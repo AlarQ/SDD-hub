@@ -8,6 +8,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 SCRIPTS_DIR="$CLAUDE_DIR/scripts"
+FORCE=false
+
+if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
+  FORCE=true
+fi
 
 echo "=== Spec-Driven Dev Workflow Setup ==="
 echo ""
@@ -24,14 +29,39 @@ echo "[ok] yq installed ($(yq --version))"
 mkdir -p "$COMMANDS_DIR"
 mkdir -p "$SCRIPTS_DIR"
 
+# Helper: copy file with overwrite protection
+safe_copy() {
+  local src="$1" dest="$2"
+  local name
+  name=$(basename "$src")
+  if [ -f "$dest" ] && [ "$FORCE" = false ]; then
+    if diff -q "$src" "$dest" >/dev/null 2>&1; then
+      echo "  [skip] $name (identical)"
+    else
+      echo "  [CONFLICT] $name already exists and differs — skipped"
+      echo "             Use --force to overwrite, or diff manually:"
+      echo "             diff \"$src\" \"$dest\""
+      return 1
+    fi
+  else
+    cp "$src" "$dest"
+    echo "  [ok] $name"
+  fi
+  return 0
+}
+
 # 3. Copy slash commands
 echo ""
 echo "Installing slash commands to $COMMANDS_DIR/"
+conflicts=0
+conflict_files=()
 for cmd_file in "$SCRIPT_DIR/commands/"*.md; do
   [ -f "$cmd_file" ] || continue
   name=$(basename "$cmd_file")
-  cp "$cmd_file" "$COMMANDS_DIR/$name"
-  echo "  [ok] $name"
+  if ! safe_copy "$cmd_file" "$COMMANDS_DIR/$name"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$name")
+  fi
 done
 
 # 4. Copy scripts
@@ -40,9 +70,11 @@ echo "Installing scripts to $SCRIPTS_DIR/"
 for script_file in "$SCRIPT_DIR/scripts/"*.sh; do
   [ -f "$script_file" ] || continue
   name=$(basename "$script_file")
-  cp "$script_file" "$SCRIPTS_DIR/$name"
-  chmod +x "$SCRIPTS_DIR/$name"
-  echo "  [ok] $name"
+  if ! safe_copy "$script_file" "$SCRIPTS_DIR/$name"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$name")
+  fi
+  [ -f "$SCRIPTS_DIR/$name" ] && chmod +x "$SCRIPTS_DIR/$name"
 done
 
 # 5. Verify
@@ -70,14 +102,28 @@ else
 fi
 
 echo ""
-if [ "$errors" -eq 0 ]; then
-  echo "Setup complete. All files installed."
+if [ "$conflicts" -gt 0 ]; then
+  echo "=== $conflicts conflict(s) ==="
+  echo "Skipped files with local changes:"
+  for f in "${conflict_files[@]}"; do
+    echo "  - $f"
+  done
   echo ""
-  echo "Next steps:"
-  echo "  1. Open a target project in Claude Code"
-  echo "  2. Run /bootstrap to create the knowledge-base"
-  echo "  3. Follow the workflow: /explore -> /propose -> /implement -> /validate -> /review-findings"
-else
-  echo "Setup completed with $errors error(s). Check the output above."
-  exit 1
+  echo "Re-run with --force to overwrite, or diff manually."
+  echo ""
 fi
+
+if [ "$errors" -gt 0 ]; then
+  echo "Setup failed with $errors error(s). Check the output above."
+  exit 1
+elif [ "$conflicts" -gt 0 ]; then
+  echo "Setup partial — $conflicts file(s) skipped due to conflicts."
+else
+  echo "Setup complete. All files installed."
+fi
+
+echo ""
+echo "Next steps:"
+echo "  1. Open a target project in Claude Code"
+echo "  2. Run /bootstrap to create the knowledge-base"
+echo "  3. Follow the workflow: /explore -> /propose -> /implement -> /validate -> /review-findings"
