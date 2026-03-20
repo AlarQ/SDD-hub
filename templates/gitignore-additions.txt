@@ -1,0 +1,2 @@
+# Spec-driven workflow: validation reports are ephemeral
+specs/*/reports/

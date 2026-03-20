@@ -1,0 +1,20 @@
+Walk through validation findings interactively.
+
+Feature name: $ARGUMENTS
+
+## Prerequisites
+1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
+
+## Steps
+1. Read all pending reports from `specs/$ARGUMENTS/reports/`
+2. For each finding with review_status: pending:
+   - Present: severity, title, description, code snippet, fix proposal, source (tool/llm)
+   - Ask: Accept or Reject?
+   - If Accept: apply the fix, **re-read the file** before applying the next fix (sequential apply to avoid conflicts), update review_status to "accepted"
+   - If Reject: ask for reasoning, update review_status to "rejected", set review_notes
+   - If Reject + new rule needed: create/update the relevant knowledge-base/ file and update `knowledge-base/_index.md`, set rule_added: true
+3. Report summary: X accepted, Y rejected, Z new rules added
+
+## Status Update
+- If any fixes were applied (accepted findings): run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented` and remind user to re-run `/validate $ARGUMENTS`
+- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
