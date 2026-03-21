@@ -10,7 +10,7 @@ Feature name: $ARGUMENTS
 
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`
-2. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task)
+2. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task and push to remote: `git push -u origin feat/$ARGUMENTS`)
 3. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
 4. Read the task's `ground_rules` files from `knowledge-base/`
 5. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
