@@ -76,9 +76,15 @@ Validation reports are ephemeral — `/validate` regenerates them. Everything el
 
 ### 4. Install the pre-commit hook
 
+Add the task validation script to your husky pre-commit hook:
+
 ```bash
-cp ~/.claude/scripts/pre-commit-hook.sh .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+echo '~/.claude/scripts/pre-commit-hook.sh' >> .husky/pre-commit
+```
+
+If `.husky/pre-commit` doesn't exist yet, create it first:
+```bash
+echo '~/.claude/scripts/pre-commit-hook.sh' > .husky/pre-commit
 ```
 
 This runs `task-manager.sh validate` on any changed task files at commit time, catching invalid structure or status transitions.
