@@ -57,6 +57,27 @@ Provide code reviews that improve code quality AND developer skills:
 - Documentation gaps
 - Alternative approaches worth considering
 
+## 📤 PR Review Output
+
+When invoked as part of the `/pr-review` workflow, output findings in this YAML format:
+
+```yaml
+findings:
+- id: pr-001
+  priority: blocker | suggestion | nit
+  category: correctness | security | maintainability | performance | testing
+  title: Short description of the issue
+  description: Detailed explanation including reasoning and impact
+  file: path/to/file.ext
+  lines: "10-25"
+  code_snippet: relevant code excerpt
+  fix_proposal: Concrete suggestion with code example
+  review_status: pending
+  source: llm
+```
+
+Only output findings in this format when instructed to act as a PR review gate. For all other uses, follow the review comment format below.
+
 ## 📝 Review Comment Format
 
 ```

@@ -77,9 +77,21 @@ Spawn `engineering-software-architect` during design.md generation. It evaluates
 - On error/test failure during implementation → auto-spawn `ultrathink-debugger`
 - After implementation complete → spawn `code-quality-pragmatist` for a pre-validation sanity check
 
-### Phase 4: Agent-Powered `/pr-review`
+### Phase 4: Agent-Powered `/pr-review` ✅ IMPLEMENTED
 
-Use `engineering-code-reviewer` agent to analyze PR diff and draft review responses. More structured than the current inline approach.
+`/pr-review` now spawns the `Code Reviewer` agent (`engineering-code-reviewer`) as Phase 1 before handling human PR comments (Phase 2):
+
+- Agent receives PR diff, task file, ground rules, and CLAUDE.md
+- Returns structured findings (blocker/suggestion/nit) in YAML format
+- Each finding goes through human accept/reject before applying
+- Human PR comments handled separately after agent review
+
+**Changes made:**
+- `commands/pr-review.md` — Split into Phase 1 (agent review) and Phase 2 (human comments), added agent output contract
+- `agents/engineering/engineering-code-reviewer.md` — Added "PR Review Output" section with structured YAML format
+- `templates/CLAUDE.md` — Documents agent-powered PR review
+- `CLAUDE.md` — Updated key design decisions
+- `setup.sh` — Added `engineering-code-reviewer` to verification checks
 
 ### Phase 5: Reality Check Gate
 
