@@ -29,8 +29,8 @@ Run from the dev-workflow repository root:
 ```
 
 This installs:
-- 7 slash commands to `~/.claude/commands/`:
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `pr-review`
+- 10 slash commands to `~/.claude/commands/`:
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `pr-review`, `spec-status`, `workflow-summary`
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 
@@ -53,11 +53,11 @@ Open the project in Claude Code and run:
 /bootstrap
 ```
 
-This creates `knowledge-base/` seeded with rules from `~/.claude/rules/`:
-- `security/general.md` — OWASP, input validation, secret handling
-- `architecture/general.md` — composition, modularity, boundaries
-- `testing/principles.md` — testability, pure functions, BDD
-- `style/general.md` — naming, module/function size
+This creates `knowledge-base/` seeded with rules from `~/.claude/rules/` (`code-quality.md` and `security-patterns.md`):
+- `security/general.md` — OWASP, input validation, secret handling (from `security-patterns.md`)
+- `architecture/general.md` — composition, modularity, boundaries (from `code-quality.md`)
+- `testing/principles.md` — testability, pure functions, BDD (from `code-quality.md`)
+- `style/general.md` — naming, module/function size (from `code-quality.md`)
 
 It also asks which languages the project uses and creates language files with `validation_tools` frontmatter (the tools `/validate` must run).
 
@@ -124,7 +124,7 @@ project-root/
 
 ## Workflow Walkthrough
 
-The workflow has 9 stages. Each stage produces specific artifacts and has a clear next step.
+The workflow has 10 stages (plus `/spec-status` and `/workflow-summary` available anytime). Each stage produces specific artifacts and has a clear next step.
 
 ### Stage 0: `/bootstrap` (once per project)
 
@@ -205,7 +205,7 @@ The workflow has 9 stages. Each stage produces specific artifacts and has a clea
 - Findings exist -> task moves to `review`
 - Zero findings -> task moves to `done`, blocked tasks are checked and unblocked
 
-**Next:** `/review-findings <name>` if findings exist, otherwise `/commit` + PR.
+**Next:** `/review-findings <name>` if findings exist, otherwise `/ship <name>`.
 
 ### Stage 6: `/review-findings <name>` (interactive review)
 
@@ -218,20 +218,25 @@ The workflow has 9 stages. Each stage produces specific artifacts and has a clea
 - Fixes applied -> task returns to `implemented` (re-run `/validate <name>`)
 - No fixes applied (all rejected) -> task moves to `done`, blocked tasks unblocked
 
-**Next:** `/validate <name>` if fixes were applied, otherwise `/commit` + PR.
+**Next:** `/validate <name>` if fixes were applied, otherwise `/ship <name>`.
 
-### Stage 7: PR creation
+### Stage 7: `/ship <name>` (commit, push, PR)
 
-**What it does:** Standard git workflow — commit and create a PR for the task branch into the integration branch.
+**What it does:** Ships a completed task — commits all changes, pushes the task branch, and creates a PR targeting the integration branch (`feat/<name>`).
 
-```
-/commit
-gh pr create --base feat/<name>
-```
+1. Finds the lowest-numbered `done` task without a PR yet
+2. Stages and commits changes with message: `{task-id}: {task-title}`
+3. Pushes the task branch
+4. Creates PR: `gh pr create --base feat/<name>`
+5. Saves the PR URL to the task file frontmatter as `pr_url`
 
-No special command — uses Claude Code's built-in `/commit` and the GitHub CLI.
+**Produces:** A PR from the task branch into the integration branch.
 
-**Next:** `/pr-review` if the PR gets review comments.
+**Requires:** `knowledge-base/`, at least one `done` task without a PR.
+
+**Key detail:** `/ship` does NOT merge the PR — you review and merge it manually. The previous task's PR must be merged before `/implement` will start the next task.
+
+**Next:** Merge the PR, then `/pr-review` if the PR gets review comments, or `/implement <name>` for the next task.
 
 ### Stage 8: `/pr-review` (PR comment loop)
 
@@ -239,7 +244,20 @@ No special command — uses Claude Code's built-in `/commit` and the GitHub CLI.
 
 **Key detail:** PR review fixes do NOT trigger re-validation. The PR reviewer is the safety net at this stage. Task status stays `done`.
 
-**Next:** `/implement <name>` for the next task, or final PR if all tasks are done.
+**Next:** Merge the PR, then `/implement <name>` for the next task, or final PR if all tasks are done.
+
+### Stage 9: `/spec-status <name>` (dashboard — use anytime)
+
+**What it does:** Shows a comprehensive status dashboard for a feature's tasks. Not a sequential stage — use it anytime to check progress.
+
+**Displays:**
+- Task summary table (ID, name, status)
+- Progress overview with counts and percentage
+- Dependency graph
+- Health diagnostics (stuck tasks, deadlocks, orphan dependencies, circular deps)
+- Suggested next action
+
+**Requires:** `specs/<name>/tasks/` must exist.
 
 ### Final PR
 
@@ -423,8 +441,8 @@ Language files include `validation_tools` in YAML frontmatter. These define the 
 
 ```
 /explore -> /propose my-feature -> review spec -> /implement my-feature ->
-/validate my-feature -> /review-findings my-feature -> /commit + gh pr create ->
-/pr-review -> repeat for remaining tasks -> final PR
+/validate my-feature -> /review-findings my-feature -> /ship my-feature ->
+merge PR -> /pr-review (if comments) -> repeat for remaining tasks -> final PR
 ```
 
 ### Spec changes after review
@@ -462,8 +480,10 @@ gh pr create --base main --head feat/<feature>
 | `/bootstrap` | Once per project | `yq` installed |
 | `/explore` | Start of new feature | `knowledge-base/` |
 | `/propose <name>` | After requirements clear | `knowledge-base/` |
-| `/implement <name>` | After spec review | `knowledge-base/`, no unvalidated tasks |
+| `/implement <name>` | After spec review | `knowledge-base/`, no unvalidated tasks, previous PR merged |
 | `/validate <name>` | After each implementation | `knowledge-base/`, task at `implemented` |
 | `/review-findings <name>` | After validation with findings | `knowledge-base/`, task at `review` |
-| `/commit` | After task reaches `done` | Changes to commit |
+| `/ship <name>` | After task reaches `done` | `done` task without PR |
 | `/pr-review` | After PR gets comments | Active PR on current branch |
+| `/spec-status <name>` | Anytime | `specs/<name>/tasks/` |
+| `/workflow-summary` | Anytime | None |

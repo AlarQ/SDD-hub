@@ -6,7 +6,8 @@ set -euo pipefail
 # Usage: task-manager.sh <command> [args...]
 
 VALID_STATUSES=("blocked" "todo" "in-progress" "implemented" "review" "done")
-REQUIRED_FIELDS=("id" "name" "status" "ground_rules" "test_cases" "blocked_by" "max_files" "estimated_files")
+REQUIRED_SCALAR_FIELDS=("id" "name" "status" "max_files")
+REQUIRED_ARRAY_FIELDS=("ground_rules" "test_cases" "blocked_by" "estimated_files")
 
 # Valid transitions: from -> to
 get_allowed_transitions() {
@@ -96,12 +97,21 @@ cmd_validate() {
   delim_count=$(grep -c '^---$' "$file" || true)
   [ "$delim_count" -lt 2 ] && die "Task file missing YAML frontmatter delimiters: $file"
 
-  # Check required fields
-  for field in "${REQUIRED_FIELDS[@]}"; do
+  # Check required scalar fields (must be non-empty)
+  for field in "${REQUIRED_SCALAR_FIELDS[@]}"; do
     local value
     value=$(read_frontmatter "$file" ".$field")
     if [ "$value" = "null" ] || [ -z "$value" ]; then
       die "Missing required field '$field' in $file"
+    fi
+  done
+
+  # Check required array fields (must exist, but empty [] is valid)
+  for field in "${REQUIRED_ARRAY_FIELDS[@]}"; do
+    local value
+    value=$(read_frontmatter "$file" ".$field | type")
+    if [ "$value" != "!!seq" ]; then
+      die "Missing or non-array field '$field' in $file (must be a YAML array)"
     fi
   done
 

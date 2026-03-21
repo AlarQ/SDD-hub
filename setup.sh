@@ -84,7 +84,7 @@ echo "=== Verification ==="
 errors=0
 
 # Check commands
-for cmd in bootstrap explore propose implement validate review-findings ship pr-review spec-status; do
+for cmd in bootstrap explore propose implement validate review-findings ship pr-review spec-status workflow-summary; do
   if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
     echo "[ok] /$cmd command"
   else

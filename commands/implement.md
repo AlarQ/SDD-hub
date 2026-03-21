@@ -16,7 +16,11 @@ Feature name: $ARGUMENTS
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`
 2. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task and push to remote: `git push -u origin feat/$ARGUMENTS`)
 3. Pull latest feature branch: `git checkout feat/$ARGUMENTS && git pull`
-4. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
+4. Check if task branch already exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`
+   - If it exists, ask the user: "Task branch `feat/$ARGUMENTS/{task-id}-{task-name}` already exists (likely from a previous aborted attempt). Delete it and start fresh, or continue on the existing branch?"
+   - If starting fresh: delete the branch (`git branch -D feat/$ARGUMENTS/{task-id}-{task-name}`) and create a new one
+   - If continuing: checkout the existing branch and proceed
+5. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
 4. Read the task's `ground_rules` files from `knowledge-base/`
 5. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
 6. Implement the code changes following the spec and ground rules:

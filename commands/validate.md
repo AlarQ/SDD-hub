@@ -4,8 +4,10 @@ Feature name: $ARGUMENTS
 
 ## Prerequisites
 1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
-2. Read tasks from `specs/$ARGUMENTS/tasks/` — find all tasks with `status: implemented`
+2. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks with `status: implemented`
    - If no tasks have `status: implemented`, report and stop
+   - If more than one task has `status: implemented`, report an error: "Multiple tasks are at `implemented` status — only one task should be in flight at a time. Check task state integrity."
+   - Validate exactly one task
 
 ## Phase 1: Deterministic Tools (hard gates)
 For each task with `status: implemented`:

@@ -10,9 +10,12 @@ Feature name: $ARGUMENTS
 3. If multiple unshipped `done` tasks exist, ship the lowest-numbered one first
 
 ## Steps
-1. Checkout the task branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
-2. Review `git status` — warn about any sensitive files (.env, credentials, secrets)
-3. Stage and commit all changes with message: `{task-id}: {task-title}`
+1. Verify the task branch exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}` — if it doesn't exist, refuse and say: "Task branch `feat/$ARGUMENTS/{task-id}-{task-name}` not found. Was `/implement` completed for this task?"
+2. Checkout the task branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
+3. Verify the branch has commits ahead of the integration branch: `git log feat/$ARGUMENTS..HEAD --oneline`
+   - If no commits and no uncommitted changes exist, refuse and say: "Task branch has no changes to ship. Was `/implement` completed for this task?"
+4. Review `git status` — warn about any sensitive files (.env, credentials, secrets)
+5. Stage and commit all changes with message: `{task-id}: {task-title}` (skip if working tree is clean and commits already exist)
 4. Push the task branch: `git push -u origin feat/$ARGUMENTS/{task-id}-{task-name}`
 5. Create PR targeting the feature branch:
    ```
