@@ -30,8 +30,17 @@ This project uses a custom spec-driven development workflow with validation gate
 ### Validation
 - `validation_tools` in language file frontmatter are mandatory — every tool must run
 - Deterministic tool findings (`source: tool`) are high-confidence
-- LLM analysis findings (`source: llm`) are advisory — human decides
+- Agent-based analysis findings (`source: llm`) are advisory — human decides
 - All findings go through `/review-findings` where human is final authority
+
+### Agent-Powered Validation Gates
+`/validate` spawns specialized agents in parallel for advisory analysis:
+- **security** → `Security Engineer` agent — OWASP, CWE, secrets, input validation
+- **code-quality** → `code-quality-pragmatist` agent — over-engineering, DRY, modularity
+- **architecture** → `Software Architect` agent (read-only) — DDD, layering, coupling
+- **compliance** → `claude-md-compliance-checker` agent — CLAUDE.md + knowledge-base rules
+
+Agents run alongside deterministic tools. Agent findings are advisory; tool findings are hard gates.
 
 ### Ground Rules
 - All rules live in `knowledge-base/` — AI must reference these during spec generation and implementation
