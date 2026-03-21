@@ -84,7 +84,7 @@ echo "=== Verification ==="
 errors=0
 
 # Check commands
-for cmd in bootstrap explore propose implement validate review-findings pr-review spec-status; do
+for cmd in bootstrap explore propose implement validate review-findings ship pr-review spec-status; do
   if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
     echo "[ok] /$cmd command"
   else
@@ -126,5 +126,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Open a target project in Claude Code"
 echo "  2. Run /bootstrap to create the knowledge-base"
-echo "  3. Follow the workflow: /explore -> /propose -> /implement -> /validate -> /review-findings"
+echo "  3. Follow the workflow: /explore -> /propose -> /implement -> /validate -> /review-findings -> /ship"
 echo "  4. Use /spec-status <feature> anytime to see the dashboard"

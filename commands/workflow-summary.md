@@ -20,7 +20,7 @@ Print the following reference card exactly:
 | 4 | `/implement <name>` | Implement next eligible task (one at a time) |
 | 5 | `/validate <name>` | Run validation gates (tools + LLM analysis) |
 | 6 | `/review-findings <name>` | Accept/reject each finding |
-| 7 | `/commit` + `gh pr create` | PR per task into feature branch |
+| 7 | `/ship <name>` | Commit, push, and PR into feature branch |
 | 8 | `/pr-review` | Address PR review comments |
 | 9 | `/spec-status <name>` | Dashboard: progress, dependencies, health |
 
@@ -31,7 +31,7 @@ blocked → todo → in-progress → implemented → review → done
 - Only one task in-flight at a time — validate before starting the next
 - `implemented` = code written, needs `/validate`
 - `review` = findings exist, needs `/review-findings`
-- `done` = validated and all findings resolved; unblocks dependent tasks
+- `done` = validated and all findings resolved; needs `/ship`, then merge PR before next task
 
 ### Key Rules
 - **Knowledge-base is mandatory** — all commands refuse without `knowledge-base/`

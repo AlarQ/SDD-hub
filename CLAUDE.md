@@ -1,0 +1,70 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What This Repo Is
+
+A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, and templates get installed globally to `~/.claude/` via `setup.sh`. Target projects get `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
+
+**This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust TUI dashboard. No application code lives here.
+
+## Project Structure
+
+- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, pr-review, spec-status, workflow-summary)
+- `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
+- `scripts/pre-commit-hook.sh` — Commit-time task validation
+- `templates/` — CLAUDE.md template and gitignore additions for target projects
+- `workflow-tui/` — Rust TUI dashboard for viewing spec/task status
+- `onboarding.md` — Full workflow documentation
+- `plan.md` — Original design document
+
+## Build & Run
+
+### Setup (install commands globally)
+
+```bash
+./setup.sh          # install to ~/.claude/
+./setup.sh --force  # overwrite existing files
+```
+
+### Workflow TUI (Rust)
+
+```bash
+cd workflow-tui
+cargo build
+cargo run -- /path/to/project   # project must contain specs/ directory
+```
+
+Dependencies: ratatui, crossterm, notify (file watcher), serde_yml, clap, anyhow. Edition 2024.
+
+### Prerequisites
+
+`yq` (`brew install yq`), `gh` (`brew install gh`)
+
+## Workflow TUI Architecture
+
+Elm-like architecture with file-system watching for live reload:
+
+- `main.rs` — CLI parsing (clap), terminal setup, event loop
+- `app.rs` — Application state and update logic
+- `event.rs` — Event polling (keyboard, terminal resize)
+- `watcher.rs` — File system watcher (notify) for live-reloading specs
+- `model/` — Domain types: `spec.rs`, `task.rs`, `report.rs`
+- `parse/` — File parsers: `scanner.rs` (directory scanning), `task_parser.rs`, `report_parser.rs`, `frontmatter.rs` (generic YAML frontmatter)
+- `ui/` — Ratatui widgets: `layout.rs`, `spec_list.rs`, `progress.rs`, `reports.rs`, `dep_graph.rs`, `styles.rs`
+
+## Slash Command Conventions
+
+- Commands receive feature name via `$ARGUMENTS`
+- All task status changes go through `task-manager.sh` — never edit YAML frontmatter directly
+- Task state machine: `blocked -> todo -> in-progress -> implemented -> review -> done`
+- Enforced flow per task: `/implement` -> `/validate` -> `/review-findings` (if findings) -> `/ship` -> merge PR -> next task
+- Serial execution only — one task in flight at a time
+
+## Key Design Decisions
+
+- `/ship` is separate from `/implement` — commit/push/PR creation happens after validation
+- `/implement` checks for unmerged PRs — previous task's PR must be merged before starting next
+- Validation tools defined in language file frontmatter `validation_tools` are mandatory; skipping is not allowed
+- LLM findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
+- Rejected findings can become new knowledge-base rules (feedback loop)

@@ -30,10 +30,9 @@ One YAML report per gate to `specs/$ARGUMENTS/reports/{task-id}-{gate}.yaml`
 ## Status Update
 - If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`
 - If zero findings across all gates:
-  1. Commit all changes and push the task branch
-  2. Create PR from task branch into feature branch: `gh pr create --base feat/$ARGUMENTS --title "<task-id>: <task-title>" --body "<summary of changes>"`
-  3. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
-  4. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
+  1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
+  2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
+  3. Remind user to run `/ship $ARGUMENTS` to commit, push, and create the PR
 
 Report schema:
 - gate: <gate-name>

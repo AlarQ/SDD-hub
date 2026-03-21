@@ -17,4 +17,4 @@ Feature name: $ARGUMENTS
 
 ## Status Update
 - If any fixes were applied (accepted findings): run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented` and remind user to re-run `/validate $ARGUMENTS`
-- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
+- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then remind user to run `/ship $ARGUMENTS`

@@ -7,11 +7,16 @@ Feature name: $ARGUMENTS
 2. Run `~/.claude/scripts/task-manager.sh check-unvalidated specs/$ARGUMENTS/tasks/` — if any task is `implemented` or `review`, refuse and say: "Task [ID] is awaiting validation. Run `/validate $ARGUMENTS` first."
 3. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
    - If no eligible task found, report which tasks are blocked and by which task IDs
+4. Check if any `done` tasks have an unmerged PR:
+   - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
+   - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/$ARGUMENTS`. Merge it before starting the next task."
+   - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."
 
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`
 2. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task and push to remote: `git push -u origin feat/$ARGUMENTS`)
-3. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
+3. Pull latest feature branch: `git checkout feat/$ARGUMENTS && git pull`
+4. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
 4. Read the task's `ground_rules` files from `knowledge-base/`
 5. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
 6. Implement the code changes following the spec and ground rules:
