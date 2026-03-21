@@ -19,8 +19,30 @@ Feature name: $ARGUMENTS
 - Reference applicable `knowledge-base/` rules
 
 ### specs/$ARGUMENTS/design.md
+
+#### Agent-Assisted Architecture Review
+Before writing design.md, spawn the `Software Architect` agent (`engineering-software-architect`) using the Agent tool. The agent receives:
+- The spec.md content (already generated above)
+- All applicable `knowledge-base/architecture/` rules
+- The project's `CLAUDE.md`
+
+Instruct the agent with this directive: "Evaluate the proposed architecture in the spec against the provided architecture rules. For each major architectural decision, produce a trade-off analysis and an ADR. Flag any patterns that introduce irreversible coupling, scaling risks, or that the team is unlikely to sustain. Use the Proposal Output format defined in your agent definition."
+
+##### Agent Output Contract
+The agent must return findings using the structured format defined in the `Software Architect` agent definition (`Proposal Output` section):
+1. **Trade-off analysis** — for each major decision: decision name, options considered, chosen option, what is gained, what is given up
+2. **ADRs** — one Architecture Decision Record per significant decision, using the ADR template
+3. **Risk flags** — severity, description, and mitigation for each architectural concern
+
+If the agent errors or times out, proceed with design.md generation without agent input and note the failure.
+
+##### Embedding Agent Output
+Incorporate the agent's trade-off analysis and ADRs directly into design.md:
+
 - Architectural decisions with explicit references to `knowledge-base/architecture/` rules
 - Explain WHY each decision was made against the ground rules
+- Include agent-generated ADRs in an `## Architecture Decision Records` section
+- Include agent trade-off analysis alongside each architectural decision
 - Module boundaries, dependency direction, data flow
 - Reference `knowledge-base/languages/` for language-specific patterns
 

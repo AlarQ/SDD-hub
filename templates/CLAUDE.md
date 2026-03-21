@@ -42,6 +42,18 @@ This project uses a custom spec-driven development workflow with validation gate
 
 Agents run alongside deterministic tools. Agent findings are advisory; tool findings are hard gates.
 
+### Agent-Assisted Proposal
+`/propose` spawns the `Software Architect` agent during design.md generation:
+- Evaluates trade-offs for each major architectural decision
+- Produces Architecture Decision Records (ADRs) embedded in design.md
+- Flags architectural risks and patterns that may not scale
+- Main command still owns spec.md and task decomposition
+
+### Agent-Assisted Implementation
+`/implement` integrates two agents into the implementation flow:
+- **On error/test failure** → auto-spawns `ultrathink-debugger` agent with error context for root cause analysis and fix proposals
+- **Post-implementation** → spawns `code-quality-pragmatist` agent for a pre-validation sanity check; high/critical issues go through human accept/reject before marking task as implemented
+
 ### Agent-Powered PR Review
 `/pr-review` spawns the `Code Reviewer` agent to proactively analyze the PR diff before responding to human comments:
 - Reviews for correctness, security, maintainability, performance, and testing gaps

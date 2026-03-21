@@ -68,14 +68,27 @@ Each agent runs in parallel, returns findings in the existing report schema. The
 - `CLAUDE.md` — Updated project structure and key design decisions
 - All 4 agents — Added "Validation Gate Output" section with report schema YAML format, ensuring agent output aligns with `/validate`'s expected schema
 
-### Phase 2: Agent-Assisted `/propose`
+### Phase 2: Agent-Assisted `/propose` ✅ IMPLEMENTED
 
 Spawn `engineering-software-architect` during design.md generation. It evaluates trade-offs and produces ADRs that get embedded in the design doc. The main command still owns spec.md and task decomposition.
 
-### Phase 3: Agent-Assisted `/implement`
+**Changes made:**
+- `commands/propose.md` — Added agent-assisted architecture review section before design.md generation, with explicit directive prompt, output contract (trade-offs, ADRs, risk flags), and embedding instructions
+- `agents/engineering/engineering-software-architect.md` — Added "Proposal Output" section with structured YAML format for trade-off analysis and risk flags
+- `templates/CLAUDE.md` — Documents agent-assisted proposal
+- `CLAUDE.md` — Updated key design decisions
+
+### Phase 3: Agent-Assisted `/implement` ✅ IMPLEMENTED
 
 - On error/test failure during implementation → auto-spawn `ultrathink-debugger`
 - After implementation complete → spawn `code-quality-pragmatist` for a pre-validation sanity check
+
+**Changes made:**
+- `commands/implement.md` — Fixed step numbering; added auto-spawn of `ultrathink-debugger` on error/test failure with human accept/reject gate; added post-implementation quality check spawning `code-quality-pragmatist` in YAML gate format with severity filtering; added graceful degradation on agent error/timeout
+- `agents/ultrathink-debugger.md` — Added "Implementation Fix Output" section with structured YAML format (root cause, proposed fix, alternatives)
+- `agents/code-quality-pragmatist.md` — Existing YAML gate format reused for `/implement` (no changes needed; command explicitly requests YAML format)
+- `templates/CLAUDE.md` — Documents agent-assisted implementation
+- `CLAUDE.md` — Updated key design decisions
 
 ### Phase 4: Agent-Powered `/pr-review` ✅ IMPLEMENTED
 
