@@ -60,7 +60,8 @@ One YAML report per gate to `specs/$ARGUMENTS/reports/{task-id}-{gate}.yaml`
 - If zero findings across all gates:
   1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
   2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
-  3. Remind user to run `/ship $ARGUMENTS` to commit, push, and create the PR
+  3. Delete all reports (`rm -rf specs/$ARGUMENTS/reports/`)
+  4. Remind user to run `/ship $ARGUMENTS` to commit, push, and create the PR
 
 Report schema:
 - gate: <gate-name>

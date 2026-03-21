@@ -11,7 +11,7 @@ This project uses a custom spec-driven development workflow with validation gate
 4. `/implement <name>` — implement tasks one at a time (one branch per task)
 5. `/validate <name>` — run validation gates (security, quality, architecture, testing)
 6. `/review-findings <name>` — human accepts/rejects each finding
-7. Create PR (task PR -> feature branch), use `/pr-review` for comment-driven fixes
+7. Create PR (task PR -> feature branch), use `/pr-review` for agent-powered review and comment-driven fixes
 8. When all tasks done, final PR from feature branch -> main
 
 ### Task States
@@ -41,6 +41,12 @@ This project uses a custom spec-driven development workflow with validation gate
 - **compliance** → `claude-md-compliance-checker` agent — CLAUDE.md + knowledge-base rules
 
 Agents run alongside deterministic tools. Agent findings are advisory; tool findings are hard gates.
+
+### Agent-Powered PR Review
+`/pr-review` spawns the `Code Reviewer` agent to proactively analyze the PR diff before responding to human comments:
+- Reviews for correctness, security, maintainability, performance, and testing gaps
+- Findings are presented to human for accept/reject before applying fixes
+- Human PR comments are handled separately after agent review
 
 ### Ground Rules
 - All rules live in `knowledge-base/` — AI must reference these during spec generation and implementation

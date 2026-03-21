@@ -143,7 +143,7 @@ for agent in code-quality-pragmatist claude-md-compliance-checker; do
     errors=$((errors + 1))
   fi
 done
-for agent in engineering-security-engineer engineering-software-architect; do
+for agent in engineering-security-engineer engineering-software-architect engineering-code-reviewer; do
   if [ -f "$AGENTS_DIR/engineering/$agent.md" ]; then
     echo "[ok] $agent agent"
   else
