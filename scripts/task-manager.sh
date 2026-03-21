@@ -146,6 +146,9 @@ cmd_set_status() {
   [ -z "$file" ] || [ -z "$new_status" ] && die "Usage: task-manager.sh set-status <task-file> <new-status>"
   [ -f "$file" ] || die "Task file not found: $file"
 
+  # Validate task file structure before allowing any transition
+  cmd_validate "$file" > /dev/null
+
   # Validate new status is valid
   local valid=false
   for s in "${VALID_STATUSES[@]}"; do
