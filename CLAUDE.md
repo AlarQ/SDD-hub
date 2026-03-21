@@ -13,6 +13,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, pr-review, spec-status, workflow-summary)
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
+- `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
 - `templates/` — CLAUDE.md template and gitignore additions for target projects
 - `workflow-tui/` — Rust TUI dashboard for viewing spec/task status
 - `onboarding.md` — Full workflow documentation
@@ -66,5 +67,6 @@ Elm-like architecture with file-system watching for live reload:
 - `/ship` is separate from `/implement` — commit/push/PR creation happens after validation
 - `/implement` checks for unmerged PRs — previous task's PR must be merged before starting next
 - Validation tools defined in language file frontmatter `validation_tools` are mandatory; skipping is not allowed
-- LLM findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
+- `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
+- Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - Rejected findings can become new knowledge-base rules (feedback loop)

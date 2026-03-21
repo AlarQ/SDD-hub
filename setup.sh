@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 SCRIPTS_DIR="$CLAUDE_DIR/scripts"
+AGENTS_DIR="$CLAUDE_DIR/agents"
 FORCE=false
 
 if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
@@ -28,6 +29,7 @@ echo "[ok] yq installed ($(yq --version))"
 # 2. Create directories
 mkdir -p "$COMMANDS_DIR"
 mkdir -p "$SCRIPTS_DIR"
+mkdir -p "$AGENTS_DIR"
 
 # Helper: copy file with overwrite protection
 safe_copy() {
@@ -77,7 +79,38 @@ for script_file in "$SCRIPT_DIR/scripts/"*.sh; do
   [ -f "$SCRIPTS_DIR/$name" ] && chmod +x "$SCRIPTS_DIR/$name"
 done
 
-# 5. Verify
+# 5. Copy agent definitions
+echo ""
+echo "Installing agents to $AGENTS_DIR/"
+for agent_file in "$SCRIPT_DIR/agents/"*.md; do
+  [ -f "$agent_file" ] || continue
+  name=$(basename "$agent_file")
+  # Skip non-agent files
+  case "$name" in CONTRIBUTING.md|INTEGRATION_PLAN.md|LICENSE|README.md) continue ;; esac
+  if ! safe_copy "$agent_file" "$AGENTS_DIR/$name"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$name")
+  fi
+done
+
+# Copy agent subdirectories (engineering, testing, design, product, project-management)
+for agent_subdir in "$SCRIPT_DIR/agents/"*/; do
+  [ -d "$agent_subdir" ] || continue
+  subdir_name=$(basename "$agent_subdir")
+  # Skip non-agent directories
+  case "$subdir_name" in scripts) continue ;; esac
+  mkdir -p "$AGENTS_DIR/$subdir_name"
+  for agent_file in "$agent_subdir"*.md; do
+    [ -f "$agent_file" ] || continue
+    name=$(basename "$agent_file")
+    if ! safe_copy "$agent_file" "$AGENTS_DIR/$subdir_name/$name"; then
+      conflicts=$((conflicts + 1))
+      conflict_files+=("$name")
+    fi
+  done
+done
+
+# 6. Verify
 echo ""
 echo "=== Verification ==="
 
@@ -100,6 +133,24 @@ else
   echo "[FAIL] task-manager.sh not executable"
   errors=$((errors + 1))
 fi
+
+# Check core validation agents
+for agent in code-quality-pragmatist claude-md-compliance-checker; do
+  if [ -f "$AGENTS_DIR/$agent.md" ]; then
+    echo "[ok] $agent agent"
+  else
+    echo "[FAIL] $agent agent missing"
+    errors=$((errors + 1))
+  fi
+done
+for agent in engineering-security-engineer engineering-software-architect; do
+  if [ -f "$AGENTS_DIR/engineering/$agent.md" ]; then
+    echo "[ok] $agent agent"
+  else
+    echo "[FAIL] $agent agent missing"
+    errors=$((errors + 1))
+  fi
+done
 
 echo ""
 if [ "$conflicts" -gt 0 ]; then
