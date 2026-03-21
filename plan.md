@@ -124,12 +124,7 @@ project-root/
 └── specs/                # Feature specs, tasks, reports
 ```
 
-**Target project `.gitignore`** — validation reports are ephemeral (re-created by `/validate`):
-```
-specs/*/reports/
-```
-
-Everything else (`knowledge-base/`, `specs/*/prd.md`, `specs/*/spec.md`, `specs/*/design.md`, `specs/*/tasks/`) should be committed.
+Validation reports are created by `/validate` and deleted after `/review-findings` resolves all findings. Everything else (`knowledge-base/`, `specs/*/prd.md`, `specs/*/spec.md`, `specs/*/design.md`, `specs/*/tasks/`) should be committed.
 
 ### Step 2: Bootstrap Knowledge Base
 
@@ -839,13 +834,7 @@ This creates:
 #### 2. Add the CLAUDE.md
 Copy the CLAUDE.md configuration from Step 6 of this plan into the project root.
 
-#### 3. Set up `.gitignore`
-Add to the project's `.gitignore`:
-```
-specs/*/reports/
-```
-
-#### 4. Set up the pre-commit hook
+#### 3. Set up the pre-commit hook
 Copy the pre-commit hook (above) into `.git/hooks/pre-commit` and make it executable:
 ```bash
 chmod +x .git/hooks/pre-commit

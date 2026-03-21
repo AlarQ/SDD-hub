@@ -65,16 +65,7 @@ It also asks which languages the project uses and creates language files with `v
 
 Copy `templates/CLAUDE.md` from this repo to your project root. It tells Claude Code about the workflow conventions (task states, rule selection, validation gates).
 
-### 3. Update .gitignore
-
-Add to `.gitignore` (see `templates/gitignore-additions.txt`):
-```
-specs/*/reports/
-```
-
-Validation reports are ephemeral — `/validate` regenerates them. Everything else (`knowledge-base/`, specs, tasks) should be committed.
-
-### 4. Install the pre-commit hook
+### 3. Install the pre-commit hook
 
 Add the task validation script to your husky pre-commit hook:
 

@@ -17,6 +17,6 @@ Feature name: $ARGUMENTS
 
 ## Status Update
 - If any fixes were applied (accepted findings): ask the user whether they want to re-run `/validate $ARGUMENTS` or skip re-validation and proceed to shipping.
-  - If user wants re-validation: run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented` and remind user to run `/validate $ARGUMENTS`
-  - If user wants to skip: run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then remind user to run `/ship $ARGUMENTS`
-- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then remind user to run `/ship $ARGUMENTS`
+  - If user wants re-validation: delete all reports (`rm -rf specs/$ARGUMENTS/reports/`), run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented` and remind user to run `/validate $ARGUMENTS`
+  - If user wants to skip: run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then delete all reports (`rm -rf specs/$ARGUMENTS/reports/`), then remind user to run `/ship $ARGUMENTS`
+- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then delete all reports (`rm -rf specs/$ARGUMENTS/reports/`), then remind user to run `/ship $ARGUMENTS`

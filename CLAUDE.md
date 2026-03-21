@@ -14,7 +14,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
-- `templates/` — CLAUDE.md template and gitignore additions for target projects
+- `templates/` — CLAUDE.md template for target projects
 - `workflow-tui/` — Rust TUI dashboard for viewing spec/task status
 - `onboarding.md` — Full workflow documentation
 - `plan.md` — Original design document
