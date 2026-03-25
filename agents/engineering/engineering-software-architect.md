@@ -54,6 +54,38 @@ When used as a validation gate (spawned by `/validate`), output findings as a YA
 
 Only output findings in this format when instructed to act as a validation gate. For all other uses, follow the deliverable formats below.
 
+## 📋 Proposal Output
+
+When spawned by `/propose` to assist with design.md generation, return your analysis in this structured format:
+
+### Trade-off Analysis
+For each major architectural decision:
+```yaml
+- decision: Name of the architectural decision
+  options:
+    - name: Option A
+      description: Brief description
+      pros: [list of advantages]
+      cons: [list of disadvantages]
+    - name: Option B
+      description: Brief description
+      pros: [list of advantages]
+      cons: [list of disadvantages]
+  chosen: Option A
+  rationale: Why this option was selected given the project constraints
+```
+
+### Architecture Decision Records
+One ADR per significant decision, using the ADR template below.
+
+### Risk Flags
+```yaml
+- severity: low | medium | high | critical
+  description: What the architectural concern is
+  impact: What happens if this risk materializes
+  mitigation: How to reduce or eliminate the risk
+```
+
 ## 📋 Architecture Decision Record Template
 
 ```markdown
