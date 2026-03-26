@@ -1,0 +1,84 @@
+---
+name: validate
+description: Run validation gates on implemented code for a feature
+agent: 'agent'
+argument-hint: "feature name"
+---
+
+Run validation gates on implemented code for a feature.
+
+The user should provide the feature name in their message.
+
+## Prerequisites
+1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
+2. Read tasks from `specs/<feature>/tasks/` — find tasks with `status: implemented`
+   - If no tasks have `status: implemented`, report and stop
+   - If more than one task has `status: implemented`, report an error: "Multiple tasks are at `implemented` status — only one task should be in flight at a time. Check task state integrity."
+   - Validate exactly one task
+
+## Phase 1: Deterministic Tools (hard gates)
+For each task with `status: implemented`:
+1. Read the task's `ground_rules` to identify language files
+2. Extract `validation_tools` from the frontmatter of each referenced language file
+3. Run **every** listed tool — skipping a tool is not allowed
+   - If a tool is missing or fails to install, report it as an error finding
+4. Collect all tool outputs and convert findings into the report schema
+
+## Phase 2: Agent-Powered Analysis (advisory)
+After deterministic tools complete, invoke specialized agents to analyze code against knowledge-base rules. Each agent receives:
+- The task file path and changed files (from `estimated_files` or git diff)
+- All `ground_rules` files referenced in the task
+- The project's CLAUDE.md or copilot-instructions.md and relevant `knowledge-base/` files
+
+### Agent Gates
+Invoke each agent one at a time (Copilot does not support parallel agent invocation):
+
+1. **security** — Invoke `@security-engineer`
+   - Analyze code for OWASP Top 10, CWE Top 25, input validation, secrets exposure
+   - Check against `knowledge-base/security/` rules
+   - Each finding must include: severity, file, lines, description, fix_proposal
+
+2. **code-quality** — Invoke `@code-quality`
+   - Check for over-engineering, unnecessary complexity, DRY violations, function size, modularity
+   - Check against `knowledge-base/style/` rules
+   - Each finding must include: severity, file, lines, description, fix_proposal
+
+3. **architecture** — Invoke `@software-architect` (read-only)
+   - Verify structural compliance, DDD boundaries, hexagonal layering, module coupling
+   - Check against `knowledge-base/architecture/` rules
+   - Each finding must include: severity, file, lines, description, fix_proposal
+
+4. **compliance** — Invoke `@compliance-checker`
+   - Verify code adheres to project CLAUDE.md / copilot-instructions and knowledge-base conventions
+   - Check language-specific rules from `knowledge-base/languages/`
+   - Each finding must include: severity, file, lines, description, fix_proposal
+
+### Agent Output Contract
+Each agent must return findings in the report schema (below). When constructing the prompt for each agent, instruct it to output findings as a YAML list matching the report schema. Mark all agent findings with `source: llm`.
+
+### Collecting Results
+After all agents complete, merge their findings into per-gate YAML reports. If an agent errors or is unavailable, record a single `error` finding for that gate (do not block other gates).
+
+## Output
+One YAML report per gate to `specs/<feature>/reports/{task-id}-{gate}.yaml`
+
+## Status Update
+- If any findings exist across any gate: run `./scripts/task-manager.sh set-status <task-file> review`
+- If zero findings across all gates:
+  1. Run `./scripts/task-manager.sh set-status <task-file> done`
+  2. Run `./scripts/task-manager.sh unblock specs/<feature>/tasks/`
+  3. Delete all reports (`rm -rf specs/<feature>/reports/`)
+  4. Remind user to run `/ship <feature>` to commit, push, and create the PR
+
+Report schema:
+- gate: <gate-name>
+- task_id: <id>
+- status: pass | findings | error
+- findings: list of {id, severity, category, title, description, file, lines, code_snippet, fix_proposal, review_status: pending, source: tool|llm}
+
+Gates:
+- **security**: semgrep + language audit tools + `@security-engineer` agent for knowledge-base/security/ rules
+- **code-quality**: language lint tools + `@code-quality` agent for DRY, function size, modularity
+- **architecture**: `@software-architect` agent (read-only, check against knowledge-base/architecture/)
+- **compliance**: `@compliance-checker` agent (check against CLAUDE.md + knowledge-base/languages/)
+- **testing**: language test/coverage tools (deterministic only — no agent gate)

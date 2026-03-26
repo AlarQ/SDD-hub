@@ -1,6 +1,6 @@
 # Spec-Driven Dev Workflow: Onboarding Guide
 
-A file-based, spec-driven development workflow for Claude Code that adds validation gates, interactive finding review, and a knowledge-base feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code and GitHub Copilot that adds validation gates, interactive finding review, and a knowledge-base feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
 
 ## Prerequisites
 
@@ -10,7 +10,8 @@ Install these before running setup:
 |------|---------|---------|
 | `yq` | `brew install yq` | YAML parsing in task-manager.sh |
 | `gh` | `brew install gh` | GitHub CLI for PRs and `/pr-review` |
-| Claude Code | [claude.ai/claude-code](https://claude.ai/claude-code) | Slash command host |
+| Claude Code | [claude.ai/claude-code](https://claude.ai/claude-code) | Slash command host (option A) |
+| GitHub Copilot | VS Code extension | Prompt/agent host (option B) |
 
 Language-specific validation tools (linters, test runners, semgrep) are installed later, after `/bootstrap` creates language files for your project.
 
@@ -20,7 +21,9 @@ yq --version
 gh --version
 ```
 
-## Installation (Global, Once Per Machine)
+## Installation
+
+### Option A: Claude Code (Global, Once Per Machine)
 
 Run from the dev-workflow repository root:
 
@@ -33,6 +36,7 @@ This installs:
   `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `pr-review`, `spec-status`, `workflow-summary`
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
+- 35+ agent definitions to `~/.claude/agents/`
 
 These are global — they work across every project that has a knowledge-base bootstrapped.
 
@@ -41,6 +45,30 @@ Verify:
 ls ~/.claude/commands/*.md
 ~/.claude/scripts/task-manager.sh help
 ```
+
+### Option B: GitHub Copilot (Per-Project)
+
+Run from the dev-workflow repository root, providing the target project path:
+
+```bash
+./setup-copilot.sh /path/to/your/project
+```
+
+This installs into the target project's `.github/` directory:
+- 10 prompt files to `.github/prompts/` (Copilot slash commands):
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `pr-review`, `spec-status`, `workflow-summary`
+- 6 custom agents to `.github/agents/`:
+  `software-architect`, `security-engineer`, `code-quality`, `compliance-checker`, `ultrathink-debugger`, `code-reviewer`
+- 2 path-specific instruction files to `.github/instructions/`
+- `copilot-instructions.md` (repo-wide workflow rules)
+- Scripts to `./scripts/` (project-local)
+
+Verify: open the project in VS Code, type `/` in Copilot Chat to see prompts, type `@` to see agents.
+
+**Key differences from Claude Code:**
+- Agents are invoked manually via `@agent-name` (Copilot cannot spawn agents programmatically)
+- `/validate` runs agent gates sequentially instead of in parallel
+- Scripts reference `./scripts/` (project-local) instead of `~/.claude/scripts/` (global)
 
 ## Per-Project Setup
 
@@ -61,21 +89,29 @@ This creates `knowledge-base/` seeded with rules from `~/.claude/rules/` (`code-
 
 It also asks which languages the project uses and creates language files with `validation_tools` frontmatter (the tools `/validate` must run).
 
-### 2. Add CLAUDE.md
+### 2. Add project instructions
 
-Copy `templates/CLAUDE.md` from this repo to your project root. It tells Claude Code about the workflow conventions (task states, rule selection, validation gates).
+**Claude Code:** Copy `templates/CLAUDE.md` from this repo to your project root. It tells Claude Code about the workflow conventions (task states, rule selection, validation gates).
+
+**GitHub Copilot:** Already installed by `setup-copilot.sh` as `.github/copilot-instructions.md`. No extra step needed.
 
 ### 3. Install the pre-commit hook
 
 Add the task validation script to your husky pre-commit hook:
 
+**Claude Code (global scripts):**
 ```bash
 echo '~/.claude/scripts/pre-commit-hook.sh' >> .husky/pre-commit
 ```
 
+**GitHub Copilot (project-local scripts):**
+```bash
+echo './scripts/pre-commit-hook.sh' >> .husky/pre-commit
+```
+
 If `.husky/pre-commit` doesn't exist yet, create it first:
 ```bash
-echo '~/.claude/scripts/pre-commit-hook.sh' > .husky/pre-commit
+echo '<path-to-pre-commit-hook.sh>' > .husky/pre-commit
 ```
 
 This runs `task-manager.sh validate` on any changed task files at commit time, catching invalid structure or status transitions.
@@ -101,7 +137,12 @@ pip install semgrep
 
 ```
 project-root/
-├── CLAUDE.md
+├── CLAUDE.md                         # Claude Code users
+├── .github/                          # GitHub Copilot users (installed by setup-copilot.sh)
+│   ├── copilot-instructions.md
+│   ├── prompts/*.prompt.md
+│   ├── agents/*.agent.md
+│   └── instructions/*.instructions.md
 ├── knowledge-base/
 │   ├── _index.md
 │   ├── security/

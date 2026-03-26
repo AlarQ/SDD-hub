@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, and templates get installed globally to `~/.claude/` via `setup.sh`. Target projects get `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code and GitHub Copilot. Slash commands, scripts, and templates get installed globally to `~/.claude/` via `setup.sh` (Claude Code) or per-project to `.github/` via `setup-copilot.sh` (GitHub Copilot). Target projects get `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
 
 **This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust TUI dashboard. No application code lives here.
 
@@ -14,6 +14,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
+- `copilot/` — GitHub Copilot equivalents: `.prompt.md` files (slash commands), `.agent.md` files (custom agents), `.instructions.md` files (path-specific rules), and `copilot-instructions.md` (repo-wide). Installed per-project to `.github/` by `setup-copilot.sh`.
 - `templates/` — CLAUDE.md template for target projects
 - `workflow-tui/` — Rust TUI dashboard for viewing spec/task status
 - `onboarding.md` — Full workflow documentation
@@ -21,11 +22,18 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Build & Run
 
-### Setup (install commands globally)
+### Setup — Claude Code (install commands globally)
 
 ```bash
 ./setup.sh          # install to ~/.claude/
 ./setup.sh --force  # overwrite existing files
+```
+
+### Setup — GitHub Copilot (install per-project)
+
+```bash
+./setup-copilot.sh /path/to/project          # install to project's .github/
+./setup-copilot.sh --force /path/to/project   # overwrite existing files
 ```
 
 ### Workflow TUI (Rust)
