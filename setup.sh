@@ -9,6 +9,8 @@ CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 SCRIPTS_DIR="$CLAUDE_DIR/scripts"
 AGENTS_DIR="$CLAUDE_DIR/agents"
+HOOKS_DIR="$CLAUDE_DIR/hooks"
+TEMPLATES_DIR="$CLAUDE_DIR/templates"
 FORCE=false
 
 if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
@@ -30,6 +32,8 @@ echo "[ok] yq installed ($(yq --version))"
 mkdir -p "$COMMANDS_DIR"
 mkdir -p "$SCRIPTS_DIR"
 mkdir -p "$AGENTS_DIR"
+mkdir -p "$HOOKS_DIR"
+mkdir -p "$TEMPLATES_DIR"
 
 # Helper: copy file with overwrite protection
 safe_copy() {
@@ -110,14 +114,39 @@ for agent_subdir in "$SCRIPT_DIR/agents/"*/; do
   done
 done
 
-# 6. Verify
+# 6. Copy hooks
+echo ""
+echo "Installing hooks to $HOOKS_DIR/"
+for hook_file in "$SCRIPT_DIR/hooks/"*.sh; do
+  [ -f "$hook_file" ] || continue
+  name=$(basename "$hook_file")
+  if ! safe_copy "$hook_file" "$HOOKS_DIR/$name"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$name")
+  fi
+  [ -f "$HOOKS_DIR/$name" ] && chmod +x "$HOOKS_DIR/$name"
+done
+
+# 7. Copy templates
+echo ""
+echo "Installing templates to $TEMPLATES_DIR/"
+for tpl_file in "$SCRIPT_DIR/templates/"*; do
+  [ -f "$tpl_file" ] || continue
+  name=$(basename "$tpl_file")
+  if ! safe_copy "$tpl_file" "$TEMPLATES_DIR/$name"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$name")
+  fi
+done
+
+# 8. Verify
 echo ""
 echo "=== Verification ==="
 
 errors=0
 
 # Check commands
-for cmd in bootstrap explore propose implement validate review-findings ship pr-review spec-status workflow-summary; do
+for cmd in bootstrap explore propose implement validate review-findings ship pr-review spec-status workflow-summary continue-task research; do
   if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
     echo "[ok] /$cmd command"
   else
@@ -152,6 +181,24 @@ for agent in engineering-security-engineer engineering-software-architect engine
   fi
 done
 
+# Check hooks
+for hook in block-git-hook-bypass block-dismissive-language; do
+  if [ -x "$HOOKS_DIR/$hook.sh" ]; then
+    echo "[ok] $hook hook"
+  else
+    echo "[FAIL] $hook hook missing or not executable"
+    errors=$((errors + 1))
+  fi
+done
+
+# Check templates
+if [ -f "$TEMPLATES_DIR/settings.json" ]; then
+  echo "[ok] settings.json template"
+else
+  echo "[FAIL] settings.json template missing"
+  errors=$((errors + 1))
+fi
+
 echo ""
 if [ "$conflicts" -gt 0 ]; then
   echo "=== $conflicts conflict(s) ==="
@@ -177,8 +224,12 @@ echo ""
 echo "Next steps:"
 echo "  1. Open a target project in Claude Code"
 echo "  2. Run /bootstrap to create the knowledge-base"
-echo "  3. Follow the workflow: /explore -> /propose -> /implement -> /validate -> /review-findings -> /ship"
-echo "  4. Use /spec-status <feature> anytime to see the dashboard"
+echo "  3. To activate hooks, copy the settings template to your project:"
+echo "     cp ~/.claude/templates/settings.json <project>/.claude/settings.json"
+echo "  4. Follow the workflow: /explore -> /propose -> /implement -> /validate -> /review-findings -> /ship"
+echo "  5. Use /spec-status <feature> anytime to see the dashboard"
+echo "  6. Use /continue-task <feature> to resume interrupted work"
+echo "  7. Use /research to enter anti-hallucination research mode"
 echo ""
 echo "For GitHub Copilot users:"
 echo "  Run ./setup-copilot.sh <project-path> to install Copilot prompts, agents, and instructions"

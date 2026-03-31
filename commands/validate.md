@@ -23,6 +23,9 @@ Spawn specialized agents **in parallel** to analyze code against knowledge-base 
 - All `ground_rules` files referenced in the task
 - The project's `CLAUDE.md` and relevant `knowledge-base/` files
 
+### Independent Verification Rule
+Each agent gate operates independently. No agent should trust or defer to another agent's results. If the security agent says code is safe, the architecture agent must still independently verify security-relevant architectural decisions. If code-quality says a function is well-structured, compliance must still independently check it against CLAUDE.md rules. Redundant findings are acceptable — missed findings are not.
+
 ### Agent Gates
 Spawn all four agents concurrently using the Agent tool:
 
@@ -55,9 +58,16 @@ After all agents complete, merge their findings into per-gate YAML reports. If a
 ## Output
 One YAML report per gate to `specs/$ARGUMENTS/reports/{task-id}-{gate}.yaml`
 
+## Gate Aggregation (Triple-Gate Rule)
+Before determining the final status, verify ALL gates produced a report:
+- If any gate has `status: error` (agent timed out or crashed), that gate must be re-run before proceeding. Do not allow shipping with an incomplete gate.
+- If any gate has `status: findings` with unresolved items, the task goes to `review`.
+- Only when ALL gates report `status: pass` (zero findings each) is the task eligible for `done`.
+
 ## Status Update
+- If any gate has `status: error`: report which gate(s) failed and instruct: "Re-run `/validate $ARGUMENTS` to retry the failed gate(s)."
 - If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`
-- If zero findings across all gates:
+- If zero findings across all gates and all gates have `status: pass`:
   1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
   2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
   3. Delete all reports (`rm -rf specs/$ARGUMENTS/reports/`)

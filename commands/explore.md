@@ -6,7 +6,11 @@ Explore and clarify requirements for a new feature or change.
 ## Steps
 1. Read `knowledge-base/_index.md` to understand available ground rules
 2. Ask the user to describe the feature or change
-3. Ask clarifying questions **one at a time** — wait for the user's answer before moving to the next question. Cover these areas in order:
+3. **Establish the user perspective first** — before diving into technical areas, clarify:
+   - Who benefits from this feature? (user role, persona)
+   - What problem does it solve for them?
+   - What is the shortest path to delivering that value?
+4. Ask clarifying questions **one at a time** — do NOT present all questions at once. Pick the single most important unknown area, ask about it, wait for the answer, then move to the next area. This is a conversation, not a questionnaire. Cover these areas in order:
    1. Scope: what's in, what's out
    2. Affected domains and modules
    3. Security implications (auth, data handling, input validation)
@@ -14,8 +18,12 @@ Explore and clarify requirements for a new feature or change.
    5. Testing expectations (unit, integration, e2e)
    6. Performance or scalability constraints
    Skip questions the user already answered in their feature description. If an area isn't relevant, skip it and move on.
-4. Identify which `knowledge-base/` rule files are relevant to this feature
-5. Summarize understanding and list applicable ground rules
-6. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name
+5. **Scope decisions**: when you identify a point where the feature could go two ways or has an unclear boundary:
+   - Present the options clearly with trade-offs for each
+   - Wait for the user to decide — do NOT assume or choose a direction
+   - Only proceed after the user confirms the scope
+6. Identify which `knowledge-base/` rule files are relevant to this feature
+7. Summarize understanding and list applicable ground rules
+8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name
 
 This is conversational — no artifacts are generated yet. The goal is alignment on what needs to be built. Continue refining until the user is satisfied with the PRD.
