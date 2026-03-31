@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/block-git-hook-bypass.sh\"",
+            "statusMessage": "Checking for git hook bypass..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/block-dismissive-language.sh\"",
+            "statusMessage": "Checking for dismissive language..."
+          },
+          {
+            "type": "prompt",
+            "prompt": "Run TWO checks on the assistant's response. BLOCK on the FIRST failure. If both pass, ALLOW.\n\n--- CHECK 1: FINDINGS PERSISTENCE ---\nDoes the response contain review findings from a validation gate agent? Signs: [MUST FIX], [SUGGESTION], [CRITICAL], [HIGH], [MEDIUM], [LOW], severity lists, finding reports with file paths, approval/rejection verdicts with concerns.\n- If findings ARE present: were they also written to a report file (via Write or Edit tool call)? The file pattern is `specs/<feature>/reports/<task-id>-<gate>.yaml`.\n  - If NOT written to file: BLOCK with reason \"FINDINGS PERSISTENCE: Validation findings must be written to specs/<feature>/reports/<task-id>-<gate>.yaml. Write findings to the report file before stopping.\"\n  - If written to file: PASS.\n- If NO findings present (clean approval or non-validation work): PASS.\n\n--- CHECK 2: UNNECESSARY HAND-OFF CONFIRMATION ---\nIs the assistant explicitly asking the user for PERMISSION to proceed to the next workflow step when the workflow clearly defines the next step? Only match direct questions like: \"Should I proceed with validation?\", \"Shall I run /validate?\", \"Ready to move to shipping?\", \"Want me to run the next command?\".\n- Do NOT flag status updates about what just happened (e.g. \"validation complete with 3 findings\").\n- Do NOT flag statements about what the assistant will do next (e.g. \"I'll run validation next\").\n- Do NOT flag genuine decision points where user input is needed (e.g. \"Accept or reject this finding?\").\n- If YES (genuinely asking permission when workflow is unambiguous): BLOCK with reason \"AUTO-PROCEED: Do not ask for permission when the workflow defines the next step. Just proceed or remind the user of the next command to run.\"\n- If NO (status update, statement of intent, genuine decision point, or unrelated): PASS.\n\nBoth checks passed -> ALLOW.",
+            "statusMessage": "Checking pipeline rules (findings persistence, auto-handoff)..."
+          }
+        ]
+      }
+    ]
+  }
+}

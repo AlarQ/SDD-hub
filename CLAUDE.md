@@ -10,12 +10,13 @@ A file-based, spec-driven development workflow for Claude Code and GitHub Copilo
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, pr-review, spec-status, workflow-summary)
+- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, pr-review, spec-status, workflow-summary, continue-task, research)
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
+- `hooks/` — Claude Code hook scripts for enforcement (block-git-hook-bypass, block-dismissive-language). Installed to `~/.claude/hooks/` by `setup.sh`.
 - `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
 - `copilot/` — GitHub Copilot equivalents: `.prompt.md` files (slash commands), `.agent.md` files (custom agents), `.instructions.md` files (path-specific rules), and `copilot-instructions.md` (repo-wide). Installed per-project to `.github/` by `setup-copilot.sh`.
-- `templates/` — CLAUDE.md template for target projects
+- `templates/` — CLAUDE.md template, settings.json hook wiring template for target projects
 - `workflow-tui/` — Rust TUI dashboard for viewing spec/task status
 - `onboarding.md` — Full workflow documentation
 - `plan.md` — Original design document
@@ -81,3 +82,8 @@ Elm-like architecture with file-system watching for live reload:
 - `/implement` auto-spawns `ultrathink-debugger` on errors/test failures for root cause analysis; spawns `code-quality-pragmatist` post-implementation for pre-validation sanity check (high/critical issues go through human accept/reject)
 - `/pr-review` spawns `Code Reviewer` agent to proactively analyze PR diff before handling human comments; agent findings go through accept/reject flow
 - Rejected findings can become new knowledge-base rules (feedback loop)
+- PreToolUse hook blocks `--no-verify` and `--no-gpg-sign` — enforces fixing failing hooks rather than bypassing them
+- Stop hook blocks dismissive language ("pre-existing", "not our code") and bypass language ("temporarily disable", "skip the hook") — forces unconditional issue resolution
+- Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
+- `/continue-task` detects resume phase by checking task status and existing artifacts (reports, branches, PR state)
+- `/research` activates anti-hallucination mode with citation discipline — useful for bug investigation and API contract review

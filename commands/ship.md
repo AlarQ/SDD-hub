@@ -7,7 +7,10 @@ Feature name: $ARGUMENTS
 2. Read tasks from `specs/$ARGUMENTS/tasks/` — find all tasks with `status: done`
    - Filter to tasks that do NOT yet have a PR (no `pr_url` in frontmatter)
    - If no unshipped `done` tasks exist, report and stop
-3. If multiple unshipped `done` tasks exist, ship the lowest-numbered one first
+3. Verify all validation gates passed for this task: check `specs/$ARGUMENTS/reports/` for report files matching this task's ID
+   - If any report has `status: findings` or `status: error`, refuse and say: "Validation gate(s) have unresolved findings or errors. Run `/review-findings $ARGUMENTS` first."
+   - If no reports directory exists or all reports show `status: pass` (or reports were already cleaned up by `/validate`), proceed
+4. If multiple unshipped `done` tasks exist, ship the lowest-numbered one first
 
 ## Steps
 1. Verify the task branch exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}` — if it doesn't exist, refuse and say: "Task branch `feat/$ARGUMENTS/{task-id}-{task-name}` not found. Was `/implement` completed for this task?"
