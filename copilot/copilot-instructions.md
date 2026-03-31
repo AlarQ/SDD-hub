@@ -5,7 +5,7 @@ This project uses a custom spec-driven development workflow with validation gate
 
 ### Flow
 0. `/bootstrap` — create and seed knowledge-base (once per project)
-1. `/explore` — investigate and clarify requirements
+1. `/explore` — investigate and clarify requirements (user-centric discovery)
 2. `/propose <name>` — generate spec, design, tasks with knowledge-base rules
 3. Human reviews artifacts, requests changes conversationally (edits to existing files)
 4. `/implement <name>` — implement tasks one at a time (one branch per task)
@@ -13,6 +13,10 @@ This project uses a custom spec-driven development workflow with validation gate
 6. `/review-findings <name>` — human accepts/rejects each finding
 7. `/ship <name>` — commit, push, and create PR (task PR -> feature branch), use `/pr-review` for agent-powered review
 8. When all tasks done, final PR from feature branch -> main
+
+### Utility Commands
+- `/continue-task <name>` — resume interrupted work (detects phase by artifacts)
+- `/research` — anti-hallucination mode with citation discipline (epistemic honesty, quote-grounded responses)
 
 ### Task States
 `blocked` -> `todo` -> `in-progress` -> `implemented` -> `review` -> `done`
@@ -41,6 +45,13 @@ This project uses a custom spec-driven development workflow with validation gate
 - **compliance** -> `@compliance-checker` — project instructions + knowledge-base rules
 
 Agents run alongside deterministic tools. Agent findings are advisory; tool findings are hard gates.
+
+### Triple-Gate Rule
+ALL validation gates must produce a report with `status: pass` before a task can move to `done`:
+- If any gate has `status: error` (agent errored or unavailable), it must be re-run
+- If any gate has `status: findings` with unresolved items, the task stays at `review`
+- Each agent gate operates independently — no agent trusts or defers to another's results
+- `/ship` also checks for unresolved gate findings as a safety net
 
 ### Agent-Assisted Proposal
 `/propose` invokes `@software-architect` during design.md generation:

@@ -165,7 +165,7 @@ echo "=== Verification ==="
 errors=0
 
 # Check prompts
-for prompt in bootstrap explore propose implement validate review-findings ship pr-review spec-status workflow-summary; do
+for prompt in bootstrap explore propose implement validate review-findings ship pr-review spec-status workflow-summary continue-task research; do
   if [ -f "$GITHUB_DIR/prompts/$prompt.prompt.md" ]; then
     echo "[ok] /$prompt prompt"
   else
@@ -228,4 +228,6 @@ echo "  2. Type / in Copilot Chat to see available prompts"
 echo "  3. Run /bootstrap to create the knowledge-base"
 echo "  4. Follow the workflow: /explore -> /propose -> /implement -> /validate -> /review-findings -> /ship"
 echo "  5. Use /spec-status <feature> anytime to see the dashboard"
-echo "  6. Invoke agents with @software-architect, @security-engineer, etc."
+echo "  6. Use /continue-task <feature> to resume interrupted work"
+echo "  7. Use /research to enter anti-hallucination research mode"
+echo "  8. Invoke agents with @software-architect, @security-engineer, etc."
