@@ -3,15 +3,22 @@ Run validation gates on implemented code for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
-2. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks with `status: implemented`
+1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
+2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
+3. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks with `status: implemented`
    - If no tasks have `status: implemented`, report and stop
    - If more than one task has `status: implemented`, report an error: "Multiple tasks are at `implemented` status — only one task should be in flight at a time. Check task state integrity."
    - Validate exactly one task
 
+## Ground Rules Resolution
+Resolve `ground_rules` paths using the prefix convention:
+- `general:` prefix → read from `~/.claude/knowledge-base/`
+- `project:` prefix → read from `knowledge-base/`
+- Unprefixed paths → default to `project:` (backward compatibility)
+
 ## Phase 1: Deterministic Tools (hard gates)
 For each task with `status: implemented`:
-1. Read the task's `ground_rules` to identify language files
+1. Read the task's `ground_rules` to identify language files (project KB `languages/` only — tools are project-specific)
 2. Extract `validation_tools` from the frontmatter of each referenced language file
 3. Run **every** listed tool — skipping a tool is not allowed
    - If a tool is missing or fails to install, report it as an error finding
@@ -20,8 +27,8 @@ For each task with `status: implemented`:
 ## Phase 2: Agent-Powered Analysis (advisory)
 Spawn specialized agents **in parallel** to analyze code against knowledge-base rules. Each agent receives:
 - The task file path and changed files (from `estimated_files` or git diff)
-- All `ground_rules` files referenced in the task
-- The project's `CLAUDE.md` and relevant `knowledge-base/` files
+- All `ground_rules` files referenced in the task (resolved from both KBs using prefix convention)
+- The project's `CLAUDE.md` and relevant knowledge-base files from both general and project KBs
 
 ### Independent Verification Rule
 Each agent gate operates independently. No agent should trust or defer to another agent's results. If the security agent says code is safe, the architecture agent must still independently verify security-relevant architectural decisions. If code-quality says a function is well-structured, compliance must still independently check it against CLAUDE.md rules. Redundant findings are acceptable — missed findings are not.
@@ -31,22 +38,22 @@ Spawn all four agents concurrently using the Agent tool:
 
 1. **security** → `Security Engineer` agent (`engineering-security-engineer`)
    - Analyze code for OWASP Top 10, CWE Top 25, input validation, secrets exposure
-   - Check against `knowledge-base/security/` rules
+   - Check against `~/.claude/knowledge-base/security/` rules AND `knowledge-base/security/` rules (if project has security overrides)
    - Each finding must include: severity, file, lines, description, fix_proposal
 
 2. **code-quality** → `code-quality-pragmatist` agent
    - Check for over-engineering, unnecessary complexity, DRY violations, function size, modularity
-   - Check against `knowledge-base/style/` rules
+   - Check against `~/.claude/knowledge-base/style/` rules AND `knowledge-base/style/` rules (if project has style overrides)
    - Each finding must include: severity, file, lines, description, fix_proposal
 
 3. **architecture** → `Software Architect` agent (`engineering-software-architect`) — **read-only**
    - Verify structural compliance, DDD boundaries, hexagonal layering, module coupling
-   - Check against `knowledge-base/architecture/` rules
+   - Check against `~/.claude/knowledge-base/architecture/` rules AND `knowledge-base/architecture/` rules (if project has architecture overrides)
    - Each finding must include: severity, file, lines, description, fix_proposal
 
 4. **compliance** → `claude-md-compliance-checker` agent
    - Verify code adheres to project CLAUDE.md instructions and knowledge-base conventions
-   - Check language-specific rules from `knowledge-base/languages/`
+   - Check language-specific rules from `knowledge-base/languages/` and project conventions from `knowledge-base/conventions/`
    - Each finding must include: severity, file, lines, description, fix_proposal
 
 ### Agent Output Contract
@@ -80,8 +87,8 @@ Report schema:
 - findings: list of {id, severity, category, title, description, file, lines, code_snippet, fix_proposal, review_status: pending, source: tool|llm}
 
 Gates:
-- **security**: semgrep + language audit tools + `Security Engineer` agent for knowledge-base/security/ rules
+- **security**: semgrep + language audit tools + `Security Engineer` agent for general and project security rules
 - **code-quality**: language lint tools + `code-quality-pragmatist` agent for DRY, function size, modularity
-- **architecture**: `Software Architect` agent (read-only, check against knowledge-base/architecture/)
-- **compliance**: `claude-md-compliance-checker` agent (check against CLAUDE.md + knowledge-base/languages/)
+- **architecture**: `Software Architect` agent (read-only, check against general and project architecture rules)
+- **compliance**: `claude-md-compliance-checker` agent (check against CLAUDE.md + project knowledge-base conventions and languages)
 - **testing**: language test/coverage tools (deterministic only — no agent gate)

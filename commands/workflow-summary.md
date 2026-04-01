@@ -13,7 +13,7 @@ Print the following reference card exactly:
 ### Commands
 | # | Command | Purpose |
 |---|---------|---------|
-| 0 | `/bootstrap` | Create knowledge-base (once per project) |
+| 0 | `/bootstrap` | Create project knowledge-base (once per project) |
 | 1 | `/explore` | Clarify requirements conversationally |
 | 2 | `/propose <name>` | Generate spec, design, and tasks |
 | 3 | *(conversation)* | Human reviews artifacts, requests changes |
@@ -33,13 +33,21 @@ blocked → todo → in-progress → implemented → review → done
 - `review` = findings exist, needs `/review-findings`
 - `done` = validated and all findings resolved; needs `/ship`, then merge PR before next task
 
+### Dual Knowledge Base
+- **General KB** (`~/.claude/knowledge-base/`) — universal rules (security, architecture, testing, style) installed via `setup.sh`
+- **Project KB** (`knowledge-base/`) — project-specific rules (languages, conventions) created via `/bootstrap`
+- Both are read by all commands; project rules override general rules on same topic
+- `ground_rules` prefix convention: `general:security/general.md`, `project:languages/rust.md`
+- Unprefixed paths default to `project:` (backward compatibility)
+- New rules from `/review-findings` always go to the project KB
+
 ### Key Rules
-- **Knowledge-base is mandatory** — all commands refuse without `knowledge-base/`
+- **Both knowledge bases are mandatory** — commands refuse without either
 - **`ground_rules` on each task** = single source of truth for which rules apply
 - **`validation_tools` in language files** = mandatory tools (every tool must run)
 - **Tool findings** (`source: tool`) are high-confidence; **LLM findings** (`source: llm`) are advisory
 - **Human is final authority** on all findings via `/review-findings`
-- **Rejected findings can become new rules** in knowledge-base (feedback loop)
+- **Rejected findings can become new rules** in project knowledge-base (feedback loop)
 - **Max 20 files per task** — keep PRs reviewable
 - **TDD/BDD** — human names test cases, AI implements bodies
 

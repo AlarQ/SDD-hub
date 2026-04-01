@@ -3,8 +3,9 @@ Show a comprehensive status dashboard for a feature's tasks.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
-2. Check that `specs/$ARGUMENTS/tasks/` directory exists and contains task files — if not, refuse and say: "No tasks found for feature '$ARGUMENTS'. Run `/propose $ARGUMENTS` first."
+1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
+2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
+3. Check that `specs/$ARGUMENTS/tasks/` directory exists and contains task files — if not, refuse and say: "No tasks found for feature '$ARGUMENTS'. Run `/propose $ARGUMENTS` first."
 
 ## Steps
 

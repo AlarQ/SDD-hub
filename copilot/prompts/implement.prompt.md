@@ -10,14 +10,21 @@ Implement the next task for a feature.
 The user should provide the feature name in their message.
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
-2. Run `./scripts/task-manager.sh check-unvalidated specs/<feature>/tasks/` — if any task is `implemented` or `review`, refuse and say: "Task [ID] is awaiting validation. Run `/validate <feature>` first."
-3. Run `./scripts/task-manager.sh next specs/<feature>/tasks/` to find the next eligible task
+1. Check that `knowledge-base/_general/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup-copilot.sh` from the dev-workflow repo first."
+2. Check that `knowledge-base/` (project) exists with project-specific files — if not, refuse and instruct the user to run `/bootstrap` first
+3. Run `./scripts/task-manager.sh check-unvalidated specs/<feature>/tasks/` — if any task is `implemented` or `review`, refuse and say: "Task [ID] is awaiting validation. Run `/validate <feature>` first."
+4. Run `./scripts/task-manager.sh next specs/<feature>/tasks/` to find the next eligible task
    - If no eligible task found, report which tasks are blocked and by which task IDs
-4. Check if any `done` tasks have an unmerged PR:
+5. Check if any `done` tasks have an unmerged PR:
    - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
    - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/<feature>`. Merge it before starting the next task."
    - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship <feature>` first."
+
+## Ground Rules Resolution
+Resolve `ground_rules` paths using the prefix convention:
+- `general:` prefix → read from `knowledge-base/_general/` (e.g., `general:security/general.md`)
+- `project:` prefix → read from `knowledge-base/` (e.g., `project:languages/rust.md`)
+- Unprefixed paths → default to `project:` (backward compatibility)
 
 ## Steps
 1. Run `./scripts/task-manager.sh set-status <task-file> in-progress`
@@ -28,17 +35,17 @@ The user should provide the feature name in their message.
    - If starting fresh: delete the branch (`git branch -D feat/<feature>/{task-id}-{task-name}`) and create a new one
    - If continuing: checkout the existing branch and proceed
 5. Create task branch from the integration branch: `feat/<feature>/{task-id}-{task-name}`
-6. Read the task's `ground_rules` files from `knowledge-base/`
+6. Read the task's `ground_rules` files from both knowledge bases (resolving prefixes per the convention above)
 7. Read `specs/<feature>/spec.md` and `specs/<feature>/design.md` for context
 8. Implement the code changes following the spec and ground rules:
    - Follow architectural decisions from design.md
    - Follow language-specific patterns from knowledge-base/languages/
-   - Apply security rules from knowledge-base/security/
+   - Apply security rules from `knowledge-base/_general/security/` and project security rules (if any)
    - **On error or test failure** — invoke `@ultrathink-debugger` with the error output, relevant source files, and task context. The agent returns structured diagnosis with root cause and proposed fix. Present the agent's diagnosis and proposed fix to the user. On accept: apply the fix and continue. On reject or if the agent cannot resolve the issue: report the failure to the user and pause for guidance.
 9. Implement test bodies for the natural-language test cases defined in the task
    - Human wrote test case names in the task file
    - AI writes the test implementations
-   - Use Given/When/Then structure from knowledge-base/testing/
+   - Use Given/When/Then structure from `knowledge-base/_general/testing/`
 10. Add implementation notes to the task file explaining decisions made
 
 ## Post-Implementation Quality Check

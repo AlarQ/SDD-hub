@@ -10,8 +10,9 @@ Show a comprehensive status dashboard for a feature's tasks.
 The user should provide the feature name in their message.
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
-2. Check that `specs/<feature>/tasks/` directory exists and contains task files — if not, refuse and say: "No tasks found for feature '<feature>'. Run `/propose <feature>` first."
+1. Check that `knowledge-base/_general/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup-copilot.sh` from the dev-workflow repo first."
+2. Check that `knowledge-base/` (project) exists with project-specific files — if not, refuse and instruct the user to run `/bootstrap` first
+3. Check that `specs/<feature>/tasks/` directory exists and contains task files — if not, refuse and say: "No tasks found for feature '<feature>'. Run `/propose <feature>` first."
 
 ## Steps
 

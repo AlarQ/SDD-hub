@@ -146,6 +146,7 @@ if ! safe_copy "$COPILOT_SRC/copilot-instructions.md" "$GITHUB_DIR/copilot-instr
 fi
 
 # 8. Copy scripts (task-manager.sh, pre-commit-hook.sh)
+# Note: scripts live in repo root scripts/, not copilot/ — so we use $SCRIPT_DIR here
 echo ""
 echo "Installing scripts to $SCRIPTS_DST/"
 for script_file in "$SCRIPT_DIR/scripts/"*.sh; do
@@ -158,7 +159,30 @@ for script_file in "$SCRIPT_DIR/scripts/"*.sh; do
   [ -f "$SCRIPTS_DST/$name" ] && chmod +x "$SCRIPTS_DST/$name"
 done
 
-# 9. Verify
+# 9. Copy general knowledge base
+echo ""
+KB_GENERAL_DIR="$TARGET_DIR/knowledge-base/_general"
+echo "Installing general knowledge base to $KB_GENERAL_DIR/"
+mkdir -p "$KB_GENERAL_DIR/security"
+mkdir -p "$KB_GENERAL_DIR/architecture"
+mkdir -p "$KB_GENERAL_DIR/testing"
+mkdir -p "$KB_GENERAL_DIR/style"
+if ! safe_copy "$SCRIPT_DIR/knowledge-base/_index.md" "$KB_GENERAL_DIR/_index.md"; then
+  conflicts=$((conflicts + 1))
+  conflict_files+=("knowledge-base/_general/_index.md")
+fi
+for kb_subdir in security architecture testing style; do
+  for kb_file in "$SCRIPT_DIR/knowledge-base/$kb_subdir/"*.md; do
+    [ -f "$kb_file" ] || continue
+    name=$(basename "$kb_file")
+    if ! safe_copy "$kb_file" "$KB_GENERAL_DIR/$kb_subdir/$name"; then
+      conflicts=$((conflicts + 1))
+      conflict_files+=("knowledge-base/_general/$kb_subdir/$name")
+    fi
+  done
+done
+
+# 10. Verify
 echo ""
 echo "=== Verification ==="
 
@@ -199,6 +223,22 @@ else
   echo "[FAIL] task-manager.sh not executable"
   errors=$((errors + 1))
 fi
+
+# Check general knowledge base
+if [ -f "$KB_GENERAL_DIR/_index.md" ]; then
+  echo "[ok] general knowledge base"
+else
+  echo "[FAIL] general knowledge base missing"
+  errors=$((errors + 1))
+fi
+for kb_file in security/general.md architecture/general.md testing/principles.md style/general.md; do
+  if [ -f "$KB_GENERAL_DIR/$kb_file" ]; then
+    echo "[ok] knowledge-base/_general/$kb_file"
+  else
+    echo "[FAIL] knowledge-base/_general/$kb_file missing"
+    errors=$((errors + 1))
+  fi
+done
 
 echo ""
 if [ "$conflicts" -gt 0 ]; then

@@ -28,7 +28,8 @@ estimated_files:
 test_cases:
   - "should reject unauthenticated requests"
 ground_rules:
-  - knowledge-base/security/auth.md
+  - general:security/general.md
+  - project:languages/rust.md
 ---
 
 # Implementation Notes

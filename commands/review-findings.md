@@ -3,7 +3,8 @@ Walk through validation findings interactively.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
+2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
 
 ## Steps
 1. Read all pending reports from `specs/$ARGUMENTS/reports/`
@@ -12,7 +13,7 @@ Feature name: $ARGUMENTS
    - Ask: Accept or Reject?
    - If Accept: apply the fix, **re-read the file** before applying the next fix (sequential apply to avoid conflicts), update review_status to "accepted"
    - If Reject: ask for reasoning, update review_status to "rejected", set review_notes
-   - If Reject + new rule needed: create/update the relevant knowledge-base/ file and update `knowledge-base/_index.md`, set rule_added: true
+   - If Reject + new rule needed: create/update the relevant file in the **project** knowledge-base (`knowledge-base/`) and update `knowledge-base/_index.md`, set rule_added: true. Never modify the general knowledge base (`~/.claude/knowledge-base/`).
 3. Report summary: X accepted, Y rejected, Z new rules added
 
 ## Status Update

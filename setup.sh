@@ -11,6 +11,7 @@ SCRIPTS_DIR="$CLAUDE_DIR/scripts"
 AGENTS_DIR="$CLAUDE_DIR/agents"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 TEMPLATES_DIR="$CLAUDE_DIR/templates"
+KB_DIR="$CLAUDE_DIR/knowledge-base"
 FORCE=false
 
 if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
@@ -34,6 +35,10 @@ mkdir -p "$SCRIPTS_DIR"
 mkdir -p "$AGENTS_DIR"
 mkdir -p "$HOOKS_DIR"
 mkdir -p "$TEMPLATES_DIR"
+mkdir -p "$KB_DIR/security"
+mkdir -p "$KB_DIR/architecture"
+mkdir -p "$KB_DIR/testing"
+mkdir -p "$KB_DIR/style"
 
 # Helper: copy file with overwrite protection
 safe_copy() {
@@ -139,7 +144,25 @@ for tpl_file in "$SCRIPT_DIR/templates/"*; do
   fi
 done
 
-# 8. Verify
+# 8. Copy general knowledge base
+echo ""
+echo "Installing general knowledge base to $KB_DIR/"
+safe_copy "$SCRIPT_DIR/knowledge-base/_index.md" "$KB_DIR/_index.md" || {
+  conflicts=$((conflicts + 1))
+  conflict_files+=("_index.md")
+}
+for kb_subdir in security architecture testing style; do
+  for kb_file in "$SCRIPT_DIR/knowledge-base/$kb_subdir/"*.md; do
+    [ -f "$kb_file" ] || continue
+    name=$(basename "$kb_file")
+    if ! safe_copy "$kb_file" "$KB_DIR/$kb_subdir/$name"; then
+      conflicts=$((conflicts + 1))
+      conflict_files+=("$name")
+    fi
+  done
+done
+
+# 9. Verify
 echo ""
 echo "=== Verification ==="
 
@@ -198,6 +221,22 @@ else
   echo "[FAIL] settings.json template missing"
   errors=$((errors + 1))
 fi
+
+# Check general knowledge base
+if [ -f "$KB_DIR/_index.md" ]; then
+  echo "[ok] general knowledge base"
+else
+  echo "[FAIL] general knowledge base missing"
+  errors=$((errors + 1))
+fi
+for kb_file in security/general.md architecture/general.md testing/principles.md style/general.md; do
+  if [ -f "$KB_DIR/$kb_file" ]; then
+    echo "[ok] knowledge-base/$kb_file"
+  else
+    echo "[FAIL] knowledge-base/$kb_file missing"
+    errors=$((errors + 1))
+  fi
+done
 
 echo ""
 if [ "$conflicts" -gt 0 ]; then

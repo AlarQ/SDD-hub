@@ -81,13 +81,13 @@ Open the project in Claude Code and run:
 /bootstrap
 ```
 
-This creates `knowledge-base/` seeded with rules from `~/.claude/rules/` (`code-quality.md` and `security-patterns.md`):
-- `security/general.md` — OWASP, input validation, secret handling (from `security-patterns.md`)
-- `architecture/general.md` — composition, modularity, boundaries (from `code-quality.md`)
-- `testing/principles.md` — testability, pure functions, BDD (from `code-quality.md`)
-- `style/general.md` — naming, module/function size (from `code-quality.md`)
+This creates the project-specific `knowledge-base/` with:
+- `languages/` — per-language validation tool definitions (asks which languages the project uses)
+- `conventions/` — empty directory for project-specific rules discovered over time
 
-It also asks which languages the project uses and creates language files with `validation_tools` frontmatter (the tools `/validate` must run).
+General rules (security, architecture, testing, style) are already installed globally at `~/.claude/knowledge-base/` by `setup.sh`. The `/bootstrap` command only creates project-specific content.
+
+**For Copilot users:** General rules are installed at `knowledge-base/_general/` by `setup-copilot.sh`.
 
 ### 2. Add project instructions
 
@@ -144,12 +144,14 @@ project-root/
 │   ├── agents/*.agent.md
 │   └── instructions/*.instructions.md
 ├── knowledge-base/
-│   ├── _index.md
-│   ├── security/
-│   ├── architecture/
-│   ├── languages/
-│   ├── testing/
-│   └── style/
+│   ├── _index.md                    # project-specific rule index
+│   ├── _general/                    # Copilot users only (installed by setup-copilot.sh)
+│   │   ├── security/
+│   │   ├── architecture/
+│   │   ├── testing/
+│   │   └── style/
+│   ├── languages/                   # project-specific language files
+│   └── conventions/                 # project-specific conventions
 ├── specs/           (created later by /propose)
 └── .git/hooks/pre-commit
 ```
@@ -160,15 +162,15 @@ The workflow has 10 stages (plus `/spec-status` and `/workflow-summary` availabl
 
 ### Stage 0: `/bootstrap` (once per project)
 
-**What it does:** Creates `knowledge-base/` with rules seeded from your global `~/.claude/rules/`. Asks which languages the project uses and generates language files with `validation_tools` frontmatter.
+**What it does:** Creates the project-specific `knowledge-base/` with language files and a `conventions/` directory. General rules (security, architecture, testing, style) are already installed globally by `setup.sh`. Asks which languages the project uses and generates language files with `validation_tools` frontmatter.
 
-**Produces:** `knowledge-base/` directory with `_index.md`, subdirectories for security, architecture, languages, testing, and style.
+**Produces:** `knowledge-base/` directory with `_index.md`, `languages/`, and `conventions/`.
 
 **Next:** `/explore`
 
 ### Stage 1: `/explore` (requirements)
 
-**What it does:** Conversational requirements gathering. Reads `knowledge-base/_index.md` to know which rules exist, then asks clarifying questions about scope, security, integrations, testing, and performance.
+**What it does:** Conversational requirements gathering. Reads both general and project `_index.md` files to know which rules exist, then asks clarifying questions about scope, security, integrations, testing, and performance.
 
 **Produces:** Shared understanding of what to build. Optionally saves a PRD to `specs/<name>/prd.md`.
 
@@ -228,9 +230,9 @@ The workflow has 10 stages (plus `/spec-status` and `/workflow-summary` availabl
 **Produces:** YAML reports in `specs/<name>/reports/NNN-gate.yaml` for each gate.
 
 **4 gates:**
-- **security** — semgrep + language audit tools + LLM (knowledge-base/security/)
-- **code-quality** — language lint tools + LLM (DRY, function size, modularity)
-- **architecture** — LLM only (knowledge-base/architecture/)
+- **security** — semgrep + language audit tools + LLM (general + project security rules)
+- **code-quality** — language lint tools + LLM (general + project style rules)
+- **architecture** — LLM only (general + project architecture rules)
 - **testing** — language test/coverage tools + LLM (test quality)
 
 **Status update:**
@@ -244,7 +246,7 @@ The workflow has 10 stages (plus `/spec-status` and `/workflow-summary` availabl
 **What it does:** Walks through each finding with `review_status: pending`. For each one, presents severity, title, description, code snippet, fix proposal, and source (tool/llm). You decide: Accept or Reject.
 
 - **Accept:** Fix is applied (files re-read between fixes to avoid conflicts). `review_status` set to `accepted`.
-- **Reject:** You provide reasoning. `review_status` set to `rejected` with `review_notes`. Optionally creates a new rule in `knowledge-base/` (sets `rule_added: true`).
+- **Reject:** You provide reasoning. `review_status` set to `rejected` with `review_notes`. Optionally creates a new rule in the project `knowledge-base/` (sets `rule_added: true`).
 
 **Status update:**
 - Fixes applied -> task returns to `implemented` (re-run `/validate <name>`)
@@ -349,17 +351,17 @@ test_cases:
   - "should return user by ID when user exists"
   - "should return error when user not found"
 ground_rules:
-  - knowledge-base/architecture/ddd.md
-  - knowledge-base/testing/principles.md
-  - knowledge-base/languages/rust.md
+  - general:architecture/general.md
+  - general:testing/principles.md
+  - project:languages/rust.md
 ---
 
 ## Description
 Implement the user repository trait and Postgres implementation.
 
 ## Ground Rules Applied
-- knowledge-base/architecture/ddd.md — domain layer owns the trait, infrastructure implements
-- knowledge-base/testing/principles.md — BDD test structure, Given/When/Then
+- general:architecture/general.md — domain layer owns the trait, infrastructure implements
+- general:testing/principles.md — BDD test structure, Given/When/Then
 
 ## Implementation Notes
 (AI fills this in during /implement)
@@ -373,9 +375,9 @@ Required fields: `id`, `name`, `status`, `ground_rules`, `test_cases`, `blocked_
 
 | Gate | Deterministic tools | LLM analysis |
 |------|-------------------|--------------|
-| **security** | semgrep, language audit tools | knowledge-base/security/ rules |
-| **code-quality** | language lint tools | DRY, function size, modularity |
-| **architecture** | none | knowledge-base/architecture/ rules |
+| **security** | semgrep, language audit tools | general + project security rules |
+| **code-quality** | language lint tools | general + project style rules |
+| **architecture** | none | general + project architecture rules |
 | **testing** | test runner, coverage tools | test quality, missing edge cases |
 
 ### Source types
@@ -441,27 +443,52 @@ main
 
 ## Knowledge Base
 
+### Dual Knowledge Base
+
+Two knowledge bases work together:
+
+**General KB** — universal rules installed globally:
+- Claude Code: `~/.claude/knowledge-base/` (installed by `setup.sh`)
+- Copilot: `knowledge-base/_general/` (installed by `setup-copilot.sh`)
+- Contains: security, architecture, testing, and style rules
+
+**Project KB** — project-specific rules at `knowledge-base/`:
+- Created by `/bootstrap`
+- Contains: `languages/` (validation tools), `conventions/` (project-specific rules)
+
 ### Structure
 
 ```
-knowledge-base/
-├── _index.md           # flat list of all files with one-line descriptions
-├── security/           # OWASP, auth, data handling
-├── architecture/       # hexagonal, DDD, boundaries
-├── languages/          # per-language rules + validation_tools frontmatter
-├── testing/            # TDD/BDD, integration testing
-└── style/              # naming, module size, function size
+~/.claude/knowledge-base/        # General KB (Claude Code — global)
+├── _index.md
+├── security/general.md
+├── architecture/general.md
+├── testing/principles.md
+└── style/general.md
+
+knowledge-base/                  # Project KB (per-repo)
+├── _index.md
+├── languages/rust.md            # with validation_tools frontmatter
+└── conventions/                 # grows via /review-findings feedback
 ```
+
+### ground_rules Prefix Convention
+
+Task `ground_rules` use prefixes to reference rules from either KB:
+- `general:security/general.md` → resolves to general KB
+- `project:languages/rust.md` → resolves to project KB
+- Unprefixed paths default to `project:` (backward compatibility)
 
 ### Rule flow
 
-1. **`/bootstrap`** — seeds initial rules from `~/.claude/rules/`
-2. **`/explore`** — reads `_index.md` to identify relevant rules conversationally
-3. **`/propose`** — selects rules and writes them into each task's `ground_rules` field
-4. **`/implement` + `/validate`** — `ground_rules` is the single source of truth for which rules apply
-5. **`/review-findings`** — rejected findings can become new rules (feedback loop)
+1. **`setup.sh`** — installs general rules globally (security, architecture, testing, style)
+2. **`/bootstrap`** — creates project-specific rules (languages, conventions)
+3. **`/explore`** — reads both `_index.md` files to identify relevant rules conversationally
+4. **`/propose`** — selects rules from both KBs and writes them into each task's `ground_rules` field with prefixes
+5. **`/implement` + `/validate`** — `ground_rules` is the single source of truth for which rules apply
+6. **`/review-findings`** — rejected findings can become new rules in the **project** KB (feedback loop)
 
-The knowledge base grows organically. Start minimal and let validation findings feed new rules back in.
+The project knowledge base grows organically. General rules are shared across all projects; project rules capture conventions unique to the codebase.
 
 ### Language files
 
@@ -509,12 +536,12 @@ gh pr create --base main --head feat/<feature>
 
 | Command | When | Requires |
 |---------|------|----------|
-| `/bootstrap` | Once per project | `yq` installed |
-| `/explore` | Start of new feature | `knowledge-base/` |
-| `/propose <name>` | After requirements clear | `knowledge-base/` |
-| `/implement <name>` | After spec review | `knowledge-base/`, no unvalidated tasks, previous PR merged |
-| `/validate <name>` | After each implementation | `knowledge-base/`, task at `implemented` |
-| `/review-findings <name>` | After validation with findings | `knowledge-base/`, task at `review` |
+| `/bootstrap` | Once per project | General KB installed (`setup.sh`), `yq` |
+| `/explore` | Start of new feature | Both KBs |
+| `/propose <name>` | After requirements clear | Both KBs |
+| `/implement <name>` | After spec review | Both KBs, no unvalidated tasks, previous PR merged |
+| `/validate <name>` | After each implementation | Both KBs, task at `implemented` |
+| `/review-findings <name>` | After validation with findings | Both KBs, task at `review` |
 | `/ship <name>` | After task reaches `done` | `done` task without PR |
 | `/pr-review` | After PR gets comments | Active PR on current branch |
 | `/spec-status <name>` | Anytime | `specs/<name>/tasks/` |
