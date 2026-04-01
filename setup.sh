@@ -146,7 +146,7 @@ echo "=== Verification ==="
 errors=0
 
 # Check commands
-for cmd in bootstrap explore propose implement validate review-findings ship pr-review spec-status workflow-summary continue-task research; do
+for cmd in bootstrap explore propose implement validate review-findings ship quick-ship pr-review spec-status workflow-summary continue-task research; do
   if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
     echo "[ok] /$cmd command"
   else

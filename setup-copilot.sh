@@ -165,7 +165,7 @@ echo "=== Verification ==="
 errors=0
 
 # Check prompts
-for prompt in bootstrap explore propose implement validate review-findings ship pr-review spec-status workflow-summary continue-task research; do
+for prompt in bootstrap explore propose implement validate review-findings ship quick-ship pr-review spec-status workflow-summary continue-task research; do
   if [ -f "$GITHUB_DIR/prompts/$prompt.prompt.md" ]; then
     echo "[ok] /$prompt prompt"
   else

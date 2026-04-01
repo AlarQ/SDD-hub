@@ -10,7 +10,7 @@ A file-based, spec-driven development workflow for Claude Code and GitHub Copilo
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, pr-review, spec-status, workflow-summary, continue-task, research)
+- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research)
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `hooks/` — Claude Code hook scripts for enforcement (block-git-hook-bypass, block-dismissive-language). Installed to `~/.claude/hooks/` by `setup.sh`.
