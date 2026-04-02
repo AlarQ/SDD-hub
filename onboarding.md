@@ -32,8 +32,8 @@ Run from the dev-workflow repository root:
 ```
 
 This installs:
-- 10 slash commands to `~/.claude/commands/`:
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `pr-review`, `spec-status`, `workflow-summary`
+- 13 slash commands to `~/.claude/commands/`:
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 - 35+ agent definitions to `~/.claude/agents/`
@@ -55,8 +55,8 @@ Run from the dev-workflow repository root, providing the target project path:
 ```
 
 This installs into the target project's `.github/` directory:
-- 10 prompt files to `.github/prompts/` (Copilot slash commands):
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `pr-review`, `spec-status`, `workflow-summary`
+- 13 prompt files to `.github/prompts/` (Copilot slash commands):
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`
 - 6 custom agents to `.github/agents/`:
   `software-architect`, `security-engineer`, `code-quality`, `compliance-checker`, `ultrathink-debugger`, `code-reviewer`
 - 2 path-specific instruction files to `.github/instructions/`
@@ -116,7 +116,7 @@ echo '<path-to-pre-commit-hook.sh>' > .husky/pre-commit
 
 This runs `task-manager.sh validate` on any changed task files at commit time, catching invalid structure or status transitions.
 
-### 5. Install language validation tools
+### 4. Install language validation tools
 
 Check `knowledge-base/languages/` for which tools are listed in `validation_tools` frontmatter, then install them. Examples:
 
@@ -149,7 +149,10 @@ project-root/
 │   │   ├── security/
 │   │   ├── architecture/
 │   │   ├── testing/
-│   │   └── style/
+│   │   ├── style/
+│   │   ├── documentation/
+│   │   ├── code-review/
+│   │   └── languages/
 │   ├── languages/                   # project-specific language files
 │   └── conventions/                 # project-specific conventions
 ├── specs/           (created later by /propose)
@@ -158,7 +161,7 @@ project-root/
 
 ## Workflow Walkthrough
 
-The workflow has 10 stages (plus `/spec-status` and `/workflow-summary` available anytime). Each stage produces specific artifacts and has a clear next step.
+The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/continue-task`, `/quick-ship`, and `/research` available anytime). Each stage produces specific artifacts and has a clear next step.
 
 ### Stage 0: `/bootstrap` (once per project)
 
@@ -292,6 +295,39 @@ The workflow has 10 stages (plus `/spec-status` and `/workflow-summary` availabl
 - Suggested next action
 
 **Requires:** `specs/<name>/tasks/` must exist.
+
+### `/continue-task <name>` (resume work — use anytime)
+
+**What it does:** Resumes work on whatever task is currently in flight. Detects the active task's phase by checking status and existing artifacts (reports, branches, PR state), then tells you exactly what to do next.
+
+**Phase detection:**
+- `in-progress` with no commits → continue implementing
+- `in-progress` with code changes → continue coding/testing
+- `implemented` with no reports → remind to run `/validate`
+- `review` with pending findings → remind to run `/review-findings`
+- `done` without PR → remind to run `/ship`
+- `done` with open PR → remind to merge
+
+**Requires:** `specs/<name>/tasks/` with at least one task in an active state.
+
+### `/quick-ship` (standalone — use anytime)
+
+**What it does:** Ships current changes without the spec-driven workflow. Works in any git repo. Commits, pushes, and creates a PR in one step.
+
+- If on `main`/`master`, creates a feature branch first
+- Stages all changes, generates a commit message from the diff
+- Pushes and creates a PR targeting the default branch
+- Scans for sensitive files before committing
+
+**Requires:** Git repository with shippable changes.
+
+### `/research` (mode toggle — use anytime)
+
+**What it does:** Activates anti-hallucination research mode with three constraints: epistemic honesty (say "I don't know"), citation discipline (every claim needs a source), and quote-grounded responses. Stays active until you say "exit research mode".
+
+Useful for bug investigation, API contract review, and any situation where accuracy matters more than speed.
+
+**Requires:** None.
 
 ### Final PR
 
@@ -450,7 +486,7 @@ Two knowledge bases work together:
 **General KB** — universal rules installed globally:
 - Claude Code: `~/.claude/knowledge-base/` (installed by `setup.sh`)
 - Copilot: `knowledge-base/_general/` (installed by `setup-copilot.sh`)
-- Contains: security, architecture, testing, and style rules
+- Contains: security, architecture, testing, style, documentation, code-review, and language rules
 
 **Project KB** — project-specific rules at `knowledge-base/`:
 - Created by `/bootstrap`
@@ -462,9 +498,19 @@ Two knowledge bases work together:
 ~/.claude/knowledge-base/        # General KB (Claude Code — global)
 ├── _index.md
 ├── security/general.md
-├── architecture/general.md
+├── architecture/
+│   ├── general.md
+│   ├── api-design.md
+│   └── code-analysis.md
 ├── testing/principles.md
-└── style/general.md
+├── style/general.md
+├── documentation/general.md
+├── code-review/general.md
+└── languages/
+    ├── rust.md
+    ├── typescript.md
+    ├── nextjs.md
+    └── scala.md
 
 knowledge-base/                  # Project KB (per-repo)
 ├── _index.md
@@ -481,7 +527,7 @@ Task `ground_rules` use prefixes to reference rules from either KB:
 
 ### Rule flow
 
-1. **`setup.sh`** — installs general rules globally (security, architecture, testing, style)
+1. **`setup.sh`** — installs general rules globally (security, architecture, testing, style, documentation, code-review, languages)
 2. **`/bootstrap`** — creates project-specific rules (languages, conventions)
 3. **`/explore`** — reads both `_index.md` files to identify relevant rules conversationally
 4. **`/propose`** — selects rules from both KBs and writes them into each task's `ground_rules` field with prefixes
@@ -546,3 +592,6 @@ gh pr create --base main --head feat/<feature>
 | `/pr-review` | After PR gets comments | Active PR on current branch |
 | `/spec-status <name>` | Anytime | `specs/<name>/tasks/` |
 | `/workflow-summary` | Anytime | None |
+| `/continue-task <name>` | Resume interrupted work | Active task in `specs/<name>/tasks/` |
+| `/quick-ship` | Ship without workflow | Git repo with changes |
+| `/research` | Bug investigation, API review | None |

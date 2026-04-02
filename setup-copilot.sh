@@ -171,7 +171,7 @@ if ! safe_copy "$SCRIPT_DIR/knowledge-base/_index.md" "$KB_GENERAL_DIR/_index.md
   conflicts=$((conflicts + 1))
   conflict_files+=("knowledge-base/_general/_index.md")
 fi
-for kb_subdir in security architecture testing style; do
+for kb_subdir in security architecture testing style documentation code-review languages; do
   for kb_file in "$SCRIPT_DIR/knowledge-base/$kb_subdir/"*.md; do
     [ -f "$kb_file" ] || continue
     name=$(basename "$kb_file")
@@ -231,7 +231,7 @@ else
   echo "[FAIL] general knowledge base missing"
   errors=$((errors + 1))
 fi
-for kb_file in security/general.md architecture/general.md testing/principles.md style/general.md; do
+for kb_file in security/general.md architecture/general.md architecture/api-design.md architecture/code-analysis.md testing/principles.md style/general.md documentation/general.md code-review/general.md languages/rust.md languages/typescript.md languages/nextjs.md languages/scala.md; do
   if [ -f "$KB_GENERAL_DIR/$kb_file" ]; then
     echo "[ok] knowledge-base/_general/$kb_file"
   else
