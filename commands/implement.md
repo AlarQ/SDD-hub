@@ -3,21 +3,14 @@ Implement the next task for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
-2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
-3. Run `~/.claude/scripts/task-manager.sh check-unvalidated specs/$ARGUMENTS/tasks/` — if any task is `implemented` or `review`, refuse and say: "Task [ID] is awaiting validation. Run `/validate $ARGUMENTS` first."
-4. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+2. Run `~/.claude/scripts/task-manager.sh check-unvalidated specs/$ARGUMENTS/tasks/` — if any task is `implemented` or `review`, refuse and say: "Task [ID] is awaiting validation. Run `/validate $ARGUMENTS` first."
+3. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
    - If no eligible task found, report which tasks are blocked and by which task IDs
-5. Check if any `done` tasks have an unmerged PR:
+4. Check if any `done` tasks have an unmerged PR:
    - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
    - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/$ARGUMENTS`. Merge it before starting the next task."
    - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."
-
-## Ground Rules Resolution
-Resolve `ground_rules` paths using the prefix convention:
-- `general:` prefix → read from `~/.claude/knowledge-base/` (e.g., `general:security/general.md`)
-- `project:` prefix → read from `knowledge-base/` (e.g., `project:languages/rust.md`)
-- Unprefixed paths → default to `project:` (backward compatibility)
 
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`

@@ -12,6 +12,7 @@ AGENTS_DIR="$CLAUDE_DIR/agents"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 TEMPLATES_DIR="$CLAUDE_DIR/templates"
 KB_DIR="$CLAUDE_DIR/knowledge-base"
+KB_RULES="$CLAUDE_DIR/knowledge-base-rules.md"
 FORCE=false
 
 if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
@@ -165,7 +166,15 @@ for kb_subdir in security architecture testing style documentation code-review l
   done
 done
 
-# 9. Verify
+# 9. Copy knowledge base rules
+echo ""
+echo "Installing knowledge base rules to $KB_RULES"
+if ! safe_copy "$SCRIPT_DIR/knowledge-base-rules.md" "$KB_RULES"; then
+  conflicts=$((conflicts + 1))
+  conflict_files+=("knowledge-base-rules.md")
+fi
+
+# 10. Verify
 echo ""
 echo "=== Verification ==="
 
@@ -240,6 +249,14 @@ for tpl in settings.json CLAUDE.md gitignore-additions.txt; do
     errors=$((errors + 1))
   fi
 done
+
+# Check knowledge base rules
+if [ -f "$KB_RULES" ]; then
+  echo "[ok] knowledge-base-rules.md"
+else
+  echo "[FAIL] knowledge-base-rules.md missing"
+  errors=$((errors + 1))
+fi
 
 # Check general knowledge base
 if [ -f "$KB_DIR/_index.md" ]; then

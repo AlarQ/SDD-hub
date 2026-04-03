@@ -12,6 +12,7 @@ A file-based, spec-driven development workflow for Claude Code and GitHub Copilo
 
 - `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research)
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Installed globally to `~/.claude/knowledge-base/` by `setup.sh`, or to `knowledge-base/_general/` by `setup-copilot.sh`.
+- `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Installed to `~/.claude/knowledge-base-rules.md` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `hooks/` — Claude Code hook scripts for enforcement (block-git-hook-bypass, block-dismissive-language). Installed to `~/.claude/hooks/` by `setup.sh`.

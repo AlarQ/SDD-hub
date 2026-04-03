@@ -5,12 +5,11 @@ Feature name: $ARGUMENTS
 **Note:** PR review fixes do NOT trigger re-validation. The PR reviewer is the safety net at this stage. Task status remains `done` — if a PR reviewer finds an issue, it is handled entirely within the PR, no task state change needed.
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
-2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
-3. Identify the task: extract task ID from the current branch name (`feat/$ARGUMENTS/{task-id}-{task-name}`) and read the matching task file from `specs/$ARGUMENTS/tasks/`
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+2. Identify the task: extract task ID from the current branch name (`feat/$ARGUMENTS/{task-id}-{task-name}`) and read the matching task file from `specs/$ARGUMENTS/tasks/`
    - If not on a task branch, check if `$ARGUMENTS` was provided and look for `done` tasks with a `pr_url` — use the most recently shipped one
    - If no task can be identified, refuse and say: "Cannot determine which task this PR belongs to. Run from a task branch or provide the feature name."
-4. Read the task's `ground_rules` to know which knowledge-base rules apply, resolving prefixes: `general:` → `~/.claude/knowledge-base/`, `project:` → `knowledge-base/`, unprefixed → `project:`
+3. Read the task's `ground_rules`, resolving prefixes per `~/.claude/knowledge-base-rules.md`
 
 ## Phase 1: Agent-Powered Code Review
 

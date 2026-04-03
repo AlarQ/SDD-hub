@@ -1,11 +1,10 @@
 Explore and clarify requirements for a new feature or change.
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
-2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
 ## Steps
-1. Read both `~/.claude/knowledge-base/_index.md` (general rules) and `knowledge-base/_index.md` (project rules) to understand available ground rules
+1. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) to understand available ground rules
 2. Ask the user to describe the feature or change
 3. **Establish the user perspective first** — before diving into technical areas, clarify:
    - Who benefits from this feature? (user role, persona)

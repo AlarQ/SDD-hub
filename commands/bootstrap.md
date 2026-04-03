@@ -1,7 +1,7 @@
 Bootstrap the project-specific knowledge-base for a new project.
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general knowledge base) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
+1. Read and follow `~/.claude/knowledge-base-rules.md` — check general KB prerequisite only (project KB doesn't exist yet, this command creates it)
 
 ## Steps
 1. Check if `knowledge-base/` already exists — if yes, report and stop (don't overwrite)

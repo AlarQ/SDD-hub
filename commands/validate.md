@@ -3,18 +3,11 @@ Run validation gates on implemented code for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
-2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
-3. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks with `status: implemented`
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+2. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks with `status: implemented`
    - If no tasks have `status: implemented`, report and stop
    - If more than one task has `status: implemented`, report an error: "Multiple tasks are at `implemented` status — only one task should be in flight at a time. Check task state integrity."
    - Validate exactly one task
-
-## Ground Rules Resolution
-Resolve `ground_rules` paths using the prefix convention:
-- `general:` prefix → read from `~/.claude/knowledge-base/`
-- `project:` prefix → read from `knowledge-base/`
-- Unprefixed paths → default to `project:` (backward compatibility)
 
 ## Phase 1: Deterministic Tools (hard gates)
 For each task with `status: implemented`:

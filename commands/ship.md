@@ -3,9 +3,8 @@ Ship a completed task: commit, push, and create a PR into the feature branch.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
-2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
-3. Read tasks from `specs/$ARGUMENTS/tasks/` — find all tasks with `status: done`
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+2. Read tasks from `specs/$ARGUMENTS/tasks/` — find all tasks with `status: done`
    - Filter to tasks that do NOT yet have a PR (no `pr_url` in frontmatter)
    - If no unshipped `done` tasks exist, report and stop
 4. Verify all validation gates passed for this task: check `specs/$ARGUMENTS/reports/` for report files matching this task's ID

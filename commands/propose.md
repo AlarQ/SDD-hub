@@ -3,19 +3,12 @@ Generate specification, design, and tasks for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
-2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
 ## Steps
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context
-2. Read both `~/.claude/knowledge-base/_index.md` (general rules) and `knowledge-base/_index.md` (project rules) — identify all applicable rules from both
+2. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) — identify all applicable rules from both
 3. Read the applicable rule files from both knowledge bases
-
-## Ground Rules Prefix Convention
-When referencing knowledge-base rules in `ground_rules` fields, use prefixes:
-- `general:` — resolves to `~/.claude/knowledge-base/` (e.g., `general:security/general.md`)
-- `project:` — resolves to `knowledge-base/` (e.g., `project:languages/rust.md`)
-- Unprefixed paths default to `project:` for backward compatibility
 
 ## Generate Artifacts
 

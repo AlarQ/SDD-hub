@@ -3,8 +3,7 @@ Walk through validation findings interactively.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `~/.claude/knowledge-base/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup.sh` from the dev-workflow repo first."
-2. Check that `knowledge-base/` (project) exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
 ## Steps
 1. Read all pending reports from `specs/$ARGUMENTS/reports/`
