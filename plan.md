@@ -48,6 +48,8 @@ All commands that operate on a feature take the feature name as `$ARGUMENTS`.
 
 ## Task State Machine
 
+> **Source of truth:** `scripts/task-manager.sh` enforces these transitions. If the script and this doc disagree, the script wins.
+
 ```
 blocked → todo → in-progress → implemented → review → done
                                             ↗ (fixes applied, re-validate)

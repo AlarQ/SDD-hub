@@ -14,6 +14,7 @@ This project uses a custom spec-driven development workflow with validation gate
 7. Create PR (task PR -> feature branch), use `/pr-review` for agent-powered review and comment-driven fixes
 8. When all tasks done, final PR from feature branch -> main
 
+<!-- State machine canonical source: scripts/task-manager.sh + plan.md. Keep in sync when editing. -->
 ### Task States
 `blocked` -> `todo` -> `in-progress` -> `implemented` -> `review` -> `done`
 

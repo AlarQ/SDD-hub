@@ -344,6 +344,8 @@ This is the full feature review — all task branches have been merged into the 
 
 ### State machine
 
+> Canonical source: `scripts/task-manager.sh` enforces transitions. Detailed docs in `plan.md` § Task State Machine.
+
 ```
 blocked -> todo -> in-progress -> implemented -> review -> done
                                               \-> done (zero findings)

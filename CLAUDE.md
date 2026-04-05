@@ -69,7 +69,7 @@ Elm-like architecture with file-system watching for live reload:
 
 - Commands receive feature name via `$ARGUMENTS`
 - All task status changes go through `task-manager.sh` — never edit YAML frontmatter directly
-- Task state machine: `blocked -> todo -> in-progress -> implemented -> review -> done`
+- Task state machine: `blocked -> todo -> in-progress -> implemented -> review -> done` (canonical source: `scripts/task-manager.sh`; full docs: `plan.md`)
 - Enforced flow per task: `/implement` -> `/validate` -> `/review-findings` (if findings) -> `/ship` -> merge PR -> next task
 - Serial execution only — one task in flight at a time
 

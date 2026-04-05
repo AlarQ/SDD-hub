@@ -24,6 +24,7 @@ Print the following reference card exactly:
 | 8 | `/pr-review` | Address PR review comments |
 | 9 | `/spec-status <name>` | Dashboard: progress, dependencies, health |
 
+<!-- State machine canonical source: scripts/task-manager.sh + plan.md. Keep in sync when editing. -->
 ### Task States
 ```
 blocked → todo → in-progress → implemented → review → done

@@ -5,6 +5,10 @@ set -euo pipefail
 # Uses yq for YAML frontmatter parsing/updating.
 # Usage: task-manager.sh <command> [args...]
 
+# === CANONICAL STATE MACHINE ===
+# Executable source of truth for task states and transitions.
+# Human-readable docs: plan.md § "Task State Machine"
+# If you change states/transitions here, update plan.md to match.
 VALID_STATUSES=("blocked" "todo" "in-progress" "implemented" "review" "done")
 REQUIRED_SCALAR_FIELDS=("id" "name" "status" "max_files")
 REQUIRED_ARRAY_FIELDS=("ground_rules" "test_cases" "blocked_by" "estimated_files")
