@@ -18,6 +18,7 @@ Task files use YAML frontmatter with these required fields:
 - `blocked_by` — list of task IDs that must be done before this task can start (empty array if none)
 - `estimated_files` — list of file paths that will be changed
 
+<!-- State machine canonical source: scripts/task-manager.sh + plan.md. Keep in sync when editing. -->
 ## Valid Status Transitions
 ```
 blocked -> todo

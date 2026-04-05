@@ -18,6 +18,7 @@ This project uses a custom spec-driven development workflow with validation gate
 - `/continue-task <name>` — resume interrupted work (detects phase by artifacts)
 - `/research` — anti-hallucination mode with citation discipline (epistemic honesty, quote-grounded responses)
 
+<!-- State machine canonical source: scripts/task-manager.sh + plan.md. Keep in sync when editing. -->
 ### Task States
 `blocked` -> `todo` -> `in-progress` -> `implemented` -> `review` -> `done`
 

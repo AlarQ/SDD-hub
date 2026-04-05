@@ -5,9 +5,21 @@ set -euo pipefail
 # Uses yq for YAML frontmatter parsing/updating.
 # Usage: task-manager.sh <command> [args...]
 
+# === CANONICAL STATE MACHINE ===
+# Executable source of truth for task states and transitions.
+# Human-readable docs: plan.md § "Task State Machine"
+# If you change states/transitions here, update plan.md to match.
 VALID_STATUSES=("blocked" "todo" "in-progress" "implemented" "review" "done")
 REQUIRED_SCALAR_FIELDS=("id" "name" "status" "max_files")
 REQUIRED_ARRAY_FIELDS=("ground_rules" "test_cases" "blocked_by" "estimated_files")
+
+# Resolve general KB base path by detecting installation context
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$SCRIPT_DIR" == "$HOME/.claude/scripts" ]]; then
+  GENERAL_KB_BASE="$HOME/.claude/knowledge-base"
+else
+  GENERAL_KB_BASE="knowledge-base/_general"
+fi
 
 # Valid transitions: from -> to
 get_allowed_transitions() {
@@ -53,6 +65,19 @@ read_frontmatter() {
   local expression="${2:-.}"
   # Extract content between first --- and second ---
   sed -n '/^---$/,/^---$/p' "$file" | sed '1d;$d' | yq eval "$expression" -
+}
+
+# Resolve a prefixed ground_rules path to a real file path.
+# general:foo.md -> $GENERAL_KB_BASE/foo.md
+# project:foo.md -> knowledge-base/foo.md
+# foo.md (unprefixed) -> knowledge-base/foo.md
+resolve_ground_rule_path() {
+  local prefixed_path="$1"
+  case "$prefixed_path" in
+    general:*) echo "$GENERAL_KB_BASE/${prefixed_path#general:}" ;;
+    project:*) echo "knowledge-base/${prefixed_path#project:}" ;;
+    *)         echo "knowledge-base/$prefixed_path" ;;
+  esac
 }
 
 # Update a field in the YAML frontmatter of a markdown file.
@@ -124,13 +149,14 @@ cmd_validate() {
   done
   [ "$valid" = "true" ] || die "Invalid status '$status' in $file. Valid: ${VALID_STATUSES[*]}"
 
-  # Validate ground_rules paths point to real files
+  # Validate ground_rules paths point to real files (resolving prefix convention)
   local rules_count
   rules_count=$(read_frontmatter "$file" '.ground_rules | length')
   for ((i = 0; i < rules_count; i++)); do
-    local rule_path
+    local rule_path resolved_path
     rule_path=$(read_frontmatter "$file" ".ground_rules[$i]")
-    [ -f "$rule_path" ] || echo "WARNING: ground_rules path not found: $rule_path (in $file)"
+    resolved_path=$(resolve_ground_rule_path "$rule_path")
+    [ -f "$resolved_path" ] || echo "WARNING: ground_rules path not found: $rule_path -> $resolved_path (in $file)"
   done
 
   # Validate blocked_by references if status is blocked

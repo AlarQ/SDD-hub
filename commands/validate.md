@@ -20,7 +20,7 @@ For each task with `status: implemented`:
 ## Phase 2: Agent-Powered Analysis (advisory)
 Spawn specialized agents **in parallel** to analyze code against knowledge-base rules. Each agent receives:
 - The task file path and changed files (from `estimated_files` or git diff)
-- All `ground_rules` files referenced in the task (resolved from both KBs using prefix convention)
+- All `ground_rules` files referenced in the task (per `knowledge-base-rules.md`)
 - The project's `CLAUDE.md` and relevant knowledge-base files from both general and project KBs
 
 ### Independent Verification Rule
@@ -31,17 +31,17 @@ Spawn all four agents concurrently using the Agent tool:
 
 1. **security** → `Security Engineer` agent (`engineering-security-engineer`)
    - Analyze code for OWASP Top 10, CWE Top 25, input validation, secrets exposure
-   - Check against `~/.claude/knowledge-base/security/` rules AND `knowledge-base/security/` rules (if project has security overrides)
+   - Check against security rules from both knowledge bases
    - Each finding must include: severity, file, lines, description, fix_proposal
 
 2. **code-quality** → `code-quality-pragmatist` agent
    - Check for over-engineering, unnecessary complexity, DRY violations, function size, modularity
-   - Check against `~/.claude/knowledge-base/style/` rules AND `knowledge-base/style/` rules (if project has style overrides)
+   - Check against style rules from both knowledge bases
    - Each finding must include: severity, file, lines, description, fix_proposal
 
 3. **architecture** → `Software Architect` agent (`engineering-software-architect`) — **read-only**
    - Verify structural compliance, DDD boundaries, hexagonal layering, module coupling
-   - Check against `~/.claude/knowledge-base/architecture/` rules AND `knowledge-base/architecture/` rules (if project has architecture overrides)
+   - Check against architecture rules from both knowledge bases
    - Each finding must include: severity, file, lines, description, fix_proposal
 
 4. **compliance** → `claude-md-compliance-checker` agent

@@ -22,8 +22,8 @@ Explore and clarify requirements for a new feature or change.
    - Present the options clearly with trade-offs for each
    - Wait for the user to decide — do NOT assume or choose a direction
    - Only proceed after the user confirms the scope
-6. Identify which rule files from both knowledge bases are relevant to this feature — general rules from `~/.claude/knowledge-base/` and project rules from `knowledge-base/`
-7. Summarize understanding and list applicable ground rules (using `general:` and `project:` prefixes)
+6. Identify which rule files from both knowledge bases are relevant to this feature
+7. Summarize understanding and list applicable ground rules (using prefix convention per `knowledge-base-rules.md`)
 8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name
 
 This is conversational — no artifacts are generated yet. The goal is alignment on what needs to be built. Continue refining until the user is satisfied with the PRD.

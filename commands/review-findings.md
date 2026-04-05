@@ -15,7 +15,7 @@ Feature name: $ARGUMENTS
    - **Stop and wait for user response before continuing to the next finding.**
    - If Accept: apply the fix, **re-read the file** before applying the next fix (sequential apply to avoid conflicts), update review_status to "accepted"
    - If Reject: ask for reasoning, update review_status to "rejected", set review_notes
-   - If Reject + new rule needed: create/update the relevant file in the **project** knowledge-base (`knowledge-base/`) and update `knowledge-base/_index.md`, set rule_added: true. Never modify the general knowledge base (`~/.claude/knowledge-base/`).
+   - If Reject + new rule needed: create/update the relevant file in the **project** knowledge-base (per `knowledge-base-rules.md`) and update `knowledge-base/_index.md`, set rule_added: true.
    - After processing, show running tally: "X accepted, Y rejected so far"
 4. Set review_status to "noted" on all informational findings
 5. Display informational summary — compact list: title, file, and one-line description for each
