@@ -2,6 +2,7 @@
 id: "001"
 name: "Create monitor.sh event logger script"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/8
 blocked_by: []
 max_files: 1
 estimated_files:
