@@ -16,7 +16,7 @@ Feature name: $ARGUMENTS
 Spawn the `Code Reviewer` agent (`engineering-code-reviewer`) to analyze the PR diff proactively — before responding to human comments. The agent receives:
 - The full PR diff (`git diff <base-branch>...HEAD`)
 - The task file (scope, acceptance criteria, ground rules)
-- All `ground_rules` files referenced in the task (resolved from both general and project KBs)
+- All `ground_rules` files referenced in the task (per `knowledge-base-rules.md`)
 - The project's `CLAUDE.md`
 
 ### Agent Output Contract
@@ -38,7 +38,7 @@ If the agent errors or times out, report the failure to the user and proceed dir
 2. Fetch comments via `gh api repos/{owner}/{repo}/pulls/{number}/comments`
 3. For each unresolved comment:
    - Read the referenced file and lines
-   - Read the task's `ground_rules` files from both knowledge bases (resolving prefixes)
+   - Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
    - Generate a fix proposal with: description, code_snippet, status: pending
 4. Present each proposal for human accept/reject
 5. On accept: apply fix, commit with reference to comment
