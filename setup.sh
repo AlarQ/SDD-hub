@@ -11,6 +11,8 @@ SCRIPTS_DIR="$CLAUDE_DIR/scripts"
 AGENTS_DIR="$CLAUDE_DIR/agents"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 TEMPLATES_DIR="$CLAUDE_DIR/templates"
+KB_DIR="$CLAUDE_DIR/knowledge-base"
+KB_RULES="$CLAUDE_DIR/knowledge-base-rules.md"
 FORCE=false
 
 if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
@@ -34,6 +36,13 @@ mkdir -p "$SCRIPTS_DIR"
 mkdir -p "$AGENTS_DIR"
 mkdir -p "$HOOKS_DIR"
 mkdir -p "$TEMPLATES_DIR"
+mkdir -p "$KB_DIR/security"
+mkdir -p "$KB_DIR/architecture"
+mkdir -p "$KB_DIR/testing"
+mkdir -p "$KB_DIR/style"
+mkdir -p "$KB_DIR/documentation"
+mkdir -p "$KB_DIR/code-review"
+mkdir -p "$KB_DIR/languages"
 
 # Helper: copy file with overwrite protection
 safe_copy() {
@@ -139,7 +148,33 @@ for tpl_file in "$SCRIPT_DIR/templates/"*; do
   fi
 done
 
-# 8. Verify
+# 8. Copy general knowledge base
+echo ""
+echo "Installing general knowledge base to $KB_DIR/"
+safe_copy "$SCRIPT_DIR/knowledge-base/_index.md" "$KB_DIR/_index.md" || {
+  conflicts=$((conflicts + 1))
+  conflict_files+=("_index.md")
+}
+for kb_subdir in security architecture testing style documentation code-review languages; do
+  for kb_file in "$SCRIPT_DIR/knowledge-base/$kb_subdir/"*.md; do
+    [ -f "$kb_file" ] || continue
+    name=$(basename "$kb_file")
+    if ! safe_copy "$kb_file" "$KB_DIR/$kb_subdir/$name"; then
+      conflicts=$((conflicts + 1))
+      conflict_files+=("$name")
+    fi
+  done
+done
+
+# 9. Copy knowledge base rules
+echo ""
+echo "Installing knowledge base rules to $KB_RULES"
+if ! safe_copy "$SCRIPT_DIR/knowledge-base-rules.md" "$KB_RULES"; then
+  conflicts=$((conflicts + 1))
+  conflict_files+=("knowledge-base-rules.md")
+fi
+
+# 10. Verify
 echo ""
 echo "=== Verification ==="
 
@@ -156,15 +191,17 @@ for cmd in bootstrap explore propose implement validate review-findings ship qui
 done
 
 # Check scripts
-if [ -x "$SCRIPTS_DIR/task-manager.sh" ]; then
-  echo "[ok] task-manager.sh"
-else
-  echo "[FAIL] task-manager.sh not executable"
-  errors=$((errors + 1))
-fi
+for script in task-manager.sh pre-commit-hook.sh; do
+  if [ -x "$SCRIPTS_DIR/$script" ]; then
+    echo "[ok] $script"
+  else
+    echo "[FAIL] $script not executable"
+    errors=$((errors + 1))
+  fi
+done
 
-# Check core validation agents
-for agent in code-quality-pragmatist claude-md-compliance-checker; do
+# Check root agents
+for agent in code-quality-pragmatist claude-md-compliance-checker karen ui-ux-reviewer ultrathink-debugger; do
   if [ -f "$AGENTS_DIR/$agent.md" ]; then
     echo "[ok] $agent agent"
   else
@@ -172,8 +209,20 @@ for agent in code-quality-pragmatist claude-md-compliance-checker; do
     errors=$((errors + 1))
   fi
 done
-for agent in engineering-security-engineer engineering-software-architect engineering-code-reviewer; do
-  if [ -f "$AGENTS_DIR/engineering/$agent.md" ]; then
+# Check categorized agents
+for agent in \
+  engineering/engineering-security-engineer engineering/engineering-software-architect engineering/engineering-code-reviewer \
+  engineering/engineering-ai-engineer engineering/engineering-backend-architect engineering/engineering-devops-automator \
+  engineering/engineering-frontend-developer engineering/engineering-mobile-app-builder engineering/engineering-sre \
+  engineering/engineering-technical-writer \
+  design/design-ui-designer design/design-ux-architect design/design-ux-researcher \
+  product/product-behavioral-nudge-engine product/product-feedback-synthesizer product/product-sprint-prioritizer \
+  product/product-trend-researcher \
+  project-management/project-management-project-shepherd project-management/project-manager-senior \
+  testing/testing-accessibility-auditor testing/testing-api-tester testing/testing-evidence-collector \
+  testing/testing-performance-benchmarker testing/testing-reality-checker testing/testing-test-results-analyzer \
+  testing/testing-tool-evaluator testing/testing-workflow-optimizer; do
+  if [ -f "$AGENTS_DIR/$agent.md" ]; then
     echo "[ok] $agent agent"
   else
     echo "[FAIL] $agent agent missing"
@@ -192,12 +241,38 @@ for hook in block-git-hook-bypass block-dismissive-language; do
 done
 
 # Check templates
-if [ -f "$TEMPLATES_DIR/settings.json" ]; then
-  echo "[ok] settings.json template"
+for tpl in settings.json CLAUDE.md gitignore-additions.txt; do
+  if [ -f "$TEMPLATES_DIR/$tpl" ]; then
+    echo "[ok] $tpl template"
+  else
+    echo "[FAIL] $tpl template missing"
+    errors=$((errors + 1))
+  fi
+done
+
+# Check knowledge base rules
+if [ -f "$KB_RULES" ]; then
+  echo "[ok] knowledge-base-rules.md"
 else
-  echo "[FAIL] settings.json template missing"
+  echo "[FAIL] knowledge-base-rules.md missing"
   errors=$((errors + 1))
 fi
+
+# Check general knowledge base
+if [ -f "$KB_DIR/_index.md" ]; then
+  echo "[ok] general knowledge base"
+else
+  echo "[FAIL] general knowledge base missing"
+  errors=$((errors + 1))
+fi
+for kb_file in security/general.md architecture/general.md architecture/api-design.md architecture/code-analysis.md testing/principles.md style/general.md documentation/general.md code-review/general.md languages/rust.md languages/typescript.md languages/nextjs.md languages/scala.md; do
+  if [ -f "$KB_DIR/$kb_file" ]; then
+    echo "[ok] knowledge-base/$kb_file"
+  else
+    echo "[FAIL] knowledge-base/$kb_file missing"
+    errors=$((errors + 1))
+  fi
+done
 
 echo ""
 if [ "$conflicts" -gt 0 ]; then

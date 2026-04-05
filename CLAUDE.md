@@ -4,13 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A file-based, spec-driven development workflow for Claude Code and GitHub Copilot. Slash commands, scripts, and templates get installed globally to `~/.claude/` via `setup.sh` (Claude Code) or per-project to `.github/` via `setup-copilot.sh` (GitHub Copilot). Target projects get `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code and GitHub Copilot. Slash commands, scripts, agents, and a general knowledge base get installed globally to `~/.claude/` via `setup.sh` (Claude Code) or per-project to `.github/` via `setup-copilot.sh` (GitHub Copilot). Target projects get a project-specific `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
 
 **This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust TUI dashboard. No application code lives here.
 
 ## Project Structure
 
 - `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research)
+- `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Installed globally to `~/.claude/knowledge-base/` by `setup.sh`, or to `knowledge-base/_general/` by `setup-copilot.sh`.
+- `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Installed to `~/.claude/knowledge-base-rules.md` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `hooks/` — Claude Code hook scripts for enforcement (block-git-hook-bypass, block-dismissive-language). Installed to `~/.claude/hooks/` by `setup.sh`.
@@ -23,10 +25,10 @@ A file-based, spec-driven development workflow for Claude Code and GitHub Copilo
 
 ## Build & Run
 
-### Setup — Claude Code (install commands globally)
+### Setup — Claude Code (install commands + general KB globally)
 
 ```bash
-./setup.sh          # install to ~/.claude/
+./setup.sh          # install to ~/.claude/ (commands, agents, hooks, templates, knowledge-base)
 ./setup.sh --force  # overwrite existing files
 ```
 
@@ -71,6 +73,17 @@ Elm-like architecture with file-system watching for live reload:
 - Enforced flow per task: `/implement` -> `/validate` -> `/review-findings` (if findings) -> `/ship` -> merge PR -> next task
 - Serial execution only — one task in flight at a time
 
+## Dual Knowledge Base
+
+Two-layer knowledge base architecture:
+
+- **General KB** — lives in this repo at `knowledge-base/`, installed globally to `~/.claude/knowledge-base/` by `setup.sh` (or `knowledge-base/_general/` by `setup-copilot.sh`). Contains universal rules: security, architecture, testing, style.
+- **Project KB** — created per-project by `/bootstrap` at `knowledge-base/`. Contains project-specific rules: language files (with `validation_tools`), conventions discovered via `/review-findings`.
+
+All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB.
+
+Task `ground_rules` use prefix convention: `general:security/general.md`, `project:languages/rust.md`. Unprefixed defaults to `project:`.
+
 ## Key Design Decisions
 
 - `/ship` is separate from `/implement` — commit/push/PR creation happens after validation
@@ -81,7 +94,7 @@ Elm-like architecture with file-system watching for live reload:
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition
 - `/implement` auto-spawns `ultrathink-debugger` on errors/test failures for root cause analysis; spawns `code-quality-pragmatist` post-implementation for pre-validation sanity check (high/critical issues go through human accept/reject)
 - `/pr-review` spawns `Code Reviewer` agent to proactively analyze PR diff before handling human comments; agent findings go through accept/reject flow
-- Rejected findings can become new knowledge-base rules (feedback loop)
+- Rejected findings can become new project knowledge-base rules (feedback loop) — never modify the general KB
 - PreToolUse hook blocks `--no-verify` and `--no-gpg-sign` — enforces fixing failing hooks rather than bypassing them
 - Stop hook blocks dismissive language ("pre-existing", "not our code") and bypass language ("temporarily disable", "skip the hook") — forces unconditional issue resolution
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation

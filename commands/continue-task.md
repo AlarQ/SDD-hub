@@ -3,7 +3,7 @@ Resume work on the current in-progress task for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 2. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks in an active state, checking in this priority order:
    - `status: in-progress`
    - `status: implemented`
@@ -20,7 +20,7 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, task branch has no commits ahead of `feat/$ARGUMENTS` | Implementation (start) | Checkout task branch, continue implementing |
 | `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing |
 | `implemented`, no reports in `specs/$ARGUMENTS/reports/` for this task | Validation needed | Remind: "Run `/validate $ARGUMENTS`" |
-| `implemented` or `review`, reports exist with `review_status: pending` findings | Review findings | Remind: "Run `/review-findings $ARGUMENTS`" |
+| `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Remind: "Run `/review-findings $ARGUMENTS`" |
 | `done`, no `pr_url` in task frontmatter | Ship needed | Remind: "Run `/ship $ARGUMENTS`" |
 | `done`, `pr_url` exists, PR state is `OPEN` | Merge needed | Remind: "Merge the PR, then run `/implement $ARGUMENTS` for the next task" |
 

@@ -10,8 +10,9 @@ Resume work on the current in-progress task for a feature.
 The user should provide the feature name in their message.
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
-2. Read tasks from `specs/<feature>/tasks/` — find tasks in an active state, checking in this priority order:
+1. Check that `knowledge-base/_general/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup-copilot.sh` from the dev-workflow repo first."
+2. Check that `knowledge-base/` (project) exists with project-specific files — if not, refuse and instruct the user to run `/bootstrap` first
+3. Read tasks from `specs/<feature>/tasks/` — find tasks in an active state, checking in this priority order:
    - `status: in-progress`
    - `status: implemented`
    - `status: review`
@@ -27,7 +28,7 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, task branch has no commits ahead of `feat/<feature>` | Implementation (start) | Checkout task branch, continue implementing |
 | `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing |
 | `implemented`, no reports in `specs/<feature>/reports/` for this task | Validation needed | Remind: "Run `/validate <feature>`" |
-| `implemented` or `review`, reports exist with `review_status: pending` findings | Review findings | Remind: "Run `/review-findings <feature>`" |
+| `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Remind: "Run `/review-findings <feature>`" |
 | `done`, no `pr_url` in task frontmatter | Ship needed | Remind: "Run `/ship <feature>`" |
 | `done`, `pr_url` exists, PR state is `OPEN` | Merge needed | Remind: "Merge the PR, then run `/implement <feature>` for the next task" |
 

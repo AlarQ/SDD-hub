@@ -4,7 +4,7 @@
 This project uses a custom spec-driven development workflow with validation gates.
 
 ### Flow
-0. `/bootstrap` — create and seed knowledge-base (once per project)
+0. `/bootstrap` — create project-specific knowledge-base (once per project)
 1. `/explore` — investigate and clarify requirements
 2. `/propose <name>` — generate spec, design, tasks with knowledge-base rules
 3. Human reviews artifacts, requests changes conversationally (edits to existing files)
@@ -23,6 +23,20 @@ This project uses a custom spec-driven development workflow with validation gate
 - A task cannot start if any other task is `implemented` or `review` (enforce validation-first)
 - When a task reaches `done`, all tasks blocked by it are checked and unblocked if ready
 
+### Dual Knowledge Base
+Two knowledge bases work together:
+
+- **General KB** (`~/.claude/knowledge-base/`) — universal rules installed globally via `setup.sh`. Contains security, architecture, testing, and style rules that apply to all projects.
+- **Project KB** (`knowledge-base/`) — project-specific rules created via `/bootstrap`. Contains language files (with `validation_tools`) and conventions discovered via the feedback loop.
+
+Both are read by all commands. Project rules override general rules on the same topic.
+
+#### ground_rules Prefix Convention
+The `ground_rules` field on each task uses prefixes to reference rules from either KB:
+- `general:security/general.md` → resolves to `~/.claude/knowledge-base/security/general.md`
+- `project:languages/rust.md` → resolves to `knowledge-base/languages/rust.md`
+- Unprefixed paths default to `project:` for backward compatibility
+
 ### Rule Selection
 - The `ground_rules` field on each task is the single source of truth for which knowledge-base rules apply during `/implement` and `/validate`
 - Rules are selected during `/propose` and reviewed by human during spec review
@@ -35,10 +49,10 @@ This project uses a custom spec-driven development workflow with validation gate
 
 ### Agent-Powered Validation Gates
 `/validate` spawns specialized agents in parallel for advisory analysis:
-- **security** → `Security Engineer` agent — OWASP, CWE, secrets, input validation
-- **code-quality** → `code-quality-pragmatist` agent — over-engineering, DRY, modularity
-- **architecture** → `Software Architect` agent (read-only) — DDD, layering, coupling
-- **compliance** → `claude-md-compliance-checker` agent — CLAUDE.md + knowledge-base rules
+- **security** → `Security Engineer` agent — OWASP, CWE, secrets, input validation (checks both general and project security rules)
+- **code-quality** → `code-quality-pragmatist` agent — over-engineering, DRY, modularity (checks both general and project style rules)
+- **architecture** → `Software Architect` agent (read-only) — DDD, layering, coupling (checks both general and project architecture rules)
+- **compliance** → `claude-md-compliance-checker` agent — CLAUDE.md + project knowledge-base conventions and languages
 
 Agents run alongside deterministic tools. Agent findings are advisory; tool findings are hard gates.
 
@@ -61,9 +75,11 @@ Agents run alongside deterministic tools. Agent findings are advisory; tool find
 - Human PR comments are handled separately after agent review
 
 ### Ground Rules
-- All rules live in `knowledge-base/` — AI must reference these during spec generation and implementation
-- `knowledge-base/` must exist — commands refuse to run without it
-- Rejected validation findings may become new rules in knowledge-base/
+- General rules live in `~/.claude/knowledge-base/` — universal across all projects
+- Project rules live in `knowledge-base/` — specific to this repository
+- Both must exist — commands refuse to run without either
+- Rejected validation findings may become new rules in project knowledge-base/
+- New rules always go to the project KB, never the general KB
 - Every line of code must be reviewable by human — keep tasks small (max 20 files)
 - AI explains architectural decisions against ground rules
 - TDD/BDD: human defines test case names, AI implements test bodies

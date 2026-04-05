@@ -1,10 +1,10 @@
 Explore and clarify requirements for a new feature or change.
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
 ## Steps
-1. Read `knowledge-base/_index.md` to understand available ground rules
+1. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) to understand available ground rules
 2. Ask the user to describe the feature or change
 3. **Establish the user perspective first** — before diving into technical areas, clarify:
    - Who benefits from this feature? (user role, persona)
@@ -22,8 +22,8 @@ Explore and clarify requirements for a new feature or change.
    - Present the options clearly with trade-offs for each
    - Wait for the user to decide — do NOT assume or choose a direction
    - Only proceed after the user confirms the scope
-6. Identify which `knowledge-base/` rule files are relevant to this feature
-7. Summarize understanding and list applicable ground rules
+6. Identify which rule files from both knowledge bases are relevant to this feature — general rules from `~/.claude/knowledge-base/` and project rules from `knowledge-base/`
+7. Summarize understanding and list applicable ground rules (using `general:` and `project:` prefixes)
 8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name
 
 This is conversational — no artifacts are generated yet. The goal is alignment on what needs to be built. Continue refining until the user is satisfied with the PRD.

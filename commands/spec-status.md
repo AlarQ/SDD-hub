@@ -3,7 +3,7 @@ Show a comprehensive status dashboard for a feature's tasks.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 2. Check that `specs/$ARGUMENTS/tasks/` directory exists and contains task files — if not, refuse and say: "No tasks found for feature '$ARGUMENTS'. Run `/propose $ARGUMENTS` first."
 
 ## Steps

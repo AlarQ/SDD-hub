@@ -10,12 +10,19 @@ Generate specification, design, and tasks for a feature.
 The user should provide the feature name in their message.
 
 ## Prerequisites
-1. Check that `knowledge-base/` directory exists — if not, refuse and instruct the user to run `/bootstrap` first
+1. Check that `knowledge-base/_general/` (general) exists — if not, refuse and say: "General knowledge base not found. Run `setup-copilot.sh` from the dev-workflow repo first."
+2. Check that `knowledge-base/` (project) exists with project-specific files — if not, refuse and instruct the user to run `/bootstrap` first
 
 ## Steps
 1. Read `specs/<feature>/prd.md` if it exists, otherwise use conversation context
-2. Read `knowledge-base/_index.md` and identify all applicable rules
-3. Read the applicable rule files
+2. Read both `knowledge-base/_general/_index.md` (general rules) and `knowledge-base/_index.md` (project rules) — identify all applicable rules from both
+3. Read the applicable rule files from both knowledge bases
+
+## Ground Rules Prefix Convention
+When referencing knowledge-base rules in `ground_rules` fields, use prefixes:
+- `general:` — resolves to `knowledge-base/_general/` (e.g., `general:security/general.md`)
+- `project:` — resolves to `knowledge-base/` (e.g., `project:languages/rust.md`)
+- Unprefixed paths default to `project:` for backward compatibility
 
 ## Generate Artifacts
 
@@ -23,7 +30,7 @@ The user should provide the feature name in their message.
 - Detailed functional specification
 - All scenarios in BDD format: Given / When / Then
 - Edge cases and error scenarios explicitly listed
-- Reference applicable `knowledge-base/` rules
+- Reference applicable rules from both knowledge bases
 
 ### specs/<feature>/design.md
 
@@ -31,7 +38,7 @@ The user should provide the feature name in their message.
 
 Before writing design.md, invoke `@software-architect` with the following context:
 - The spec.md content (already generated above)
-- All applicable `knowledge-base/architecture/` rules
+- All applicable architecture rules from both `knowledge-base/_general/architecture/` and `knowledge-base/architecture/` (if exists)
 - The project's CLAUDE.md or copilot-instructions.md
 
 Use this directive: "Evaluate the proposed architecture in the spec against the provided architecture rules. For each major architectural decision, produce a trade-off analysis and an ADR. Flag any patterns that introduce irreversible coupling, scaling risks, or that the team is unlikely to sustain. Use the Proposal Output format defined in your agent definition."
@@ -47,7 +54,7 @@ If the agent errors or is unavailable, proceed with design.md generation without
 ##### Embedding Agent Output
 Incorporate the agent's trade-off analysis and ADRs directly into design.md:
 
-- Architectural decisions with explicit references to `knowledge-base/architecture/` rules
+- Architectural decisions with explicit references to knowledge-base rules (both general and project)
 - Explain WHY each decision was made against the ground rules
 - Include agent-generated ADRs in an `## Architecture Decision Records` section
 - Include agent trade-off analysis alongside each architectural decision
@@ -56,13 +63,13 @@ Incorporate the agent's trade-off analysis and ADRs directly into design.md:
 
 ### specs/<feature>/tasks/NNN-{task-name}.md
 - Split implementation into small tasks
-- Each task's `ground_rules` field lists the specific knowledge-base files that apply — this becomes the single source of truth for `/implement` and `/validate`
+- Each task's `ground_rules` field lists the specific knowledge-base files that apply using the prefix convention (`general:` / `project:`) — this becomes the single source of truth for `/implement` and `/validate`
 - Set `status: blocked` with `blocked_by` IDs for tasks with dependencies
 - Set `status: todo` for tasks with no dependencies
 
 ## Constraints
 - Max 20 files per task
-- Each task references applicable `knowledge-base/` rules in the `ground_rules` field
+- Each task references applicable rules from both knowledge bases in the `ground_rules` field using prefix convention
 - Each task includes natural-language test cases (human defines names, AI implements bodies later)
 - Tasks ordered by dependency (`blocked_by` fields)
 - AI explains architectural decisions against ground rules, not just outputs code
