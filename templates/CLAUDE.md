@@ -50,9 +50,9 @@ The `ground_rules` field on each task uses prefixes to reference rules from eith
 ### Agent-Powered Validation Gates
 `/validate` spawns specialized agents in parallel for advisory analysis:
 - **security** → `Security Engineer` agent — OWASP, CWE, secrets, input validation (checks both general and project security rules)
-- **code-quality** → `code-quality-pragmatist` agent — over-engineering, DRY, modularity (checks both general and project style rules)
+- **code-quality** → `Code Quality Pragmatist` agent — over-engineering, DRY, modularity (checks both general and project style rules)
 - **architecture** → `Software Architect` agent (read-only) — DDD, layering, coupling (checks both general and project architecture rules)
-- **compliance** → `claude-md-compliance-checker` agent — CLAUDE.md + project knowledge-base conventions and languages
+- **compliance** → `CLAUDE.md Compliance Checker` agent — CLAUDE.md + project knowledge-base conventions and languages
 
 Agents run alongside deterministic tools. Agent findings are advisory; tool findings are hard gates.
 
@@ -65,8 +65,8 @@ Agents run alongside deterministic tools. Agent findings are advisory; tool find
 
 ### Agent-Assisted Implementation
 `/implement` integrates two agents into the implementation flow:
-- **On error/test failure** → auto-spawns `ultrathink-debugger` agent with error context for root cause analysis and fix proposals
-- **Post-implementation** → spawns `code-quality-pragmatist` agent for a pre-validation sanity check; high/critical issues go through human accept/reject before marking task as implemented
+- **On error/test failure** → auto-spawns `Ultrathink Debugger` agent with error context for root cause analysis and fix proposals
+- **Post-implementation** → spawns `Code Quality Pragmatist` agent for a pre-validation sanity check; high/critical issues go through human accept/reject before marking task as implemented
 
 ### Agent-Powered PR Review
 `/pr-review` spawns the `Code Reviewer` agent to proactively analyze the PR diff before responding to human comments:

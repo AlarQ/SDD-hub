@@ -92,7 +92,7 @@ Task `ground_rules` use prefix convention: `general:security/general.md`, `proje
 - `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition
-- `/implement` auto-spawns `ultrathink-debugger` on errors/test failures for root cause analysis; spawns `code-quality-pragmatist` post-implementation for pre-validation sanity check (high/critical issues go through human accept/reject)
+- `/implement` auto-spawns `Ultrathink Debugger` on errors/test failures for root cause analysis; spawns `Code Quality Pragmatist` post-implementation for pre-validation sanity check (high/critical issues go through human accept/reject)
 - `/pr-review` spawns `Code Reviewer` agent to proactively analyze PR diff before handling human comments; agent findings go through accept/reject flow
 - Rejected findings can become new project knowledge-base rules (feedback loop) — never modify the general KB
 - PreToolUse hook blocks `--no-verify` and `--no-gpg-sign` — enforces fixing failing hooks rather than bypassing them
