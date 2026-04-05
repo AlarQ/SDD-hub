@@ -91,7 +91,7 @@ Report schema:
 - gate: <gate-name>
 - task_id: <id>
 - status: pass | findings | error
-- findings: list of {id, severity, category, title, description, file, lines, code_snippet, fix_proposal, review_status: pending, source: tool|llm}
+- findings: list of {id, severity (critical|high|medium|low|info), category, title, description, file, lines, code_snippet, fix_proposal, review_status: pending, source: tool|llm}
 
 Gates:
 - **security**: semgrep + language audit tools + `@security-engineer` agent for general and project security rules

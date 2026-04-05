@@ -246,10 +246,12 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 
 ### Stage 6: `/review-findings <name>` (interactive review)
 
-**What it does:** Walks through each finding with `review_status: pending`. For each one, presents severity, title, description, code snippet, fix proposal, and source (tool/llm). You decide: Accept or Reject.
+**What it does:** Partitions findings into **actionable** (severity: critical/high/medium/low) and **informational** (severity: info). Walks through actionable findings one-by-one for review, then displays informational findings as a compact summary list.
 
-- **Accept:** Fix is applied (files re-read between fixes to avoid conflicts). `review_status` set to `accepted`.
-- **Reject:** You provide reasoning. `review_status` set to `rejected` with `review_notes`. Optionally creates a new rule in the project `knowledge-base/` (sets `rule_added: true`).
+- **Actionable findings** — presented individually with severity, title, description, code snippet, fix proposal, and source. You decide: Accept or Reject.
+  - **Accept:** Fix is applied (files re-read between fixes to avoid conflicts). `review_status` set to `accepted`.
+  - **Reject:** You provide reasoning. `review_status` set to `rejected` with `review_notes`. Optionally creates a new rule in the project `knowledge-base/` (sets `rule_added: true`).
+- **Informational findings** — auto-acknowledged with `review_status: noted`. Displayed as a summary list (title, file, description) at the end. No action required.
 
 **Status update:**
 - Fixes applied -> task returns to `implemented` (re-run `/validate <name>`)
@@ -455,7 +457,7 @@ findings:
     lines: { start: 42, end: 45 }
     code_snippet: "..."
     fix_proposal: { description: "...", code_snippet: "..." }
-    review_status: "pending"  # pending | accepted | rejected
+    review_status: "pending"  # pending | accepted | rejected | noted
     source: "tool"            # tool | llm
 ```
 

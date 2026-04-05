@@ -28,7 +28,7 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, task branch has no commits ahead of `feat/<feature>` | Implementation (start) | Checkout task branch, continue implementing |
 | `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing |
 | `implemented`, no reports in `specs/<feature>/reports/` for this task | Validation needed | Remind: "Run `/validate <feature>`" |
-| `implemented` or `review`, reports exist with `review_status: pending` findings | Review findings | Remind: "Run `/review-findings <feature>`" |
+| `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Remind: "Run `/review-findings <feature>`" |
 | `done`, no `pr_url` in task frontmatter | Ship needed | Remind: "Run `/ship <feature>`" |
 | `done`, `pr_url` exists, PR state is `OPEN` | Merge needed | Remind: "Merge the PR, then run `/implement <feature>` for the next task" |
 
