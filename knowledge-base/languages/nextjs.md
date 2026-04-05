@@ -4,6 +4,9 @@ validation_tools:
   - npx tsc --noEmit
   - npm test
   - npx next lint
+  - npx biome check .  # if biome.json exists
+  # Detect package manager from lockfile: pnpm-lock.yaml → pnpm, package-lock.json → npm, yarn.lock → yarn
+  # Use detected manager for run commands (e.g., pnpm exec tsc, pnpm exec next lint, pnpm exec biome check .)
 
 ## Rules
 

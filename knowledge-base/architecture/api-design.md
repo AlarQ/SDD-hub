@@ -13,7 +13,7 @@
 - **HTTPS everywhere** — encrypt all API traffic
 - **Validate all inputs** — never trust client data; use schema validation (Zod, JSON Schema)
 - **Implement rate limiting** — prevent abuse and ensure fair usage
-- **Use caching** — implement ETags, Cache-Control headers for appropriate endpoints
+- **Use caching when applicable** — implement ETags, Cache-Control headers where caching makes sense (not all endpoints benefit from caching)
 
 ## Response Formats
 
