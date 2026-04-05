@@ -20,3 +20,4 @@ Project-specific rules live in each repository's `knowledge-base/` directory.
 | `languages/typescript.md` | Languages | Strict mode, type safety, discriminated unions, utility types, module organization |
 | `languages/nextjs.md` | Languages | Server/Client Components, data fetching, Server Actions, App Router conventions |
 | `languages/scala.md` | Languages | Immutability, ADTs, pattern matching, for-comprehensions, Cats Effect |
+| `languages/shell.md` | Languages | 150-line module limit, python3 as test dependency, shellcheck validation |
