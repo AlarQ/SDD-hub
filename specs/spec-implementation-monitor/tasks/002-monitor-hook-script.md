@@ -2,6 +2,7 @@
 id: "002"
 name: "Create PostToolUse hook for tool call monitoring"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/9
 blocked_by:
   - "001"
 max_files: 2
