@@ -167,6 +167,24 @@ set_context() {
   printf 'feature=%s\ntask=%s\n' "$feature" "$task_id" > "$root/$MONITOR_CONTEXT_FILE"
 }
 
+read_context() {
+  local root
+  root="$(find_project_root)" || return 1
+  local context_file="$root/$MONITOR_CONTEXT_FILE"
+  [[ -f "$context_file" ]] || return 1
+
+  local feature="" task=""
+  while IFS='=' read -r key value; do
+    case "$key" in
+      feature) feature="$value" ;;
+      task)    task="$value" ;;
+    esac
+  done < "$context_file"
+  [[ -n "$feature" ]] || return 1
+
+  printf '%s\n%s\n' "$feature" "$task"
+}
+
 clear_context() {
   local root
   root="$(find_project_root)" || return 0
@@ -183,10 +201,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     start_phase) start_phase "$@" ;;
     end_phase)   end_phase "$@" ;;
     set_context) set_context "$@" ;;
+    read_context)  read_context "$@" ;;
     clear_context) clear_context "$@" ;;
     *)
       echo "Unknown command: $subcmd" >&2
-      echo "Commands: log_event, start_phase, end_phase, set_context, clear_context" >&2
+      echo "Commands: log_event, start_phase, end_phase, set_context, read_context, clear_context" >&2
       exit 1
       ;;
   esac
