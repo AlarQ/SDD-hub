@@ -4,11 +4,13 @@ set -euo pipefail
 # monitor.sh — Event logger for the spec implementation monitoring system.
 # Appends JSONL events to specs/<feature>/.monitor.jsonl.
 # Source-able by other scripts: source ~/.claude/scripts/monitor.sh
+# Public sourcing API: log_event, start_phase, end_phase, set_context,
+#   read_context, clear_context, escape_json_string.
 # No external dependencies (uses printf for JSON, date for timestamps).
 
 MONITOR_CONTEXT_FILE=".monitor-context"
 
-# === Helpers ===
+# === Helpers (public when sourced) ===
 
 get_timestamp() {
   date -u +"%Y-%m-%dT%H:%M:%S.000Z"
