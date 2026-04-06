@@ -1,7 +1,7 @@
 ---
 id: "008"
 name: "Update setup.sh to install monitor scripts and hook"
-status: blocked
+status: todo
 blocked_by:
   - "001"
   - "002"
