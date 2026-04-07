@@ -27,7 +27,9 @@ Feature name: $ARGUMENTS
      --body "<summary of changes based on the diff>"
    ```
 8. Save the PR URL to the task file frontmatter as `pr_url`
-9. Report the PR URL as final output
+9. Commit the updated task file with the PR URL: `git add <task-file> && git commit -m "{task-id}: add PR URL"`
+10. Push the commit: `git push`
+11. Report the PR URL as final output
 
 IMPORTANT:
 - Do NOT add any "Co-Authored-By" line to the commit message
