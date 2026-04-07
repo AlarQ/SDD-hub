@@ -2,6 +2,7 @@
 id: "004"
 name: "Add MonitorEvent model and JSONL parser to TUI"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/11
 blocked_by: []
 max_files: 4
 estimated_files:
