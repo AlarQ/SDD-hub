@@ -5,7 +5,7 @@ mod parse;
 mod ui;
 mod watcher;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use app::App;
 use clap::Parser;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -20,7 +20,10 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 #[derive(Parser)]
-#[command(name = "workflow-tui", about = "Terminal dashboard for spec-driven workflows")]
+#[command(
+    name = "workflow-tui",
+    about = "Terminal dashboard for spec-driven workflows"
+)]
 struct Cli {
     /// Path to the project root (must contain specs/ directory)
     #[arg(default_value = ".")]
@@ -106,10 +109,10 @@ fn run_loop(
             AppEvent::None => {}
         }
 
-        if let Some(rx) = watcher_rx {
-            if rx.try_recv().is_ok() {
-                app.rescan();
-            }
+        if let Some(rx) = watcher_rx
+            && rx.try_recv().is_ok()
+        {
+            app.rescan();
         }
     }
     Ok(())
