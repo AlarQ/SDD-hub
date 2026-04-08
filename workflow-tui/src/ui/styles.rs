@@ -22,6 +22,17 @@ pub fn selected_style() -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
+pub fn event_category_color(cat: &crate::model::EventCategory) -> Color {
+    match cat {
+        crate::model::EventCategory::ContextRead => Color::Cyan,
+        crate::model::EventCategory::KbRule => Color::Blue,
+        crate::model::EventCategory::TaskTransition => Color::Yellow,
+        crate::model::EventCategory::AgentInvocation => Color::Magenta,
+        crate::model::EventCategory::ValidationResult => Color::Green,
+        crate::model::EventCategory::ToolCall => Color::Gray,
+    }
+}
+
 pub fn severity_color(severity: &str) -> Color {
     match severity.to_lowercase().as_str() {
         "critical" | "error" => Color::Red,

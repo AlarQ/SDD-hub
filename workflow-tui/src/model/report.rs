@@ -17,7 +17,10 @@ where
     match value {
         serde_yml::Value::String(s) => Ok(s),
         serde_yml::Value::Null => Ok(String::new()),
-        other => Ok(serde_yml::to_string(&other).unwrap_or_default().trim().to_string()),
+        other => Ok(serde_yml::to_string(&other)
+            .unwrap_or_default()
+            .trim()
+            .to_string()),
     }
 }
 

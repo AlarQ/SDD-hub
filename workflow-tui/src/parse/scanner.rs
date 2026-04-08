@@ -50,12 +50,12 @@ fn scan_tasks(dir: &Path) -> (Vec<crate::model::Task>, Vec<String>) {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().is_some_and(|e| e == "md") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                match parse_task(&content, &path.to_string_lossy()) {
-                    Ok(task) => tasks.push(task),
-                    Err(e) => warnings.push(format!("{}: {e:#}", path.display())),
-                }
+        if path.extension().is_some_and(|e| e == "md")
+            && let Ok(content) = fs::read_to_string(&path)
+        {
+            match parse_task(&content, &path.to_string_lossy()) {
+                Ok(task) => tasks.push(task),
+                Err(e) => warnings.push(format!("{}: {e:#}", path.display())),
             }
         }
     }
@@ -74,15 +74,11 @@ fn scan_reports(dir: &Path) -> (Vec<crate::model::Report>, Vec<String>) {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        let is_yaml = path
-            .extension()
-            .is_some_and(|e| e == "yaml" || e == "yml");
-        if is_yaml {
-            if let Ok(content) = fs::read_to_string(&path) {
-                match parse_report(&content, &path.to_string_lossy()) {
-                    Ok(report) => reports.push(report),
-                    Err(e) => warnings.push(format!("{}: {e:#}", path.display())),
-                }
+        let is_yaml = path.extension().is_some_and(|e| e == "yaml" || e == "yml");
+        if is_yaml && let Ok(content) = fs::read_to_string(&path) {
+            match parse_report(&content, &path.to_string_lossy()) {
+                Ok(report) => reports.push(report),
+                Err(e) => warnings.push(format!("{}: {e:#}", path.display())),
             }
         }
     }
