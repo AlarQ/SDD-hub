@@ -16,18 +16,28 @@ The user should provide the feature name in their message.
 ## Steps
 1. Read all pending reports from `specs/<feature>/reports/`
 2. Partition findings: separate `severity: info` findings (informational) from all others (actionable)
-3. Present **exactly one actionable finding at a time** — do NOT show the next finding until the user has responded to the current one. Show a progress header (e.g., "Finding 1 of N") before each finding.
-   For each **actionable** finding (severity != info) with review_status: pending:
-   - Present: severity, title, description, code snippet, fix proposal, source (tool/llm)
-   - Ask: Accept or Reject?
-   - **Stop and wait for user response before continuing to the next finding.**
-   - If Accept: apply the fix, **re-read the file** before applying the next fix (sequential apply to avoid conflicts), update review_status to "accepted"
-   - If Reject: ask for reasoning, update review_status to "rejected", set review_notes
-   - If Reject + new rule needed: create/update the relevant file in the **project** knowledge-base (`knowledge-base/`) and update `knowledge-base/_index.md`, set rule_added: true. Never modify the general knowledge base (`knowledge-base/_general/`).
+3. Group actionable findings before presenting them:
+   a. Sort all actionable findings by file path, then by start line.
+   b. **Pass 1 — Line proximity:** For findings targeting the same `file`, merge into one group if their `lines` ranges overlap or are within 5 lines of each other. Apply transitive closure: if finding C overlaps with B which is already grouped with A, C joins the {A, B} group.
+   c. **Pass 2 — Same-file category match:** For still-ungrouped findings in the same file that share an identical `category` value, merge them into one group.
+   d. Remaining ungrouped findings each become a singleton group.
+   e. Sort groups by: highest severity within the group (critical > high > medium > low), then file path alphabetically.
+4. Present **one group at a time**. Show a progress header: "Group 1 of G (N total findings)".
+   For each group:
+   - List all findings in the group: for each, show severity, title, gate (source report), description, code snippet, and fix proposal. Visually separate findings within the group but present them as one review unit.
+   - If the group has multiple findings, show a brief note: "These N findings target the same code region in `<file>` and are grouped for a single decision."
+   - Ask: **Accept all / Reject all?** Do NOT offer partial accept within a group — the fixes are interrelated.
+   - **Stop and wait for user response before continuing to the next group.**
+   - If Accept: apply the fix, **re-read the file** before applying the next fix (sequential apply to avoid conflicts), apply fixes in reverse line order (highest line number first) to avoid offset drift, update review_status to "accepted" on all findings in the group
+   - If Reject: ask for reasoning, update review_status to "rejected" and set review_notes on ALL findings in the group.
+   - If Reject + new rule needed: create/update the relevant file in the **project** knowledge-base (`knowledge-base/`) and update `knowledge-base/_index.md`, set rule_added: true on the relevant finding(s). Never modify the general knowledge base (`knowledge-base/_general/`).
    - After processing, show running tally: "X accepted, Y rejected so far"
-4. Set review_status to "noted" on all informational findings
-5. Display informational summary — compact list: title, file, and one-line description for each
-6. Report summary: X accepted, Y rejected, Z noted (informational), W new rules added
+
+   > **Note:** The Claude Code version of this command spawns background sub-agents for accepted fixes, enabling parallel fix application. Copilot lacks the Agent tool, so fixes are applied inline sequentially here.
+
+5. Set review_status to "noted" on all informational findings
+6. Display informational summary — compact list: title, file, and one-line description for each
+7. Report summary: X groups accepted (N findings), Y groups rejected (M findings), Z noted (informational), W new rules added
 
 ## Status Update
 - If any fixes were applied (accepted actionable findings — informational findings do not count): ask the user whether they want to re-run `/validate <feature>` or skip re-validation and proceed to shipping.
