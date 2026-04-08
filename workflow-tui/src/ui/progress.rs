@@ -1,11 +1,11 @@
 use crate::app::App;
 use crate::model::{Spec, TaskStatus};
 use crate::ui::styles;
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, Paragraph};
-use ratatui::Frame;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect, active: bool) {
     let block = Block::default()
@@ -63,7 +63,10 @@ fn render_details(frame: &mut Frame, spec: &Spec, warnings: &[String], area: Rec
             ),
         ]),
         Line::from(vec![
-            Span::styled(format!("  Todo: {todo}  "), Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("  Todo: {todo}  "),
+                Style::default().fg(Color::Gray),
+            ),
             Span::styled(
                 format!("Implemented: {implemented}  "),
                 Style::default().fg(Color::Cyan),
@@ -79,9 +82,12 @@ fn render_details(frame: &mut Frame, spec: &Spec, warnings: &[String], area: Rec
         )]),
     ];
 
-    let diagnostics = health_diagnostics(in_progress, implemented, review, blocked, total, done, todo);
+    let diagnostics = health_diagnostics(spec);
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("  Health:", styles::header_style())));
+    lines.push(Line::from(Span::styled(
+        "  Health:",
+        styles::header_style(),
+    )));
 
     if diagnostics.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -99,7 +105,10 @@ fn render_details(frame: &mut Frame, spec: &Spec, warnings: &[String], area: Rec
 
     if !warnings.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled("  Parse warnings:", styles::header_style())));
+        lines.push(Line::from(Span::styled(
+            "  Parse warnings:",
+            styles::header_style(),
+        )));
         for w in warnings {
             lines.push(Line::from(Span::styled(
                 format!("  ! {w}"),
@@ -112,15 +121,15 @@ fn render_details(frame: &mut Frame, spec: &Spec, warnings: &[String], area: Rec
     frame.render_widget(paragraph, area);
 }
 
-fn health_diagnostics(
-    in_progress: usize,
-    implemented: usize,
-    review: usize,
-    blocked: usize,
-    total: usize,
-    done: usize,
-    todo: usize,
-) -> Vec<String> {
+fn health_diagnostics(spec: &Spec) -> Vec<String> {
+    let in_progress = spec.count_by_status(TaskStatus::InProgress);
+    let implemented = spec.count_by_status(TaskStatus::Implemented);
+    let review = spec.count_by_status(TaskStatus::Review);
+    let blocked = spec.count_by_status(TaskStatus::Blocked);
+    let done = spec.count_by_status(TaskStatus::Done);
+    let todo = spec.count_by_status(TaskStatus::Todo);
+    let total = spec.tasks.len();
+
     let mut issues = Vec::new();
     if in_progress > 0 {
         issues.push(format!("  ! {in_progress} task(s) in-progress"));

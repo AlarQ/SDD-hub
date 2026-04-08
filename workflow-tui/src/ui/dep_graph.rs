@@ -1,10 +1,10 @@
 use crate::app::App;
 use crate::ui::styles;
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
-use ratatui::Frame;
 use std::collections::HashMap;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect, active: bool) {
@@ -45,7 +45,10 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect, active: bool) {
         }
 
         if !task.blocked_by.is_empty() {
-            spans.push(Span::raw(format!(" [blocked by: {}]", task.blocked_by.join(", "))));
+            spans.push(Span::raw(format!(
+                " [blocked by: {}]",
+                task.blocked_by.join(", ")
+            )));
         }
 
         lines.push(Line::from(spans));

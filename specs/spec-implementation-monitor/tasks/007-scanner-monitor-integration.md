@@ -1,7 +1,7 @@
 ---
 id: "007"
 name: "Extend scanner to load .monitor.jsonl files"
-status: blocked
+status: todo
 blocked_by:
   - "004"
 max_files: 2

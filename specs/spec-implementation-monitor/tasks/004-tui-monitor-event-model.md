@@ -1,7 +1,8 @@
 ---
 id: "004"
 name: "Add MonitorEvent model and JSONL parser to TUI"
-status: todo
+status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/11
 blocked_by: []
 max_files: 4
 estimated_files:
@@ -41,3 +42,10 @@ Add the Rust domain types and JSONL parser for monitoring events.
 
 ## Dependency
 - Add `serde_json = "1.0"` to `Cargo.toml`
+
+## Implementation Notes
+- Types and parser are `#[allow(dead_code)]` / `#[allow(unused_imports)]` since they're consumed by later tasks (scanner integration in task 005+, TUI rendering)
+- Also fixed pre-existing `collapsible_if` clippy warnings in `scanner.rs` and `main.rs` (Rust 1.93 made these errors under `-D warnings`)
+- Also applied `cargo fmt` formatting fixes across the existing codebase
+- `parse/mod.rs` re-exports `parse_monitor_log` for public use by scanner
+- `model/mod.rs` re-exports `EventCategory` and `MonitorEvent` for public use

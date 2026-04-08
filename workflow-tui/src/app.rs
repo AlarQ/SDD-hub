@@ -85,10 +85,7 @@ impl App {
                 }
             }
             _ => {
-                self.scroll_offset = self
-                    .scroll_offset
-                    .saturating_add(1)
-                    .min(u16::MAX as usize);
+                self.scroll_offset = self.scroll_offset.saturating_add(1).min(u16::MAX as usize);
             }
         }
     }

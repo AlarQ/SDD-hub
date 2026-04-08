@@ -2,6 +2,7 @@
 id: "003"
 name: "Add monitoring instrumentation to task-manager.sh"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/10
 blocked_by:
   - "001"
 max_files: 2
