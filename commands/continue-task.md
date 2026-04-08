@@ -17,11 +17,11 @@ Examine the active task's status and existing artifacts to determine where work 
 
 | Condition | Detected Phase | Action |
 |-----------|---------------|--------|
-| `in-progress`, task branch has no commits ahead of `feat/$ARGUMENTS` | Implementation (start) | Checkout task branch, continue implementing |
-| `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing |
-| `implemented`, no reports in `specs/$ARGUMENTS/reports/` for this task | Validation needed | Remind: "Run `/validate $ARGUMENTS`" |
-| `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Remind: "Run `/review-findings $ARGUMENTS`" |
-| `done`, no `pr_url` in task frontmatter | Ship needed | Remind: "Run `/ship $ARGUMENTS`" |
+| `in-progress`, task branch has no commits ahead of `feat/$ARGUMENTS` | Implementation (start) | Checkout task branch, continue implementing. After implementation completes, chain into validation: read and follow `~/.claude/commands/validate.md` |
+| `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing. After implementation completes, chain into validation: read and follow `~/.claude/commands/validate.md` |
+| `implemented`, no reports in `specs/$ARGUMENTS/reports/` for this task | Validation needed | Read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value |
+| `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Read and follow `~/.claude/commands/review-findings.md` with the same $ARGUMENTS value |
+| `done`, no `pr_url` in task frontmatter | Ship needed | Read and follow `~/.claude/commands/ship.md` with the same $ARGUMENTS value |
 | `done`, `pr_url` exists, PR state is `OPEN` | Merge needed | Remind: "Merge the PR, then run `/implement $ARGUMENTS` for the next task" |
 
 ## Steps
@@ -37,7 +37,7 @@ Examine the active task's status and existing artifacts to determine where work 
    Status: {current task status}
    ```
 6. If phase is Implementation (start or mid): checkout the task branch and continue implementing following the `/implement` workflow
-7. For all other phases: remind the user which command to run next
+7. For all other phases: read and follow the appropriate command file to continue the workflow automatically
 
 ## If No Active Task
 Report the feature status summary — how many tasks in each state (blocked, todo, in-progress, implemented, review, done) — and suggest the next action based on the current state.

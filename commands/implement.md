@@ -4,10 +4,10 @@ Feature name: $ARGUMENTS
 
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
-2. Run `~/.claude/scripts/task-manager.sh check-unvalidated specs/$ARGUMENTS/tasks/` — if any task is `implemented` or `review`, refuse and say: "Task [ID] is awaiting validation. Run `/validate $ARGUMENTS` first."
-3. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
+2. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
    - If no eligible task found, report which tasks are blocked and by which task IDs
-4. Check if any `done` tasks have an unmerged PR:
+   - If any task has `status: in-progress`, warn: "Task [ID] is stuck at in-progress (likely from a crashed session). Run `/continue-task $ARGUMENTS` to resume or manually reset its status."
+3. Check if any `done` tasks have an unmerged PR:
    - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
    - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/$ARGUMENTS`. Merge it before starting the next task."
    - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."
@@ -57,8 +57,7 @@ This is a lightweight pre-flight check — `/validate` remains the authoritative
 
 IMPORTANT:
 - Do NOT proceed to the next task automatically
-- Remind the user to run `/validate $ARGUMENTS` before continuing
-- Human must review and validate before the next task starts
+- Now proceed to the validation phase: read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value
 
 ## Error Recovery
 If implementation is aborted mid-task (crash, user cancels), the task is stuck at `in-progress`. The user can manually edit the task file's YAML frontmatter to reset `status` back to `todo` and clean up the partial branch. If the post-implementation quality check was in progress, any accepted fixes will already be on the branch.

@@ -66,12 +66,12 @@ Before determining the final status, verify ALL gates produced a report:
 
 ## Status Update
 - If any gate has `status: error`: report which gate(s) failed and instruct: "Re-run `/validate $ARGUMENTS` to retry the failed gate(s)."
-- If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`
+- If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`, then proceed to the review-findings phase: read and follow `~/.claude/commands/review-findings.md` with the same $ARGUMENTS value
 - If zero findings across all gates and all gates have `status: pass`:
   1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
   2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
   3. Delete all reports (`rm -rf specs/$ARGUMENTS/reports/`)
-  4. Remind user to run `/ship $ARGUMENTS` to commit, push, and create the PR
+  4. Now proceed to the shipping phase: read and follow `~/.claude/commands/ship.md` with the same $ARGUMENTS value
 
 Report schema:
 - gate: <gate-name>
