@@ -200,34 +200,33 @@ for script in task-manager.sh pre-commit-hook.sh; do
   fi
 done
 
-# Check root agents
-for agent in code-quality-pragmatist claude-md-compliance-checker karen ui-ux-reviewer ultrathink-debugger; do
-  if [ -f "$AGENTS_DIR/$agent.md" ]; then
-    echo "[ok] $agent agent"
+# Check agents (root)
+for agent_file in "$SCRIPT_DIR/agents/"*.md; do
+  [ -f "$agent_file" ] || continue
+  name=$(basename "$agent_file" .md)
+  case "$name" in CONTRIBUTING|INTEGRATION_PLAN|LICENSE|README) continue ;; esac
+  if [ -f "$AGENTS_DIR/$name.md" ]; then
+    echo "[ok] $name agent"
   else
-    echo "[FAIL] $agent agent missing"
+    echo "[FAIL] $name agent missing"
     errors=$((errors + 1))
   fi
 done
-# Check categorized agents
-for agent in \
-  engineering/engineering-security-engineer engineering/engineering-software-architect engineering/engineering-code-reviewer \
-  engineering/engineering-ai-engineer engineering/engineering-backend-architect engineering/engineering-devops-automator \
-  engineering/engineering-frontend-developer engineering/engineering-mobile-app-builder engineering/engineering-sre \
-  engineering/engineering-technical-writer \
-  design/design-ui-designer design/design-ux-architect design/design-ux-researcher \
-  product/product-behavioral-nudge-engine product/product-feedback-synthesizer product/product-sprint-prioritizer \
-  product/product-trend-researcher \
-  project-management/project-management-project-shepherd project-management/project-manager-senior \
-  testing/testing-accessibility-auditor testing/testing-api-tester testing/testing-evidence-collector \
-  testing/testing-performance-benchmarker testing/testing-reality-checker testing/testing-test-results-analyzer \
-  testing/testing-tool-evaluator testing/testing-workflow-optimizer; do
-  if [ -f "$AGENTS_DIR/$agent.md" ]; then
-    echo "[ok] $agent agent"
-  else
-    echo "[FAIL] $agent agent missing"
-    errors=$((errors + 1))
-  fi
+# Check agents (categorized)
+for agent_subdir in "$SCRIPT_DIR/agents/"*/; do
+  [ -d "$agent_subdir" ] || continue
+  subdir_name=$(basename "$agent_subdir")
+  case "$subdir_name" in scripts) continue ;; esac
+  for agent_file in "$agent_subdir"*.md; do
+    [ -f "$agent_file" ] || continue
+    name=$(basename "$agent_file" .md)
+    if [ -f "$AGENTS_DIR/$subdir_name/$name.md" ]; then
+      echo "[ok] $subdir_name/$name agent"
+    else
+      echo "[FAIL] $subdir_name/$name agent missing"
+      errors=$((errors + 1))
+    fi
+  done
 done
 
 # Check hooks
