@@ -8,6 +8,7 @@ pub enum Panel {
     DepGraph,
     Reports,
     Progress,
+    Monitor,
 }
 
 impl Panel {
@@ -16,16 +17,18 @@ impl Panel {
             Self::SpecList => Self::DepGraph,
             Self::DepGraph => Self::Reports,
             Self::Reports => Self::Progress,
-            Self::Progress => Self::SpecList,
+            Self::Progress => Self::Monitor,
+            Self::Monitor => Self::SpecList,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::SpecList => Self::Progress,
+            Self::SpecList => Self::Monitor,
             Self::DepGraph => Self::SpecList,
             Self::Reports => Self::DepGraph,
             Self::Progress => Self::Reports,
+            Self::Monitor => Self::Progress,
         }
     }
 }
@@ -141,15 +144,70 @@ mod tests {
     }
 
     #[test]
+    fn panel_cycle_includes_all_5_panels() {
+        let start = Panel::SpecList;
+        let mut current = start.next();
+        let mut count = 1;
+        while current != start {
+            current = current.next();
+            count += 1;
+        }
+        assert_eq!(count, 5);
+    }
+
+    #[test]
     fn panel_cycles_forward() {
         assert_eq!(Panel::SpecList.next(), Panel::DepGraph);
-        assert_eq!(Panel::Progress.next(), Panel::SpecList);
+        assert_eq!(Panel::Progress.next(), Panel::Monitor);
+        assert_eq!(Panel::Monitor.next(), Panel::SpecList);
     }
 
     #[test]
     fn panel_cycles_backward() {
-        assert_eq!(Panel::SpecList.prev(), Panel::Progress);
+        assert_eq!(Panel::SpecList.prev(), Panel::Monitor);
+        assert_eq!(Panel::Monitor.prev(), Panel::Progress);
         assert_eq!(Panel::DepGraph.prev(), Panel::SpecList);
+    }
+
+    #[test]
+    fn tab_navigation_cycles_through_all_panels() {
+        let mut app = make_app(vec![]);
+        assert_eq!(app.active_panel, Panel::SpecList);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::DepGraph);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::Reports);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::Progress);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::Monitor);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::SpecList);
+    }
+
+    #[test]
+    fn scroll_behavior_works_for_each_panel() {
+        let mut app = make_app(vec![make_task("001", TaskStatus::Todo)]);
+        // SpecList scrolls through specs
+        app.active_panel = Panel::SpecList;
+        app.scroll_down();
+        // Only 1 spec, so stays at 0
+        assert_eq!(app.selected_spec, 0);
+
+        // Grid panels use scroll_offset
+        for panel in [
+            Panel::DepGraph,
+            Panel::Reports,
+            Panel::Progress,
+            Panel::Monitor,
+        ] {
+            app.active_panel = panel;
+            app.scroll_offset = 0;
+            app.scroll_down();
+            assert_eq!(app.scroll_offset, 1, "scroll_down failed for {panel:?}");
+            app.scroll_up();
+            assert_eq!(app.scroll_offset, 0, "scroll_up failed for {panel:?}");
+        }
     }
 
     #[test]
