@@ -1,0 +1,3 @@
+- One validation per whole spec for small spec implementation, small features.
+- Validate test creation for tasks. Maybe you should run separate agents to create these test cases. For example, not duplicating them and just reducing to the important ones.
+- add workflow config
