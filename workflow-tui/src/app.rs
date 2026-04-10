@@ -1,6 +1,6 @@
 use crate::model::Spec;
 use crate::parse::scan_specs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
@@ -36,29 +36,31 @@ pub struct App {
     pub(crate) specs: Vec<Spec>,
     pub(crate) active_panel: Panel,
     pub(crate) selected_spec: usize,
+    // Shared across all grid panels; reset to 0 on panel switch (see next_panel / prev_panel).
+    // Per-panel scroll persistence is not needed currently.
     pub(crate) scroll_offset: usize,
     pub(crate) should_quit: bool,
     pub(crate) warnings: Vec<String>,
 }
 
 impl App {
-    pub fn new(root: PathBuf) -> Self {
-        let (specs, warnings) = scan_specs(&root);
+    pub fn new(root: &Path) -> Self {
+        let (specs, warnings) = scan_specs(root);
         Self {
-            root,
+            root: root.to_path_buf(),
             specs,
             active_panel: Panel::SpecList,
             selected_spec: 0,
             scroll_offset: 0,
             should_quit: false,
-            warnings,
+            warnings: warnings.into_iter().map(|w| w.to_string()).collect(),
         }
     }
 
     pub fn rescan(&mut self) {
         let (specs, warnings) = scan_specs(&self.root);
         self.specs = specs;
-        self.warnings = warnings;
+        self.warnings = warnings.into_iter().map(|w| w.to_string()).collect();
         if self.selected_spec >= self.specs.len() && !self.specs.is_empty() {
             self.selected_spec = self.specs.len() - 1;
         }
@@ -132,6 +134,7 @@ mod tests {
                 name: "test".to_string(),
                 tasks,
                 reports: vec![],
+                monitor_events: vec![],
             }],
             active_panel: Panel::SpecList,
             selected_spec: 0,
@@ -218,6 +221,7 @@ mod tests {
             name: "second".to_string(),
             tasks: vec![],
             reports: vec![],
+            monitor_events: vec![],
         });
         app.scroll_down(); // 0 -> 1
         app.scroll_down(); // stays at 1

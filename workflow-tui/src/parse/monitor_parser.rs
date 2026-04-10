@@ -1,9 +1,9 @@
 use crate::model::MonitorEvent;
+use crate::parse::ParseWarning;
 
 const MAX_EVENTS: usize = 10_000;
 
-#[allow(dead_code)] // Used by scanner in later tasks
-pub fn parse_monitor_log(content: &str, source: &str) -> (Vec<MonitorEvent>, Vec<String>) {
+pub fn parse_monitor_log(content: &str, source: &str) -> (Vec<MonitorEvent>, Vec<ParseWarning>) {
     let mut events = Vec::new();
     let mut warnings = Vec::new();
 
@@ -16,11 +16,18 @@ pub fn parse_monitor_log(content: &str, source: &str) -> (Vec<MonitorEvent>, Vec
             Ok(event) => {
                 events.push(event);
                 if events.len() >= MAX_EVENTS {
-                    warnings.push(format!("{source}: truncated at {MAX_EVENTS} events"));
+                    warnings.push(ParseWarning::Truncated {
+                        source: source.to_string(),
+                        max: MAX_EVENTS,
+                    });
                     break;
                 }
             }
-            Err(e) => warnings.push(format!("{source}:{}: {e}", i + 1)),
+            Err(e) => warnings.push(ParseWarning::MalformedLine {
+                source: source.to_string(),
+                line: i + 1,
+                cause: e.to_string(),
+            }),
         }
     }
 
@@ -119,7 +126,7 @@ mod tests {
         // Then valid lines parse and malformed line produces a warning with line number
         assert_eq!(events.len(), 2);
         assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].starts_with("monitor.jsonl:2:"));
+        assert!(warnings[0].to_string().starts_with("monitor.jsonl:2:"));
     }
 
     #[test]

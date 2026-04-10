@@ -41,7 +41,7 @@ fn main() -> Result<()> {
         );
     }
 
-    let mut app = App::new(root.clone());
+    let mut app = App::new(&root);
 
     // Start file watcher (degrade gracefully if it fails)
     let watcher_rx: Option<mpsc::Receiver<()>>;
