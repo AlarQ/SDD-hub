@@ -1,7 +1,7 @@
 ---
 id: "006"
 name: "Implement Monitor panel rendering in TUI"
-status: todo
+status: done
 blocked_by:
   - "004"
   - "005"
@@ -46,3 +46,15 @@ Implement the Monitor panel widget that renders the event feed.
 ### `ui/mod.rs`
 - Replace Monitor placeholder with actual `monitor::render()` call
 - Pass `spec.monitor_events` to Monitor panel
+
+## Implementation Notes
+
+- `render()` signature includes `scroll_offset` parameter (passed from `app.scroll_offset`) for scroll support
+- `category_badge()` delegates color to `styles::event_category_color()` to avoid duplicating the category-to-color mapping
+- `format_summary()` handles both `from_status`/`to_status` and shorthand `from`/`to` keys for task transitions (defensive against both emission formats)
+- Similarly, `agent_name`/`agent` and `tool_name`/`tool` alternates are handled for agent invocations and tool calls
+- `validation_result` color uses the base category color (Green) from styles; per-status coloring (Red for findings) deferred to future enhancement
+- `feature` and `correlation_id` fields on `MonitorEvent` are deserialized but not yet read by rendering — marked with `#[allow(dead_code)]` since they're structurally required for the JSONL schema
+- Scanner extended with `scan_monitor_log()` that reads `.monitor.jsonl` from each spec directory; missing file returns empty vec (no warning)
+- Removed all `#[allow(dead_code)]` and `#[allow(unused_imports)]` annotations from tasks 004/005 that were waiting for this task
+- Also modified: `parse/scanner.rs` (new `scan_monitor_log` fn), `parse/mod.rs` (removed unused import allow), `model/monitor_event.rs` (removed dead_code allows), `app.rs` (updated test Spec constructors)
