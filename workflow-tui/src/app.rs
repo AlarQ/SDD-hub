@@ -11,25 +11,23 @@ pub enum Panel {
     Monitor,
 }
 
+const PANELS: &[Panel] = &[
+    Panel::SpecList,
+    Panel::DepGraph,
+    Panel::Reports,
+    Panel::Progress,
+    Panel::Monitor,
+];
+
 impl Panel {
     pub fn next(self) -> Self {
-        match self {
-            Self::SpecList => Self::DepGraph,
-            Self::DepGraph => Self::Reports,
-            Self::Reports => Self::Progress,
-            Self::Progress => Self::Monitor,
-            Self::Monitor => Self::SpecList,
-        }
+        let i = PANELS.iter().position(|&p| p == self).unwrap_or(0);
+        PANELS[(i + 1) % PANELS.len()]
     }
 
     pub fn prev(self) -> Self {
-        match self {
-            Self::SpecList => Self::Monitor,
-            Self::DepGraph => Self::SpecList,
-            Self::Reports => Self::DepGraph,
-            Self::Progress => Self::Reports,
-            Self::Monitor => Self::Progress,
-        }
+        let i = PANELS.iter().position(|&p| p == self).unwrap_or(0);
+        PANELS[(PANELS.len() + i - 1) % PANELS.len()]
     }
 }
 

@@ -6,29 +6,29 @@ pub struct DashboardLayout {
 }
 
 pub fn build_layout(area: Rect) -> DashboardLayout {
-    let columns = Layout::default()
+    let [sidebar, main] = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
-        .split(area);
+        .areas(area);
 
-    let rows = Layout::default()
+    let [top_row, bottom_row] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(columns[1]);
+        .areas(main);
 
-    let top = Layout::default()
+    let [top_left, top_right] = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(rows[0]);
+        .areas(top_row);
 
-    let bottom = Layout::default()
+    let [bottom_left, bottom_right] = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(rows[1]);
+        .areas(bottom_row);
 
     DashboardLayout {
-        sidebar: columns[0],
-        grid: [top[0], top[1], bottom[0], bottom[1]],
+        sidebar,
+        grid: [top_left, top_right, bottom_left, bottom_right],
     }
 }
 

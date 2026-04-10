@@ -1,7 +1,7 @@
 ---
 id: "005"
 name: "Restructure TUI layout to sidebar + 2x2 grid"
-status: implemented
+status: done
 blocked_by: []
 max_files: 5
 estimated_files:
