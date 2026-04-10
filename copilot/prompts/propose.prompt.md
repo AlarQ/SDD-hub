@@ -129,6 +129,29 @@ Use the task breakdown as input for generating the final task files:
 - Set `status: blocked` with `blocked_by` IDs for tasks with dependencies (per dependency graph)
 - Set `status: todo` for tasks with no dependencies
 
+#### Test Strategy Analysis (after task generation)
+After all task files have been generated, perform a cross-task test strategy analysis. Invoke `@test-strategist` (if available) or perform inline. The analysis receives:
+- The spec.md content (with BDD scenarios)
+- The design.md content (with architecture and module boundaries)
+- All generated task files (with their test_cases fields)
+
+Directive: "Analyze the spec scenarios, design boundaries, and task test cases. Produce a cross-task test strategy: assign test ownership per task, identify integration seams, flag duplication risks, and map every spec scenario to exactly one task. Use the Proposal Output format defined in your agent definition."
+
+##### Test Strategy Output Contract
+1. **Task test responsibilities** — per-task: test theme, what it owns, what it must not test, integration seams, shared fixtures
+2. **Spec coverage map** — every BDD scenario mapped to exactly one owning task
+3. **Integration test plan** — seam descriptions with owning task and rationale
+4. **Risk flags** — testing concerns with severity and mitigation
+
+If the agent is unavailable, perform the analysis inline and note the limitation.
+
+##### Saving and Applying Test Strategy
+- Save the full analysis output as `specs/<feature>/test-strategy.md`
+- Update each task file's `test_cases` field based on the strategy:
+  - Add integration seam tests assigned to that task
+  - Remove test cases that the strategy assigns to a different task
+  - Add shared fixture creation responsibilities to the earliest task that needs them
+
 ## Constraints
 - Max 20 files per task
 - Each task references applicable rules from both knowledge bases in the `ground_rules` field using prefix convention

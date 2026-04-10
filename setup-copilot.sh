@@ -199,7 +199,7 @@ for prompt in bootstrap explore propose implement validate review-findings ship 
 done
 
 # Check agents
-for agent in software-architect security-engineer code-quality compliance-checker ultrathink-debugger code-reviewer; do
+for agent in software-architect security-engineer code-quality compliance-checker ultrathink-debugger code-reviewer test-strategist; do
   if [ -f "$GITHUB_DIR/agents/$agent.agent.md" ]; then
     echo "[ok] @$agent agent"
   else

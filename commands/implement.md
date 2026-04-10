@@ -28,11 +28,25 @@ Feature name: $ARGUMENTS
    - Follow language-specific patterns from knowledge-base/languages/
    - Apply security rules from both knowledge bases
    - **On error or test failure** → spawn the `Ultrathink Debugger` agent (`ultrathink-debugger`) with the error output, relevant source files, and task context. The agent must return its findings in the structured format defined in the agent's "Implementation Fix Output" section. Present the agent's diagnosis and proposed fix to the user. On accept: apply the fix and continue. On reject or if the agent cannot resolve the issue: report the failure to the user with the agent's diagnosis and pause for guidance.
-9. Implement test bodies for the natural-language test cases defined in the task
-   - Human wrote test case names in the task file
+9. If `specs/$ARGUMENTS/test-strategy.md` exists, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool before writing test bodies. The agent receives:
+   - The test-strategy.md content
+   - The current task file (with test_cases)
+   - List of existing test files from completed tasks (find test files in the task branches already merged to `feat/$ARGUMENTS`)
+   
+   Instruct the agent with this directive: "Review this task's test cases against the test strategy and existing test coverage from completed tasks. For each test case, determine: keep, skip (already covered), or modify. Add any missing integration seam tests assigned to this task. List shared fixtures available from completed tasks. Use the Implementation Refinement Output format defined in your agent definition."
+   
+   Apply the agent's output:
+   - Skip test cases marked as `skip` (already covered by completed tasks)
+   - Modify test cases as directed
+   - Add new integration tests the agent identifies
+   - Reuse shared fixtures instead of recreating test data
+   
+   If the agent errors or times out, or if test-strategy.md does not exist, proceed with all test cases from the task file as-is and note: *"Test Strategist refinement unavailable — implementing all test cases from task file."*
+10. Implement test bodies for the (filtered) test cases
+   - Use the refined test list from step 9 if available, otherwise use the task file's test_cases as-is
    - AI writes the test implementations
    - Use Given/When/Then structure from testing knowledge-base rules
-10. Add implementation notes to the task file explaining decisions made
+11. Add implementation notes to the task file explaining decisions made
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), spawn the `Code Quality Pragmatist` agent (`code-quality-pragmatist`) for a pre-validation sanity check. The agent receives:
@@ -53,7 +67,7 @@ If the agent errors or times out, proceed without the quality check and note the
 
 This is a lightweight pre-flight check — `/validate` remains the authoritative validation step.
 
-11. Run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`
+12. Run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`
 
 IMPORTANT:
 - Do NOT proceed to the next task automatically
