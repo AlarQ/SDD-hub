@@ -22,6 +22,7 @@ pub fn selected_style() -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
+#[allow(dead_code)] // Used by monitor panel rendering in task 006
 pub fn event_category_color(cat: &crate::model::EventCategory) -> Color {
     match cat {
         crate::model::EventCategory::ContextRead => Color::Cyan,

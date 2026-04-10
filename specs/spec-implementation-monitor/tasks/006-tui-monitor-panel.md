@@ -1,7 +1,7 @@
 ---
 id: "006"
 name: "Implement Monitor panel rendering in TUI"
-status: blocked
+status: todo
 blocked_by:
   - "004"
   - "005"
