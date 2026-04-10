@@ -2,6 +2,7 @@
 id: "006"
 name: "Implement Monitor panel rendering in TUI"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/16
 blocked_by:
   - "004"
   - "005"
