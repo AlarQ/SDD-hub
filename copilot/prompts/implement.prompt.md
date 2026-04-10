@@ -42,11 +42,21 @@ Resolve `ground_rules` paths using the prefix convention:
    - Follow language-specific patterns from knowledge-base/languages/
    - Apply security rules from `knowledge-base/_general/security/` and project security rules (if any)
    - **On error or test failure** — invoke `@ultrathink-debugger` with the error output, relevant source files, and task context. The agent returns structured diagnosis with root cause and proposed fix. Present the agent's diagnosis and proposed fix to the user. On accept: apply the fix and continue. On reject or if the agent cannot resolve the issue: report the failure to the user and pause for guidance.
-9. Implement test bodies for the natural-language test cases defined in the task
-   - Human wrote test case names in the task file
+9. If `specs/<feature>/test-strategy.md` exists, invoke `@test-strategist` (if available) before writing test bodies. Provide:
+   - The test-strategy.md content
+   - The current task file (with test_cases)
+   - Existing test files from completed tasks (check files changed in merged task branches on `feat/<feature>`)
+   
+   Directive: "Review this task's test cases against the test strategy and existing test coverage from completed tasks. For each test case, determine: keep, skip (already covered), or modify. Add any missing integration seam tests assigned to this task. List shared fixtures available from completed tasks. Use the Implementation Refinement Output format."
+   
+   Apply the output: skip covered tests, modify as directed, add missing integration tests, reuse shared fixtures.
+   
+   If the agent is unavailable or test-strategy.md does not exist, implement all test cases from the task file as-is.
+10. Implement test bodies for the (filtered) test cases
+   - Use the refined test list from step 9 if available, otherwise use the task file's test_cases as-is
    - AI writes the test implementations
    - Use Given/When/Then structure from `knowledge-base/_general/testing/`
-10. Add implementation notes to the task file explaining decisions made
+11. Add implementation notes to the task file explaining decisions made
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), invoke `@code-quality` for a pre-validation sanity check. Provide:
@@ -67,7 +77,7 @@ If the agent errors or is unavailable, proceed without the quality check and not
 
 This is a lightweight pre-flight check — `/validate` remains the authoritative validation step.
 
-11. Run `./scripts/task-manager.sh set-status <task-file> implemented`
+12. Run `./scripts/task-manager.sh set-status <task-file> implemented`
 
 IMPORTANT:
 - Do NOT proceed to the next task automatically
