@@ -41,7 +41,7 @@ Optional: branch name or PR title via $ARGUMENTS
 - **If no PR exists for this branch:**
   ```
   gh pr create --base <default-branch> \
-    --title "<concise title from changes>" \
+    --title "<conventional commit format title matching the commit>" \
     --body "<summary of all changes in the branch>"
   ```
   - Use `$ARGUMENTS` as PR title if provided and a branch was not created from it

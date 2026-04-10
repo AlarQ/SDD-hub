@@ -1,3 +1,3 @@
 - One validation per whole spec for small spec implementation, small features.
-- Validate test creation for tasks. Maybe you should run separate agents to create these test cases. For example, not duplicating them and just reducing to the important ones.
+- fix review-findings grouping: currently groups blindly by code location — should group by both code location AND type of needed change, so unrelated fixes in the same snippet aren't bundled together
 - add workflow config
