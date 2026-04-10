@@ -130,6 +130,32 @@ Use the PM agent's task breakdown as input for generating the final task files:
 - Set `status: blocked` with `blocked_by` IDs for tasks with dependencies (per PM dependency graph)
 - Set `status: todo` for tasks with no dependencies
 
+#### Agent — Test Strategist (after task generation)
+After all task files have been generated, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool. The agent receives:
+- The spec.md content (with BDD scenarios)
+- The design.md content (with architecture and module boundaries)
+- All generated task files (with their test_cases fields)
+
+Instruct the agent with this directive: "Analyze the spec scenarios, design boundaries, and task test cases. Produce a cross-task test strategy: assign test ownership per task, identify integration seams, flag duplication risks, and map every spec scenario to exactly one task. Use the Proposal Output format defined in your agent definition."
+
+##### Test Strategist Output Contract
+The agent must return:
+1. **Task test responsibilities** — per-task: test theme, what it owns, what it must not test, integration seams, shared fixtures
+2. **Spec coverage map** — every BDD scenario mapped to exactly one owning task
+3. **Integration test plan** — seam descriptions with owning task and rationale
+4. **Risk flags** — testing concerns with severity and mitigation
+
+If the agent errors or times out, proceed without the test strategy and note: *"Test Strategist analysis unavailable — test strategy not generated."*
+
+##### Saving Test Strategy Output
+Save the agent's full output as `specs/$ARGUMENTS/test-strategy.md`.
+
+##### Updating Task Files with Strategy
+After saving test-strategy.md, update each task file's `test_cases` field:
+- Add integration seam tests assigned to that task
+- Remove test cases that the strategy assigns to a different task
+- Add shared fixture creation responsibilities to the earliest task that needs them
+
 ## Constraints
 - Max 20 files per task
 - Each task references applicable rules in the `ground_rules` field (per `knowledge-base-rules.md`)
