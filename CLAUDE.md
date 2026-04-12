@@ -15,7 +15,8 @@ A file-based, spec-driven development workflow for Claude Code and GitHub Copilo
 - `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Installed to `~/.claude/knowledge-base-rules.md` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
-- `hooks/` — Claude Code hook scripts for enforcement (block-git-hook-bypass, block-dismissive-language). Installed to `~/.claude/hooks/` by `setup.sh`.
+- `scripts/monitor.sh` — Event logger for spec implementation monitoring; appends JSONL events to `specs/<feature>/.monitor.jsonl`
+- `hooks/` — Claude Code hook scripts for enforcement and monitoring (block-git-hook-bypass, block-dismissive-language, monitor-tool-calls). Installed to `~/.claude/hooks/` by `setup.sh`.
 - `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
 - `copilot/` — GitHub Copilot equivalents: `.prompt.md` files (slash commands), `.agent.md` files (custom agents), `.instructions.md` files (path-specific rules), and `copilot-instructions.md` (repo-wide). Installed per-project to `.github/` by `setup-copilot.sh`.
 - `templates/` — CLAUDE.md template, settings.json hook wiring template for target projects
