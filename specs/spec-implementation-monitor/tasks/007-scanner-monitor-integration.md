@@ -2,6 +2,7 @@
 id: "007"
 name: "Extend scanner to load .monitor.jsonl files"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/19
 blocked_by:
   - "004"
 max_files: 2
