@@ -1,7 +1,8 @@
 ---
 id: "008"
 name: "Update setup.sh to install monitor scripts and hook"
-status: todo
+status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/20
 blocked_by:
   - "001"
   - "002"
@@ -29,3 +30,9 @@ Update `setup.sh` to install the new monitoring scripts alongside existing comma
 - `monitor-tool-calls.sh` installed to `~/.claude/hooks/monitor-tool-calls.sh` (executable)
 - Add verification checks in the verification section
 - Both files use the existing `safe_copy` pattern for overwrite protection
+
+## Implementation Notes
+
+- Installation is already handled by the existing generic loops: scripts loop (line 99-107) copies all `scripts/*.sh` and hooks loop (line 143-151) copies all `hooks/*.sh`. No new copy logic needed.
+- Only change required: add `monitor.sh` to the scripts verification list and `monitor-tool-calls` to the hooks verification list so the verification section confirms successful installation.
+- All 6 test cases verified manually by running `setup.sh` with and without `--force`.
