@@ -2,7 +2,7 @@
 id: "002"
 name: wire-set-context-implement
 title: Wire set_context into /implement command
-status: blocked
+status: todo
 blocked_by: ["001"]
 ground_rules:
   - "general:architecture/general.md"

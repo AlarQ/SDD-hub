@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090,SC1091
 set -euo pipefail
 
 # test-monitor.sh — Tests for scripts/monitor.sh
@@ -147,6 +148,7 @@ test_log_event_empty_task_omits_field() {
 }
 
 test_json_output_valid_single_line() {
+  command -v python3 >/dev/null 2>&1 || { echo "  SKIP: python3 not available"; return 0; }
   # Given a project with specs/test-feature/
   source "$MONITOR_SCRIPT"
 
@@ -185,6 +187,142 @@ test_timestamps_iso8601_utc() {
   [[ "$line" =~ \"ts\":\"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.000Z\" ]]
 }
 
+# === Feature Validation Tests (Task 001) ===
+
+test_set_context_valid_feature_succeeds() {
+  # Given a valid feature name matching ^[a-zA-Z0-9_-]+$
+  # When set_context is called via CLI mode
+  "$MONITOR_SCRIPT" set_context "my-feature" "001"
+
+  # Then the context file is created successfully
+  [[ -f "$TEST_TMPDIR/.monitor-context" ]]
+}
+
+test_set_context_path_traversal_rejected() {
+  # Given a feature name containing path traversal
+  # When set_context is called via CLI
+  local err
+  err="$("$MONITOR_SCRIPT" set_context "../../etc" "001" 2>&1)" && return 1
+
+  # Then exit code is non-zero and an error is printed to stderr
+  [[ "$err" == *"Invalid feature"* ]] || return 1
+  [[ ! -f "$TEST_TMPDIR/.monitor-context" ]] || return 1
+}
+
+test_set_context_spaces_rejected() {
+  # Given a feature name with spaces
+  # When set_context is called
+  "$MONITOR_SCRIPT" set_context "my feature" "001" 2>/dev/null && return 1
+
+  # Then context file is not created
+  [[ ! -f "$TEST_TMPDIR/.monitor-context" ]]
+}
+
+test_set_context_empty_feature_fails() {
+  # Given an empty feature name
+  # When set_context is called with empty first arg
+  # Then bash :? guard fires with non-zero exit
+  "$MONITOR_SCRIPT" set_context "" "001" 2>/dev/null && return 1
+  return 0
+}
+
+test_get_monitor_file_slashes_rejected() {
+  # Given a feature name containing a slash
+  # When get_monitor_file is called (via log_event which flows through it)
+  source "$MONITOR_SCRIPT"
+  get_monitor_file "my/feature" 2>/dev/null && return 1
+
+  # Then it returns exit 1
+  return 0
+}
+
+test_log_event_malicious_feature_blocked() {
+  # Given a malicious feature value with path separators
+  source "$MONITOR_SCRIPT"
+  local before after
+  before="$(find "$TEST_TMPDIR" -name '.monitor.jsonl' | wc -l | tr -d ' ')"
+
+  # When log_event is called with a malicious feature value
+  log_event "../../etc" "tool_call" "001" '{"tool_name":"Bash"}' 2>/dev/null && return 1
+
+  # Then get_monitor_file rejects it and no new monitor file is written
+  after="$(find "$TEST_TMPDIR" -name '.monitor.jsonl' | wc -l | tr -d ' ')"
+  [[ "$before" -eq "$after" ]] || return 1
+}
+
+test_poisoned_context_rejected() {
+  # Given .monitor-context was somehow written with a poisoned feature value
+  source "$MONITOR_SCRIPT"
+  printf 'feature=../../etc\ntask=001\n' > "$TEST_TMPDIR/.monitor-context"
+
+  # When read_context is called it should reject the poisoned value at the read boundary
+  read_context 2>/dev/null && return 1
+
+  # Then read_context returns non-zero — poisoned value never leaves the function
+  return 0
+}
+
+test_set_context_overwrites_previous() {
+  # Given .monitor-context exists with one task
+  "$MONITOR_SCRIPT" set_context "feature-a" "001"
+  [[ -f "$TEST_TMPDIR/.monitor-context" ]] || return 1
+
+  # When set_context is called with different values
+  "$MONITOR_SCRIPT" set_context "feature-b" "002"
+
+  # Then the file contains the new values
+  grep -q "^feature=feature-b$" "$TEST_TMPDIR/.monitor-context" || return 1
+  grep -q "^task=002$" "$TEST_TMPDIR/.monitor-context" || return 1
+}
+
+test_set_context_writes_only_feature_and_task() {
+  # Given no prior context file
+  # When set_context is called
+  "$MONITOR_SCRIPT" set_context "my-feature" "003"
+
+  # Then the file contains exactly 2 lines: feature and task
+  local line_count
+  line_count="$(wc -l < "$TEST_TMPDIR/.monitor-context" | tr -d ' ')"
+  assert_eq "2" "$line_count" "expected exactly 2 lines"
+  grep -q "^feature=my-feature$" "$TEST_TMPDIR/.monitor-context" || return 1
+  grep -q "^task=003$" "$TEST_TMPDIR/.monitor-context" || return 1
+}
+
+test_set_context_read_context_roundtrip() {
+  # Given set_context is called with known values
+  source "$MONITOR_SCRIPT"
+  set_context "round-trip" "042"
+
+  # When read_context is called
+  local output
+  output="$(read_context)"
+  local feature task
+  feature="$(printf '%s' "$output" | head -1)"
+  task="$(printf '%s' "$output" | tail -1)"
+
+  # Then the values match what was written
+  assert_eq "round-trip" "$feature" "feature mismatch" || return 1
+  assert_eq "042" "$task" "task mismatch"
+}
+
+test_task_id_path_chars_rejected() {
+  # Given a task ID containing path characters
+  # When set_context is called via CLI
+  "$MONITOR_SCRIPT" set_context "valid-feature" "../task" 2>/dev/null && return 1
+
+  # Then context file is not created
+  [[ ! -f "$TEST_TMPDIR/.monitor-context" ]] || return 1
+}
+
+test_gitignore_matches_monitor_context() {
+  # Given the repo root .gitignore
+  local gitignore="$REPO_ROOT/.gitignore"
+  [[ -f "$gitignore" ]] || return 1
+
+  # When we check for .monitor-context pattern
+  grep -q "\.monitor-context" "$gitignore"
+}
+
 # === Runner ===
 
 echo "Running monitor.sh tests..."
@@ -199,6 +337,18 @@ run_test "clear_context removes .monitor-context file" test_clear_context_remove
 run_test "log_event with empty task_id omits task field" test_log_event_empty_task_omits_field
 run_test "JSON output is valid single-line JSON per event" test_json_output_valid_single_line
 run_test "timestamps are ISO 8601 UTC format" test_timestamps_iso8601_utc
+run_test "set_context with valid feature name succeeds" test_set_context_valid_feature_succeeds
+run_test "set_context with path traversal feature rejects with exit 1" test_set_context_path_traversal_rejected
+run_test "set_context with spaces in feature rejects with exit 1" test_set_context_spaces_rejected
+run_test "set_context with empty feature fails via bash guard" test_set_context_empty_feature_fails
+run_test "get_monitor_file with slashes in feature rejects with exit 1" test_get_monitor_file_slashes_rejected
+run_test "log_event with malicious feature is blocked by get_monitor_file" test_log_event_malicious_feature_blocked
+run_test "poisoned context file values are rejected by read_context" test_poisoned_context_rejected
+run_test "set_context with different values overwrites previous context" test_set_context_overwrites_previous
+run_test "set_context writes exactly feature and task lines, nothing else" test_set_context_writes_only_feature_and_task
+run_test "set_context + read_context round-trip returns correct values" test_set_context_read_context_roundtrip
+run_test "task ID with path characters is rejected by existing validate_id" test_task_id_path_chars_rejected
+run_test ".gitignore matches .monitor-context pattern" test_gitignore_matches_monitor_context
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"
