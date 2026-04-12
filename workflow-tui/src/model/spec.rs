@@ -1,3 +1,4 @@
+use super::monitor_event::MonitorEvent;
 use super::report::Report;
 use super::task::{Task, TaskStatus};
 
@@ -6,6 +7,7 @@ pub struct Spec {
     pub name: String,
     pub tasks: Vec<Task>,
     pub reports: Vec<Report>,
+    pub monitor_events: Vec<MonitorEvent>,
 }
 
 impl Spec {

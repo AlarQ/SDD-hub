@@ -1,6 +1,6 @@
 use crate::model::Spec;
 use crate::parse::scan_specs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
@@ -8,25 +8,26 @@ pub enum Panel {
     DepGraph,
     Reports,
     Progress,
+    Monitor,
 }
+
+const PANELS: &[Panel] = &[
+    Panel::SpecList,
+    Panel::DepGraph,
+    Panel::Reports,
+    Panel::Progress,
+    Panel::Monitor,
+];
 
 impl Panel {
     pub fn next(self) -> Self {
-        match self {
-            Self::SpecList => Self::DepGraph,
-            Self::DepGraph => Self::Reports,
-            Self::Reports => Self::Progress,
-            Self::Progress => Self::SpecList,
-        }
+        let i = PANELS.iter().position(|&p| p == self).unwrap_or(0);
+        PANELS[(i + 1) % PANELS.len()]
     }
 
     pub fn prev(self) -> Self {
-        match self {
-            Self::SpecList => Self::Progress,
-            Self::DepGraph => Self::SpecList,
-            Self::Reports => Self::DepGraph,
-            Self::Progress => Self::Reports,
-        }
+        let i = PANELS.iter().position(|&p| p == self).unwrap_or(0);
+        PANELS[(PANELS.len() + i - 1) % PANELS.len()]
     }
 }
 
@@ -35,29 +36,31 @@ pub struct App {
     pub(crate) specs: Vec<Spec>,
     pub(crate) active_panel: Panel,
     pub(crate) selected_spec: usize,
+    // Shared across all grid panels; reset to 0 on panel switch (see next_panel / prev_panel).
+    // Per-panel scroll persistence is not needed currently.
     pub(crate) scroll_offset: usize,
     pub(crate) should_quit: bool,
     pub(crate) warnings: Vec<String>,
 }
 
 impl App {
-    pub fn new(root: PathBuf) -> Self {
-        let (specs, warnings) = scan_specs(&root);
+    pub fn new(root: &Path) -> Self {
+        let (specs, warnings) = scan_specs(root);
         Self {
-            root,
+            root: root.to_path_buf(),
             specs,
             active_panel: Panel::SpecList,
             selected_spec: 0,
             scroll_offset: 0,
             should_quit: false,
-            warnings,
+            warnings: warnings.into_iter().map(|w| w.to_string()).collect(),
         }
     }
 
     pub fn rescan(&mut self) {
         let (specs, warnings) = scan_specs(&self.root);
         self.specs = specs;
-        self.warnings = warnings;
+        self.warnings = warnings.into_iter().map(|w| w.to_string()).collect();
         if self.selected_spec >= self.specs.len() && !self.specs.is_empty() {
             self.selected_spec = self.specs.len() - 1;
         }
@@ -85,10 +88,7 @@ impl App {
                 }
             }
             _ => {
-                self.scroll_offset = self
-                    .scroll_offset
-                    .saturating_add(1)
-                    .min(u16::MAX as usize);
+                self.scroll_offset = self.scroll_offset.saturating_add(1).min(u16::MAX as usize);
             }
         }
     }
@@ -134,6 +134,7 @@ mod tests {
                 name: "test".to_string(),
                 tasks,
                 reports: vec![],
+                monitor_events: vec![],
             }],
             active_panel: Panel::SpecList,
             selected_spec: 0,
@@ -144,15 +145,70 @@ mod tests {
     }
 
     #[test]
+    fn panel_cycle_includes_all_5_panels() {
+        let start = Panel::SpecList;
+        let mut current = start.next();
+        let mut count = 1;
+        while current != start {
+            current = current.next();
+            count += 1;
+        }
+        assert_eq!(count, 5);
+    }
+
+    #[test]
     fn panel_cycles_forward() {
         assert_eq!(Panel::SpecList.next(), Panel::DepGraph);
-        assert_eq!(Panel::Progress.next(), Panel::SpecList);
+        assert_eq!(Panel::Progress.next(), Panel::Monitor);
+        assert_eq!(Panel::Monitor.next(), Panel::SpecList);
     }
 
     #[test]
     fn panel_cycles_backward() {
-        assert_eq!(Panel::SpecList.prev(), Panel::Progress);
+        assert_eq!(Panel::SpecList.prev(), Panel::Monitor);
+        assert_eq!(Panel::Monitor.prev(), Panel::Progress);
         assert_eq!(Panel::DepGraph.prev(), Panel::SpecList);
+    }
+
+    #[test]
+    fn tab_navigation_cycles_through_all_panels() {
+        let mut app = make_app(vec![]);
+        assert_eq!(app.active_panel, Panel::SpecList);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::DepGraph);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::Reports);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::Progress);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::Monitor);
+        app.next_panel();
+        assert_eq!(app.active_panel, Panel::SpecList);
+    }
+
+    #[test]
+    fn scroll_behavior_works_for_each_panel() {
+        let mut app = make_app(vec![make_task("001", TaskStatus::Todo)]);
+        // SpecList scrolls through specs
+        app.active_panel = Panel::SpecList;
+        app.scroll_down();
+        // Only 1 spec, so stays at 0
+        assert_eq!(app.selected_spec, 0);
+
+        // Grid panels use scroll_offset
+        for panel in [
+            Panel::DepGraph,
+            Panel::Reports,
+            Panel::Progress,
+            Panel::Monitor,
+        ] {
+            app.active_panel = panel;
+            app.scroll_offset = 0;
+            app.scroll_down();
+            assert_eq!(app.scroll_offset, 1, "scroll_down failed for {panel:?}");
+            app.scroll_up();
+            assert_eq!(app.scroll_offset, 0, "scroll_up failed for {panel:?}");
+        }
     }
 
     #[test]
@@ -165,6 +221,7 @@ mod tests {
             name: "second".to_string(),
             tasks: vec![],
             reports: vec![],
+            monitor_events: vec![],
         });
         app.scroll_down(); // 0 -> 1
         app.scroll_down(); // stays at 1

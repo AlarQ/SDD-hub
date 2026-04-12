@@ -1,12 +1,11 @@
 use ratatui::style::{Color, Modifier, Style};
 
 pub fn panel_border(active: bool) -> Style {
-    if active {
-        Style::default()
+    match active {
+        true => Style::default()
             .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::DarkGray)
+            .add_modifier(Modifier::BOLD),
+        false => Style::default().fg(Color::DarkGray),
     }
 }
 
@@ -20,6 +19,17 @@ pub fn selected_style() -> Style {
     Style::default()
         .bg(Color::DarkGray)
         .add_modifier(Modifier::BOLD)
+}
+
+pub fn event_category_color(cat: &crate::model::EventCategory) -> Color {
+    match cat {
+        crate::model::EventCategory::ContextRead => Color::Cyan,
+        crate::model::EventCategory::KbRule => Color::Blue,
+        crate::model::EventCategory::TaskTransition => Color::Yellow,
+        crate::model::EventCategory::AgentInvocation => Color::Magenta,
+        crate::model::EventCategory::ValidationResult => Color::Green,
+        crate::model::EventCategory::ToolCall => Color::Gray,
+    }
 }
 
 pub fn severity_color(severity: &str) -> Color {

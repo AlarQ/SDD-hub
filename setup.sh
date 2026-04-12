@@ -195,21 +195,25 @@ echo -e "${BOLD}${BLUE}=== Verification ===${RESET}"
 errors=0
 
 # Check commands
-for cmd in bootstrap explore propose implement validate review-findings ship quick-ship pr-review spec-status workflow-summary continue-task research; do
-  if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
-    echo -e "${GREEN}[ok]${RESET} /$cmd command"
+for cmd_file in "$SCRIPT_DIR/commands/"*.md; do
+  [ -f "$cmd_file" ] || continue
+  name=$(basename "$cmd_file" .md)
+  if [ -f "$COMMANDS_DIR/$name.md" ]; then
+    echo -e "${GREEN}[ok]${RESET} /$name command"
   else
-    echo -e "${RED}[FAIL]${RESET} /$cmd command missing"
+    echo -e "${RED}[FAIL]${RESET} /$name command missing"
     errors=$((errors + 1))
   fi
 done
 
 # Check scripts
-for script in task-manager.sh pre-commit-hook.sh; do
-  if [ -x "$SCRIPTS_DIR/$script" ]; then
-    echo -e "${GREEN}[ok]${RESET} $script"
+for script_file in "$SCRIPT_DIR/scripts/"*.sh; do
+  [ -f "$script_file" ] || continue
+  name=$(basename "$script_file")
+  if [ -x "$SCRIPTS_DIR/$name" ]; then
+    echo -e "${GREEN}[ok]${RESET} $name"
   else
-    echo -e "${RED}[FAIL]${RESET} $script not executable"
+    echo -e "${RED}[FAIL]${RESET} $name not executable"
     errors=$((errors + 1))
   fi
 done
@@ -244,11 +248,13 @@ for agent_subdir in "$SCRIPT_DIR/agents/"*/; do
 done
 
 # Check hooks
-for hook in block-git-hook-bypass block-dismissive-language; do
-  if [ -x "$HOOKS_DIR/$hook.sh" ]; then
-    echo -e "${GREEN}[ok]${RESET} $hook hook"
+for hook_file in "$SCRIPT_DIR/hooks/"*.sh; do
+  [ -f "$hook_file" ] || continue
+  name=$(basename "$hook_file")
+  if [ -x "$HOOKS_DIR/$name" ]; then
+    echo -e "${GREEN}[ok]${RESET} $name hook"
   else
-    echo -e "${RED}[FAIL]${RESET} $hook hook missing or not executable"
+    echo -e "${RED}[FAIL]${RESET} $name hook missing or not executable"
     errors=$((errors + 1))
   fi
 done

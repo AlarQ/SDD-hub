@@ -1,10 +1,10 @@
 use crate::app::App;
 use crate::ui::styles;
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem};
-use ratatui::Frame;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect, active: bool) {
     let block = Block::default()
@@ -13,7 +13,9 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect, active: bool) {
         .border_style(styles::panel_border(active));
 
     if app.specs.is_empty() {
-        let items: Vec<ListItem> = vec![ListItem::new("  No specs found. Ensure specs/ directory exists.")];
+        let items: Vec<ListItem> = vec![ListItem::new(
+            "  No specs found. Ensure specs/ directory exists.",
+        )];
         let list = List::new(items).block(block);
         frame.render_widget(list, area);
         return;
@@ -30,12 +32,10 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect, active: bool) {
         };
 
         let pct = spec.progress_percent();
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(
-                format!("{marker} {name} ({pct}%)", name = spec.name),
-                spec_style,
-            ),
-        ])));
+        items.push(ListItem::new(Line::from(vec![Span::styled(
+            format!("{marker} {name} ({pct}%)", name = spec.name),
+            spec_style,
+        )])));
 
         for task in &spec.tasks {
             let status_color = task.status.color();

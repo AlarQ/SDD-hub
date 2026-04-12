@@ -21,6 +21,31 @@ else
   GENERAL_KB_BASE="knowledge-base/_general"
 fi
 
+# Source monitor.sh for event logging (guard: only if file exists)
+MONITOR_AVAILABLE=false
+if [[ -f "$SCRIPT_DIR/monitor.sh" ]]; then
+  source "$SCRIPT_DIR/monitor.sh"
+  MONITOR_AVAILABLE=true
+fi
+
+# Emit a task_transition event if monitoring is active.
+# Requires .monitor-context to have been set by the calling workflow command (e.g. /implement).
+# No-ops silently if context is missing — standalone task-manager.sh usage won't emit events.
+emit_transition_event() {
+  local task_id="$1" from_status="$2" to_status="$3" task_file="$4"
+  [[ "$MONITOR_AVAILABLE" = "true" ]] || return 0
+  local ctx mon_feature
+  if ctx="$(read_context 2>/dev/null)"; then
+    mon_feature="$(echo "$ctx" | head -1)"
+    [[ -n "$mon_feature" ]] || return 0
+    log_event "$mon_feature" "task_transition" "$task_id" \
+      "$(printf '{"from_status":"%s","to_status":"%s","task_file":"%s"}' \
+        "$(escape_json_string "$from_status")" \
+        "$(escape_json_string "$to_status")" \
+        "$(escape_json_string "$task_file")")" || echo "WARN: monitor event emission failed" >&2
+  fi
+}
+
 # Valid transitions: from -> to
 get_allowed_transitions() {
   case "$1" in
@@ -192,9 +217,10 @@ cmd_set_status() {
   done
   [ "$valid" = "true" ] || die "Invalid status '$new_status'. Valid: ${VALID_STATUSES[*]}"
 
-  # Get current status
-  local current_status
+  # Get current status and task id
+  local current_status task_id
   current_status=$(read_frontmatter "$file" ".status")
+  task_id=$(read_frontmatter "$file" ".id")
 
   # Check transition is allowed
   local allowed
@@ -209,6 +235,9 @@ cmd_set_status() {
   # Update the status
   update_frontmatter "$file" ".status = \"$new_status\""
   echo "Status updated: $current_status -> $new_status ($file)"
+
+  # Emit task_transition event if monitoring is active
+  emit_transition_event "$task_id" "$current_status" "$new_status" "$file"
 }
 
 # Check blocked tasks and unblock if all dependencies are done
@@ -257,6 +286,9 @@ cmd_unblock() {
       task_id=$(read_frontmatter "$task_file" ".id")
       echo "Unblocked: task $task_id ($task_file)"
       unblocked=$((unblocked + 1))
+
+      # Emit task_transition event if monitoring is active
+      emit_transition_event "$task_id" "blocked" "todo" "$task_file"
     fi
   done
 

@@ -1,6 +1,6 @@
 use ratatui::style::Color;
-use serde::de::{self, Deserializer};
 use serde::Deserialize;
+use serde::de::{self, Deserializer};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

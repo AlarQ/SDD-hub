@@ -3,8 +3,7 @@ use crate::parse::frontmatter::extract_frontmatter;
 use anyhow::{Context, Result};
 
 pub fn parse_task(content: &str, path: &str) -> Result<Task> {
-    let yaml = extract_frontmatter(content)
-        .with_context(|| format!("no frontmatter in {path}"))?;
+    let yaml = extract_frontmatter(content).with_context(|| format!("no frontmatter in {path}"))?;
     serde_yml::from_str(&yaml).with_context(|| format!("invalid task YAML in {path}"))
 }
 
