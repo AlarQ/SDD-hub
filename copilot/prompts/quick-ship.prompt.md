@@ -48,7 +48,7 @@ The user may optionally provide a branch name or PR title in their message.
 - **If no PR exists for this branch:**
   ```
   gh pr create --base <default-branch> \
-    --title "<concise title from changes>" \
+    --title "<conventional commit format title matching the commit>" \
     --body "<summary of all changes in the branch>"
   ```
   - Use the user-provided argument as PR title if given and a branch was not created from it

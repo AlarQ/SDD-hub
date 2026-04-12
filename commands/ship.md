@@ -18,16 +18,16 @@ Feature name: $ARGUMENTS
 3. Verify the branch has commits ahead of the integration branch: `git log feat/$ARGUMENTS..HEAD --oneline`
    - If no commits and no uncommitted changes exist, refuse and say: "Task branch has no changes to ship. Was `/implement` completed for this task?"
 4. Review `git status` — warn about any sensitive files (.env, credentials, secrets)
-5. Stage and commit all changes with message: `{task-id}: {task-title}` (skip if working tree is clean and commits already exist)
+5. Stage and commit all changes using conventional commit format: `type(task-id): {task-title}` where type is determined from the task context (feat, fix, refactor, docs, chore, test, style) — skip if working tree is clean and commits already exist
 6. Push the task branch: `git push -u origin feat/$ARGUMENTS/{task-id}-{task-name}`
 7. Create PR targeting the feature branch:
    ```
    gh pr create --base feat/$ARGUMENTS \
-     --title "{task-id}: {task-title}" \
+     --title "type(task-id): {task-title}" \
      --body "<summary of changes based on the diff>"
    ```
 8. Save the PR URL to the task file frontmatter as `pr_url`
-9. Commit the updated task file with the PR URL: `git add <task-file> && git commit -m "{task-id}: add PR URL"`
+9. Commit the updated task file with the PR URL: `git add <task-file> && git commit -m "chore(task-id): add PR URL"`
 10. Push the commit: `git push`
 11. Report the PR URL as final output
 

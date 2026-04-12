@@ -264,7 +264,7 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 **What it does:** Ships a completed task — commits all changes, pushes the task branch, and creates a PR targeting the integration branch (`feat/<name>`).
 
 1. Finds the lowest-numbered `done` task without a PR yet
-2. Stages and commits changes with message: `{task-id}: {task-title}`
+2. Stages and commits changes using conventional commit format: `type(task-id): {task-title}`
 3. Pushes the task branch
 4. Creates PR: `gh pr create --base feat/<name>`
 5. Saves the PR URL to the task file frontmatter as `pr_url`
