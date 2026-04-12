@@ -2,6 +2,7 @@
 id: "008"
 name: "Update setup.sh to install monitor scripts and hook"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/20
 blocked_by:
   - "001"
   - "002"
