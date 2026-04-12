@@ -3,6 +3,7 @@ id: "001"
 name: add-feature-validation
 title: Add feature name validation to monitor.sh choke points
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/22
 blocked_by: []
 max_files: 3
 estimated_files:
