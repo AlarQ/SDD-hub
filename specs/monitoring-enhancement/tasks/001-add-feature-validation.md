@@ -2,8 +2,14 @@
 id: "001"
 name: add-feature-validation
 title: Add feature name validation to monitor.sh choke points
-status: todo
+status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/22
 blocked_by: []
+max_files: 3
+estimated_files:
+  - "scripts/monitor.sh"
+  - "tests/test-monitor.sh"
+  - ".gitignore"
 ground_rules:
   - "general:security/general.md"
   - "general:architecture/general.md"
@@ -53,3 +59,13 @@ These are the two security surfaces identified in ADR-002. All other public func
 ## Implementation Notes
 
 The change is exactly 2 lines of code added. Add a comment at the top of the Public API section noting the validation contract: "All public functions receiving a feature parameter must either validate_id it directly or flow through get_monitor_file which validates."
+
+### Decisions Made
+
+- Added `validate_id "$feature" "feature" || return 1` as the first line of `get_monitor_file()`, before `find_project_root` — path construction never happens with an invalid feature.
+- Added `validate_id "$feature" "feature" || return 1` to `set_context()` before the existing `validate_id "$task_id"` check — feature validation is more fundamental and should short-circuit first.
+- Added a doc comment block above the Public API section explaining the transitive protection contract (log_event, start_phase, end_phase are covered via get_monitor_file).
+- Added `.monitor-context` to `.gitignore` — required by the spec and test-strategy.
+- Tests use CLI mode (`"$MONITOR_SCRIPT" set_context ...`) for dispatch coverage as directed by test-strategy.md. Tests that need to call internal helpers (get_monitor_file, read_context) still source the script.
+- `test_set_context_empty_feature_fails` verifies the `${1:?...}` bash guard fires — the empty string passes the regex trivially, so the guard is the actual protection. Test confirms non-zero exit only.
+- ADR-003 accepted: monitor.sh is now ~225 lines, exceeding the 150-line shell limit. Documented in design.md.
