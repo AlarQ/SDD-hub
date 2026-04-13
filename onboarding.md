@@ -1,6 +1,6 @@
 # Spec-Driven Dev Workflow: Onboarding Guide
 
-A file-based, spec-driven development workflow for Claude Code and GitHub Copilot that adds validation gates, interactive finding review, and a knowledge-base feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code that adds validation gates, interactive finding review, and a knowledge-base feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
 
 ## Prerequisites
 
@@ -10,8 +10,7 @@ Install these before running setup:
 |------|---------|---------|
 | `yq` | `brew install yq` | YAML parsing in task-manager.sh |
 | `gh` | `brew install gh` | GitHub CLI for PRs and `/pr-review` |
-| Claude Code | [claude.ai/claude-code](https://claude.ai/claude-code) | Slash command host (option A) |
-| GitHub Copilot | VS Code extension | Prompt/agent host (option B) |
+| Claude Code | [claude.ai/claude-code](https://claude.ai/claude-code) | Slash command host |
 
 Language-specific validation tools (linters, test runners, semgrep) are installed later, after `/bootstrap` creates language files for your project.
 
@@ -22,8 +21,6 @@ gh --version
 ```
 
 ## Installation
-
-### Option A: Claude Code (Global, Once Per Machine)
 
 Run from the dev-workflow repository root:
 
@@ -46,30 +43,6 @@ ls ~/.claude/commands/*.md
 ~/.claude/scripts/task-manager.sh help
 ```
 
-### Option B: GitHub Copilot (Per-Project)
-
-Run from the dev-workflow repository root, providing the target project path:
-
-```bash
-./setup-copilot.sh /path/to/your/project
-```
-
-This installs into the target project's `.github/` directory:
-- 13 prompt files to `.github/prompts/` (Copilot slash commands):
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`
-- 6 custom agents to `.github/agents/`:
-  `software-architect`, `security-engineer`, `code-quality`, `compliance-checker`, `ultrathink-debugger`, `code-reviewer`
-- 2 path-specific instruction files to `.github/instructions/`
-- `copilot-instructions.md` (repo-wide workflow rules)
-- Scripts to `./scripts/` (project-local)
-
-Verify: open the project in VS Code, type `/` in Copilot Chat to see prompts, type `@` to see agents.
-
-**Key differences from Claude Code:**
-- Agents are invoked manually via `@agent-name` (Copilot cannot spawn agents programmatically)
-- `/validate` runs agent gates sequentially instead of in parallel
-- Scripts reference `./scripts/` (project-local) instead of `~/.claude/scripts/` (global)
-
 ## Per-Project Setup
 
 Do these steps once in each project you want to use the workflow with.
@@ -87,31 +60,21 @@ This creates the project-specific `knowledge-base/` with:
 
 General rules (security, architecture, testing, style) are already installed globally at `~/.claude/knowledge-base/` by `setup.sh`. The `/bootstrap` command only creates project-specific content.
 
-**For Copilot users:** General rules are installed at `knowledge-base/_general/` by `setup-copilot.sh`.
-
 ### 2. Add project instructions
 
-**Claude Code:** Copy `templates/CLAUDE.md` from this repo to your project root. It tells Claude Code about the workflow conventions (task states, rule selection, validation gates).
-
-**GitHub Copilot:** Already installed by `setup-copilot.sh` as `.github/copilot-instructions.md`. No extra step needed.
+Copy `templates/CLAUDE.md` from this repo to your project root. It tells Claude Code about the workflow conventions (task states, rule selection, validation gates).
 
 ### 3. Install the pre-commit hook
 
 Add the task validation script to your husky pre-commit hook:
 
-**Claude Code (global scripts):**
 ```bash
 echo '~/.claude/scripts/pre-commit-hook.sh' >> .husky/pre-commit
 ```
 
-**GitHub Copilot (project-local scripts):**
-```bash
-echo './scripts/pre-commit-hook.sh' >> .husky/pre-commit
-```
-
 If `.husky/pre-commit` doesn't exist yet, create it first:
 ```bash
-echo '<path-to-pre-commit-hook.sh>' > .husky/pre-commit
+echo '~/.claude/scripts/pre-commit-hook.sh' > .husky/pre-commit
 ```
 
 This runs `task-manager.sh validate` on any changed task files at commit time, catching invalid structure or status transitions.
@@ -137,22 +100,9 @@ pip install semgrep
 
 ```
 project-root/
-├── CLAUDE.md                         # Claude Code users
-├── .github/                          # GitHub Copilot users (installed by setup-copilot.sh)
-│   ├── copilot-instructions.md
-│   ├── prompts/*.prompt.md
-│   ├── agents/*.agent.md
-│   └── instructions/*.instructions.md
+├── CLAUDE.md
 ├── knowledge-base/
 │   ├── _index.md                    # project-specific rule index
-│   ├── _general/                    # Copilot users only (installed by setup-copilot.sh)
-│   │   ├── security/
-│   │   ├── architecture/
-│   │   ├── testing/
-│   │   ├── style/
-│   │   ├── documentation/
-│   │   ├── code-review/
-│   │   └── languages/
 │   ├── languages/                   # project-specific language files
 │   └── conventions/                 # project-specific conventions
 ├── specs/           (created later by /propose)
@@ -487,10 +437,7 @@ main
 
 Two knowledge bases work together:
 
-**General KB** — universal rules installed globally:
-- Claude Code: `~/.claude/knowledge-base/` (installed by `setup.sh`)
-- Copilot: `knowledge-base/_general/` (installed by `setup-copilot.sh`)
-- Contains: security, architecture, testing, style, documentation, code-review, and language rules
+**General KB** — universal rules installed globally at `~/.claude/knowledge-base/` by `setup.sh`. Contains: security, architecture, testing, style, documentation, code-review, and language rules.
 
 **Project KB** — project-specific rules at `knowledge-base/`:
 - Created by `/bootstrap`
@@ -499,7 +446,7 @@ Two knowledge bases work together:
 ### Structure
 
 ```
-~/.claude/knowledge-base/        # General KB (Claude Code — global)
+~/.claude/knowledge-base/        # General KB (global)
 ├── _index.md
 ├── security/general.md
 ├── architecture/

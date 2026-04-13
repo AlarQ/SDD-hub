@@ -324,6 +324,3 @@ echo -e "  4. Follow the workflow: ${CYAN}/explore${RESET} -> ${CYAN}/propose${R
 echo -e "  5. Use ${CYAN}/spec-status <feature>${RESET} anytime to see the dashboard"
 echo -e "  6. Use ${CYAN}/continue-task <feature>${RESET} to resume interrupted work"
 echo -e "  7. Use ${CYAN}/research${RESET} to enter anti-hallucination research mode"
-echo ""
-echo -e "${BOLD}For GitHub Copilot users:${RESET}"
-echo -e "  Run ${DIM}./setup-copilot.sh <project-path>${RESET} to install Copilot prompts, agents, and instructions"

@@ -55,7 +55,6 @@ Browse the agents below and copy/adapt the ones you need!
 
 # Or target a specific tool directly
 ./scripts/install.sh --tool cursor
-./scripts/install.sh --tool copilot
 ./scripts/install.sh --tool aider
 ./scripts/install.sh --tool windsurf
 ```
@@ -481,7 +480,6 @@ The Agency works natively with Claude Code, and ships conversion + install scrip
 ### Supported Tools
 
 - **[Claude Code](https://claude.ai/code)** — native `.md` agents, no conversion needed → `~/.claude/agents/`
-- **[GitHub Copilot](https://github.com/copilot)** — native `.md` agents, no conversion needed → `~/.github/agents/`
 - **[Antigravity](https://github.com/google-gemini/antigravity)** — `SKILL.md` per agent → `~/.gemini/antigravity/skills/`
 - **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** — extension + `SKILL.md` files → `~/.gemini/extensions/agency-agents/`
 - **[OpenCode](https://opencode.ai)** — `.md` agent files → `.opencode/agents/`
@@ -515,17 +513,16 @@ The installer scans your system for installed tools, shows a checkbox UI, and le
   System scan: [*] = detected on this machine
 
   [x]  1)  [*]  Claude Code     (claude.ai/code)
-  [x]  2)  [*]  Copilot         (~/.github/agents)
-  [x]  3)  [*]  Antigravity     (~/.gemini/antigravity)
-  [ ]  4)  [ ]  Gemini CLI      (gemini extension)
-  [ ]  5)  [ ]  OpenCode        (opencode.ai)
-  [ ]  6)  [ ]  OpenClaw        (~/.openclaw)
-  [x]  7)  [*]  Cursor          (.cursor/rules)
-  [ ]  8)  [ ]  Aider           (CONVENTIONS.md)
-  [ ]  9)  [ ]  Windsurf        (.windsurfrules)
-  [ ] 10)  [ ]  Qwen Code       (~/.qwen/agents)
+  [x]  2)  [*]  Antigravity     (~/.gemini/antigravity)
+  [ ]  3)  [ ]  Gemini CLI      (gemini extension)
+  [ ]  4)  [ ]  OpenCode        (opencode.ai)
+  [ ]  5)  [ ]  OpenClaw        (~/.openclaw)
+  [x]  6)  [*]  Cursor          (.cursor/rules)
+  [ ]  7)  [ ]  Aider           (CONVENTIONS.md)
+  [ ]  8)  [ ]  Windsurf        (.windsurfrules)
+  [ ]  9)  [ ]  Qwen Code       (~/.qwen/agents)
 
-  [1-10] toggle   [a] all   [n] none   [d] detected
+  [1-9] toggle   [a] all   [n] none   [d] detected
   [Enter] install   [q] quit
 ```
 
@@ -561,23 +558,6 @@ Use the Frontend Developer agent to review this component.
 ```
 
 See [integrations/claude-code/README.md](integrations/claude-code/README.md) for details.
-</details>
-
-<details>
-<summary><strong>GitHub Copilot</strong></summary>
-
-Agents are copied directly from the repo into `~/.github/agents/` -- no conversion needed.
-
-```bash
-./scripts/install.sh --tool copilot
-```
-
-Then activate in GitHub Copilot:
-```
-Use the Frontend Developer agent to review this component.
-```
-
-See [integrations/github-copilot/README.md](integrations/github-copilot/README.md) for details.
 </details>
 
 <details>
@@ -742,7 +722,7 @@ When you add new agents or edit existing ones, regenerate all integration files:
 
 - [ ] Interactive agent selector web tool
 - [x] Multi-agent workflow examples -- see [examples/](examples/)
-- [x] Multi-tool integration scripts (Claude Code, GitHub Copilot, Antigravity, Gemini CLI, OpenCode, OpenClaw, Cursor, Aider, Windsurf, Qwen Code)
+- [x] Multi-tool integration scripts (Claude Code, Antigravity, Gemini CLI, OpenCode, OpenClaw, Cursor, Aider, Windsurf, Qwen Code)
 - [ ] Video tutorials on agent design
 - [ ] Community agent marketplace
 - [ ] Agent "personality quiz" for project matching

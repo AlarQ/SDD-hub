@@ -17,11 +17,11 @@ When resolving `ground_rules` paths referenced in task files, use these prefixes
 
 ### Resolution Examples
 
-| Prefix path | Claude Code resolves to | Copilot resolves to |
-|---|---|---|
-| `general:security/general.md` | `~/.claude/knowledge-base/security/general.md` | `knowledge-base/_general/security/general.md` |
-| `project:languages/rust.md` | `knowledge-base/languages/rust.md` | `knowledge-base/languages/rust.md` |
-| `languages/go.md` (unprefixed) | `knowledge-base/languages/go.md` | `knowledge-base/languages/go.md` |
+| Prefix path | Resolves to |
+|---|---|
+| `general:security/general.md` | `~/.claude/knowledge-base/security/general.md` |
+| `project:languages/rust.md` | `knowledge-base/languages/rust.md` |
+| `languages/go.md` (unprefixed) | `knowledge-base/languages/go.md` |
 
 ## Reading Both Knowledge Bases
 
