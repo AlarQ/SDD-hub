@@ -3,6 +3,7 @@ id: "002"
 name: wire-set-context-implement
 title: Wire set_context into /implement command
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/23
 blocked_by: ["001"]
 max_files: 2
 estimated_files:
