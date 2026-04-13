@@ -15,21 +15,22 @@ Feature name: $ARGUMENTS
 
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`
-2. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task and push to remote: `git push -u origin feat/$ARGUMENTS`)
-3. Pull latest feature branch: `git checkout feat/$ARGUMENTS && git pull`
-4. Check if task branch already exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`
+2. Set monitor context: run `$HOME/.claude/scripts/monitor.sh set_context "$ARGUMENTS" "<task-id>"` (replace `<task-id>` with the numeric ID from the prerequisite step, e.g. `001`)
+3. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task and push to remote: `git push -u origin feat/$ARGUMENTS`)
+4. Pull latest feature branch: `git checkout feat/$ARGUMENTS && git pull`
+5. Check if task branch already exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`
    - If it exists, ask the user: "Task branch `feat/$ARGUMENTS/{task-id}-{task-name}` already exists (likely from a previous aborted attempt). Delete it and start fresh, or continue on the existing branch?"
    - If starting fresh: delete the branch (`git branch -D feat/$ARGUMENTS/{task-id}-{task-name}`) and create a new one
    - If continuing: checkout the existing branch and proceed
-5. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
-6. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
-7. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
-8. Implement the code changes following the spec and ground rules:
+6. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
+7. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
+8. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
+9. Implement the code changes following the spec and ground rules:
    - Follow architectural decisions from design.md
    - Follow language-specific patterns from knowledge-base/languages/
    - Apply security rules from both knowledge bases
    - **On error or test failure** → spawn the `Ultrathink Debugger` agent (`ultrathink-debugger`) with the error output, relevant source files, and task context. The agent must return its findings in the structured format defined in the agent's "Implementation Fix Output" section. Present the agent's diagnosis and proposed fix to the user. On accept: apply the fix and continue. On reject or if the agent cannot resolve the issue: report the failure to the user with the agent's diagnosis and pause for guidance.
-9. If `specs/$ARGUMENTS/test-strategy.md` exists, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool before writing test bodies. The agent receives:
+10. If `specs/$ARGUMENTS/test-strategy.md` exists, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool before writing test bodies. The agent receives:
    - The test-strategy.md content
    - The current task file (with test_cases)
    - List of existing test files from completed tasks (find test files in the task branches already merged to `feat/$ARGUMENTS`)
@@ -43,11 +44,11 @@ Feature name: $ARGUMENTS
    - Reuse shared fixtures instead of recreating test data
    
    If the agent errors or times out, or if test-strategy.md does not exist, proceed with all test cases from the task file as-is and note: *"Test Strategist refinement unavailable — implementing all test cases from task file."*
-10. Implement test bodies for the (filtered) test cases
-   - Use the refined test list from step 9 if available, otherwise use the task file's test_cases as-is
+11. Implement test bodies for the (filtered) test cases
+   - Use the refined test list from step 10 if available, otherwise use the task file's test_cases as-is
    - AI writes the test implementations
    - Use Given/When/Then structure from testing knowledge-base rules
-11. Add implementation notes to the task file explaining decisions made
+12. Add implementation notes to the task file explaining decisions made
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), spawn the `Code Quality Pragmatist` agent (`code-quality-pragmatist`) for a pre-validation sanity check. The agent receives:
@@ -68,7 +69,7 @@ If the agent errors or times out, proceed without the quality check and note the
 
 This is a lightweight pre-flight check — `/validate` remains the authoritative validation step.
 
-12. Run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`
+13. Run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`
 
 IMPORTANT:
 - Do NOT proceed to the next task automatically
