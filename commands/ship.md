@@ -26,10 +26,11 @@ Feature name: $ARGUMENTS
      --title "type(task-id): {task-title}" \
      --body "<summary of changes based on the diff>"
    ```
-8. Save the PR URL to the task file frontmatter as `pr_url`
-9. Commit the updated task file with the PR URL: `git add <task-file> && git commit -m "chore(task-id): add PR URL"`
-10. Push the commit: `git push`
-11. Report the PR URL as final output
+8. Clear monitor context: `$HOME/.claude/scripts/monitor.sh clear_context` (non-fatal — proceed even if this fails; stale context is overwritten by the next `/implement`)
+9. Save the PR URL to the task file frontmatter as `pr_url`
+10. Commit the updated task file with the PR URL: `git add <task-file> && git commit -m "chore(task-id): add PR URL"`
+11. Push the commit: `git push`
+12. Report the PR URL as final output
 
 IMPORTANT:
 - Do NOT add any "Co-Authored-By" line to the commit message
