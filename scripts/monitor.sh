@@ -43,6 +43,7 @@ find_project_root() {
 
 get_monitor_file() {
   local feature="$1"
+  validate_id "$feature" "feature" || return 1
   local root
   root="$(find_project_root)" || return 1
   printf '%s' "$root/specs/$feature/.monitor.jsonl"
@@ -50,10 +51,7 @@ get_monitor_file() {
 
 require_monitor_file() {
   local feature="$1"
-  get_monitor_file "$feature" || {
-    echo "ERROR: Cannot find project root with specs/ directory" >&2
-    return 1
-  }
+  get_monitor_file "$feature" || return 1
 }
 
 require_project_root() {
@@ -66,7 +64,7 @@ require_project_root() {
 validate_id() {
   local value="$1" label="$2"
   if [[ ! "$value" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo "ERROR: Invalid $label: must be alphanumeric, hyphens, or underscores" >&2
+    echo "ERROR: Invalid $label: must be non-empty alphanumeric, hyphens, or underscores" >&2
     return 1
   fi
 }
@@ -79,12 +77,21 @@ write_event() {
 }
 
 # === Public API ===
+# Validation contract: all public functions that receive a feature parameter must
+# either call validate_id on it directly (set_context) or flow through
+# get_monitor_file which validates. log_event, start_phase, and end_phase are
+# transitively protected via get_monitor_file.
 
 log_event() {
   local feature="${1:?Usage: log_event <feature> <category> <task_id> <json_data>}"
   local category="${2:?Usage: log_event <feature> <category> <task_id> <json_data>}"
   local task_id="${3:-}"
   local json_data="${4:?Usage: log_event <feature> <category> <task_id> <json_data>}"
+  validate_id "$category" "category" || return 1
+  if [[ -z "$json_data" || ( "$json_data" != "null" && "$json_data" != "true" && "$json_data" != "false" && ! "$json_data" =~ ^[0-9] && ! "$json_data" =~ ^\{ && ! "$json_data" =~ ^\[ && ! "$json_data" =~ ^\" ) ]]; then
+    echo "ERROR: json_data must be a valid JSON fragment" >&2
+    return 1
+  fi
 
   local ts
   ts="$(get_timestamp)"
@@ -114,6 +121,7 @@ start_phase() {
   local task_id="${2:?Usage: start_phase <feature> <task_id> <phase_name>}"
   local phase_name="${3:?Usage: start_phase <feature> <task_id> <phase_name>}"
   validate_id "$task_id" "task_id" || return 1
+  validate_id "$phase_name" "phase_name" || return 1
 
   local epoch
   epoch="$(get_epoch)"
@@ -141,6 +149,7 @@ end_phase() {
   local feature="${1:?Usage: end_phase <feature> <correlation_id> <phase_name>}"
   local correlation_id="${2:?Usage: end_phase <feature> <correlation_id> <phase_name>}"
   local phase_name="${3:?Usage: end_phase <feature> <correlation_id> <phase_name>}"
+  validate_id "$correlation_id" "correlation_id" || return 1
 
   local ts
   ts="$(get_timestamp)"
@@ -161,12 +170,16 @@ end_phase() {
 set_context() {
   local feature="${1:?Usage: set_context <feature> <task_id>}"
   local task_id="${2:?Usage: set_context <feature> <task_id>}"
+  validate_id "$feature" "feature" || return 1
   validate_id "$task_id" "task_id" || return 1
 
   local root
   root="$(require_project_root)" || return 1
 
-  printf 'feature=%s\ntask=%s\n' "$feature" "$task_id" > "$root/$MONITOR_CONTEXT_FILE"
+  local tmp_file
+  tmp_file="$(mktemp "$root/.monitor-context.XXXXXX")"
+  printf 'feature=%s\ntask=%s\n' "$feature" "$task_id" > "$tmp_file"
+  mv "$tmp_file" "$root/$MONITOR_CONTEXT_FILE"
 }
 
 read_context() {
@@ -183,6 +196,11 @@ read_context() {
     esac
   done < "$context_file"
   [[ -n "$feature" ]] || return 1
+  validate_id "$feature" "feature" || return 1
+  # Only validate task if non-empty (task may be absent in some contexts)
+  if [[ -n "$task" ]]; then
+    validate_id "$task" "task_id" || return 1
+  fi
 
   printf '%s\n%s\n' "$feature" "$task"
 }

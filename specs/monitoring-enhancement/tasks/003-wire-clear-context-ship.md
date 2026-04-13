@@ -2,8 +2,12 @@
 id: "003"
 name: wire-clear-context-ship
 title: Wire clear_context into /ship command
-status: blocked
+status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/24
 blocked_by: ["001"]
+max_files: 1
+estimated_files:
+  - "commands/ship.md"
 ground_rules:
   - "general:architecture/general.md"
   - "general:style/general.md"
@@ -31,3 +35,12 @@ Add a `monitor.sh clear_context` call to `commands/ship.md` after Step 7 (PR cre
 - All subsequent step numbers are incremented (Steps 8-11 become 9-12)
 - If PR creation fails (Step 7), `clear_context` is NOT reached — context correctly persists
 - No error handling or conditional logic added
+
+## Implementation Notes
+
+### Decisions Made
+
+- Inserted `~/.claude/scripts/monitor.sh clear_context` as new Step 8, between PR creation (Step 7) and saving PR URL (Step 9). Linear control flow — if Step 7 fails, Step 8 is never reached, so context correctly persists.
+- Steps 8–11 renumbered to 9–12 with no other modifications.
+- Full path `~/.claude/scripts/monitor.sh` used per ADR-004.
+- No error handling or conditional logic added — single unconditional call, consistent with how `set_context` is wired in `/implement`.
