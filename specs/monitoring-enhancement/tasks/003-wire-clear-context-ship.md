@@ -3,6 +3,7 @@ id: "003"
 name: wire-clear-context-ship
 title: Wire clear_context into /ship command
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/24
 blocked_by: ["001"]
 max_files: 1
 estimated_files:
