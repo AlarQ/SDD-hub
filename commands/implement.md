@@ -72,8 +72,8 @@ This is a lightweight pre-flight check — `/validate` remains the authoritative
 13. Run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`
 
 IMPORTANT:
-- Do NOT proceed to the next task automatically
-- Now proceed to the validation phase: read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value
+- Do NOT start the next task automatically — serial execution, one task in flight at a time.
+- DO auto-chain into validation for the current task: read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value. `/validate` then chains into `/review-findings` (if findings) or `/ship` (zero findings).
 
 ## Error Recovery
 If implementation is aborted mid-task (crash, user cancels), the task is stuck at `in-progress`. The user can manually edit the task file's YAML frontmatter to reset `status` back to `todo` and clean up the partial branch. If the post-implementation quality check was in progress, any accepted fixes will already be on the branch.

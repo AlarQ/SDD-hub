@@ -157,6 +157,8 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 
 **Next:** `/implement <name>`
 
+> **Auto-chain:** Within a single task, `/implement` automatically chains into `/validate` → `/review-findings` (if findings) → `/ship`. The user only types `/implement` and interacts during finding review. Stages 5–7 below are individually invocable for edge cases, but normally run as a continuation of stage 4.
+
 ### Stage 4: `/implement <name>` (one task at a time)
 
 **What it does:**
@@ -172,7 +174,7 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 
 **Requires:** `knowledge-base/`, no unvalidated tasks.
 
-**Next:** `/validate <name>` — do NOT skip this step.
+**Next:** auto-chains into `/validate <name>` — do NOT skip this step.
 
 ### Stage 5: `/validate <name>` (automated validation)
 
@@ -193,7 +195,7 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 - Findings exist -> task moves to `review`
 - Zero findings -> task moves to `done`, blocked tasks are checked and unblocked
 
-**Next:** `/review-findings <name>` if findings exist, otherwise `/ship <name>`.
+**Next:** auto-chains into `/review-findings <name>` if findings exist, otherwise `/ship <name>`.
 
 ### Stage 6: `/review-findings <name>` (interactive review)
 
@@ -205,10 +207,10 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 - **Informational findings** — auto-acknowledged with `review_status: noted`. Displayed as a summary list (title, file, description) at the end. No action required.
 
 **Status update:**
-- Fixes applied -> task returns to `implemented` (re-run `/validate <name>`)
-- No fixes applied (all rejected) -> task moves to `done`, blocked tasks unblocked
+- Fixes applied -> user is asked whether to re-run validation. If yes, task returns to `implemented` and auto-chains into `/validate <name>`. If skipped, task moves to `done` and auto-chains into `/ship <name>`.
+- No fixes applied (all rejected) -> task moves to `done`, blocked tasks unblocked, auto-chains into `/ship <name>`.
 
-**Next:** `/validate <name>` if fixes were applied, otherwise `/ship <name>`.
+**Next:** auto-chains per status update above.
 
 ### Stage 7: `/ship <name>` (commit, push, PR)
 

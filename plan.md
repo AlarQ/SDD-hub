@@ -340,6 +340,8 @@ Present all generated artifacts for human review before proceeding to implementa
 
 Implement one task at a time.
 
+> **Note:** The snippet below is a historical design snapshot. Current behavior auto-chains `/implement` → `/validate` → `/review-findings` → `/ship` within a single task. See `commands/implement.md` for the authoritative command definition.
+
 ```markdown
 Implement the next task for a feature.
 
