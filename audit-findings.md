@@ -23,9 +23,10 @@ Scope: `/Users/ernestbednarczyk/Desktop/projects/dev-workflow` — commands, age
 - Bypasses pre-commit validation. Should route through `/continue-task`.
 - **Fix:** Replaced manual-edit instructions with `/continue-task` redirect + `task-manager.sh set-status` fallback in both `implement.md` and `spec-status.md`. Explicit "never hand-edit frontmatter" warning added.
 
-### Triple-gate rule not code-enforced
+### Triple-gate rule not code-enforced ⏭️ SKIPPED
 - `task-manager.sh` validates transitions only, not gate reports.
 - `/validate` command logic is sole enforcer — if command drifts, invalid tasks reach `done`.
+- **Decision:** Skipped. Command-layer enforcement accepted as sufficient for now.
 
 ## High
 
