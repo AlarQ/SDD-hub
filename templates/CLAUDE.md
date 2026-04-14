@@ -9,7 +9,7 @@ This project uses a custom spec-driven development workflow with validation gate
 2. `/propose <name>` — generate spec, design, tasks with knowledge-base rules
 3. Human reviews artifacts, requests changes conversationally (edits to existing files)
 4. `/implement <name>` — implement tasks one at a time (one branch per task)
-5. `/validate <name>` — run validation gates (security, quality, architecture, testing)
+5. `/validate <name>` — run validation gates (security, code-quality, architecture, compliance, testing)
 6. `/review-findings <name>` — human accepts/rejects each finding
 7. Create PR (task PR -> feature branch), use `/pr-review` for agent-powered review and comment-driven fixes
 8. When all tasks done, final PR from feature branch -> main

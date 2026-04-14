@@ -422,10 +422,11 @@ Report schema:
 - findings: list of {id, severity, category, title, description, file, lines, code_snippet, fix_proposal, review_status: pending, source: tool|llm}
 
 Gates:
-- **security**: semgrep + language audit tools + LLM for knowledge-base/security/ rules
-- **code-quality**: language lint tools + LLM for DRY, function size, modularity
-- **architecture**: LLM-only (check against knowledge-base/architecture/)
-- **testing**: language test/coverage tools + LLM for test quality review
+- **security**: semgrep + language audit tools + `Security Engineer` agent for general and project security rules
+- **code-quality**: language lint tools + `code-quality-pragmatist` agent for DRY, function size, modularity
+- **architecture**: `Software Architect` agent (read-only, check against general and project architecture rules)
+- **compliance**: `claude-md-compliance-checker` agent (check against CLAUDE.md + project knowledge-base conventions and languages)
+- **testing**: language test/coverage tools (deterministic only — no agent gate)
 ```
 
 #### `~/.claude/commands/review-findings.md`

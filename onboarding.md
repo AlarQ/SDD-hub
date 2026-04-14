@@ -182,11 +182,12 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 
 **Produces:** YAML reports in `specs/<name>/reports/NNN-gate.yaml` for each gate.
 
-**4 gates:**
-- **security** — semgrep + language audit tools + LLM (general + project security rules)
-- **code-quality** — language lint tools + LLM (general + project style rules)
-- **architecture** — LLM only (general + project architecture rules)
-- **testing** — language test/coverage tools + LLM (test quality)
+**5 gates:**
+- **security** — semgrep + language audit tools + `Security Engineer` agent (general + project security rules)
+- **code-quality** — language lint tools + `code-quality-pragmatist` agent (DRY, function size, modularity)
+- **architecture** — `Software Architect` agent (general + project architecture rules)
+- **compliance** — `claude-md-compliance-checker` agent (CLAUDE.md + project KB conventions)
+- **testing** — language test/coverage tools (deterministic only — no agent gate)
 
 **Status update:**
 - Findings exist -> task moves to `review`
@@ -361,14 +362,15 @@ Required fields: `id`, `name`, `status`, `ground_rules`, `test_cases`, `blocked_
 
 ## Validation Gates
 
-### 4 gates
+### 5 gates
 
-| Gate | Deterministic tools | LLM analysis |
+| Gate | Deterministic tools | LLM analysis (agent) |
 |------|-------------------|--------------|
-| **security** | semgrep, language audit tools | general + project security rules |
-| **code-quality** | language lint tools | general + project style rules |
-| **architecture** | none | general + project architecture rules |
-| **testing** | test runner, coverage tools | test quality, missing edge cases |
+| **security** | semgrep, language audit tools | general + project security rules (`Security Engineer`) |
+| **code-quality** | language lint tools | DRY, function size, modularity (`code-quality-pragmatist`) |
+| **architecture** | none | general + project architecture rules (`Software Architect`) |
+| **compliance** | none | CLAUDE.md + project knowledge-base conventions (`claude-md-compliance-checker`) |
+| **testing** | test runner, coverage tools | none (deterministic only) |
 
 ### Source types
 
