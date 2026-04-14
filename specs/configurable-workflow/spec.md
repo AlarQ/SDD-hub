@@ -1,0 +1,512 @@
+---
+name: configurable-workflow
+status: proposed
+---
+
+# Spec — Configurable Workflow
+
+## Summary
+
+Externalize "which gates/agents run" and "where specs live" into YAML config. LLM curates per-spec at birth via a `config-inferencer` agent; user approves. Phase structure and ship mechanics stay hardcoded — only gate/agent *selection* is pluggable inside the existing skeleton. Replaces four symptoms (wrong gates fire, spec sprawl, agent mismatch, rigidity) with one config layer.
+
+See `prd.md` for full problem framing and rationale.
+
+## Functional Scope
+
+### FR-1: Repo Config (`.workflow.yml`)
+
+Single file at repo root with three fields:
+
+```yaml
+spec_storage: specs/              # path where specs live
+gate_pool: knowledge-base/gates.yml
+agent_pool: ~/.claude/agents
+```
+
+Defaults apply when file absent (`spec_storage: specs/`, others resolved from install layout). Loader walks up from CWD to find it — does not require running from repo root.
+
+### FR-2: Gate Registry (`knowledge-base/gates.yml`)
+
+Canonical deterministic-gate list:
+
+```yaml
+gates:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto"
+    applies_to: [any]
+    category: security
+    blocking: true
+```
+
+`applies_to` tags bind gate to language(s) or `[any]` for cross-cutting. `validation_tools` frontmatter in `knowledge-base/languages/*.md` becomes display-only after this spec ships.
+
+### FR-3: Spec Config (`specs/<feature>/config.yml`)
+
+Per-spec file written during `/explore`. Two sections:
+
+```yaml
+tags: [api, auth]
+gates:
+  - rust-clippy
+  - semgrep-security
+agents:
+  explore:    [design/ux-researcher, engineering/security-engineer]
+  propose:    [engineering/software-architect]
+  implement:  [code-quality-pragmatist]
+  validate:   [engineering/security-engineer, code-quality-pragmatist]
+  pr-review:  [engineering/code-reviewer]
+```
+
+Agent IDs are **fully qualified** (`<category>/<name>` or bare `<name>` for root-level agents). Resolution rule and full grammar: see `design.md §Backend Design §Schemas §Agent ID grammar and resolution`.
+
+Missing file = legacy behavior (default agents per command markdown, full gate set from task `ground_rules`).
+
+### FR-4: Config Inferencer Agent
+
+New agent at `agents/engineering/engineering-config-inferencer.md` (ID: `engineering/config-inferencer`). Inputs: repo signal files (`Cargo.toml`, `package.json`, `go.mod`, `requirements.txt`, etc.), `gates.yml`, `agents/` directory listing, spec description/PRD. Output: draft `config.yml` matching the schema above.
+
+### FR-5: `/explore` Step 0
+
+Before normal explore flow:
+1. Spawn `config-inferencer` with spec description.
+2. Render one-screen summary: chosen gates + agents-per-phase + reasoning.
+3. Accept single-key approval OR invoke `/config` for manual override.
+4. Write `specs/<feature>/config.yml`.
+5. Emit `config_inferred` and `config_approved` monitor events.
+
+### FR-6: Phase Commands Read Spec Config
+
+`/propose`, `/implement`, `/validate`, `/pr-review`, `/review-findings` read agent list from `config.yml`. Legacy fallback to hardcoded defaults if file missing.
+
+### FR-7: `/validate` Ceiling Semantics
+
+Executes **intersection** of spec-eligible gates (from `config.yml`) ∩ gates applicable to task `ground_rules` (language + category match). Task `ground_rules` remains authoritative for what applies; spec config is a ceiling that restricts eligibility. Skipped gates emit `gate_skip` monitor events.
+
+### FR-8: Path Resolution Refactor
+
+`scripts/monitor.sh`, `scripts/task-manager.sh`, `scripts/pre-commit-hook.sh`, `workflow-tui/src/parse/scanner.rs` walk up from CWD to find `.workflow.yml`, resolve `spec_storage`, then scan from there. Fall back to hardcoded `specs/` until E2E green (dogfood safety).
+
+### FR-9: Monitor Event Categories
+
+`scripts/monitor.sh` accepts new event categories: `config_inferred`, `config_approved`, `agent_spawn`, `gate_skip`. Existing categories unchanged.
+
+### FR-10: Config Loader Script
+
+New `scripts/config-loader.sh`:
+- Walks up for `.workflow.yml`
+- Single `timeout 5 yq` parse per invocation
+- Exports `WF_SPEC_STORAGE`, `WF_GATE_POOL`, `WF_AGENT_POOL` env vars
+- Fails closed on parse error, timeout, or missing file (with defaults where safe)
+- Must NOT source `monitor.sh` (circular dep risk)
+
+### FR-11: `/config` Command
+
+New `commands/config.md`. Edits or regenerates `specs/<feature>/config.yml` post-creation. Re-runs inferencer on demand.
+
+### FR-12: `/bootstrap` Generates `.workflow.yml`
+
+When initializing a new repo, write starter `.workflow.yml` alongside project KB.
+
+### FR-13: TUI Additions
+
+- `workflow-tui/src/parse/workflow_config.rs` — parse `.workflow.yml`
+- `workflow-tui/src/parse/spec_config.rs` — parse `specs/<feature>/config.yml`
+- `workflow-tui/src/ui/pipeline.rs` — pipeline widget showing configured gates/agents per phase
+- `workflow-tui/src/watcher.rs` — watch `.workflow.yml` for live reload
+- Pipeline widget renders `scope: per-task | per-spec | both` badge and a terminal "audit" column (FR-14..17).
+
+### FR-14: `validate_scope` Config Field
+
+Adds gate **cadence** control on top of FR-7 gate *selection*. Small features (≤5 tasks) can skip per-task validation entirely and rely on the spec-level audit.
+
+`.workflow.yml` (repo default):
+
+```yaml
+validate_scope: per-task       # per-task | per-spec | both
+```
+
+`specs/<feature>/config.yml` (optional override):
+
+```yaml
+validate_scope: per-spec
+```
+
+Semantics:
+
+| Mode | `/validate` per task | `/validate-spec` at last-task `done` |
+|---|---|---|
+| `per-task` (default) | runs | runs |
+| `per-spec` | skipped in `/implement` auto-chain (emit `gate_skip` with `reason=scope=per-spec`) | runs, executes **union** of spec-eligible gates |
+| `both` | runs | runs |
+
+Validation: enum allowlist. Unknown value → fail closed (loader exit 2). Missing field → `per-task`. Loader exports `WF_VALIDATE_SCOPE`.
+
+### FR-15: `/validate-spec` Command + Karen Wrapper
+
+New `commands/validate-spec.md`. Runs once when all spec tasks reach `done`. Reuses existing **Karen agent** (`agents/karen.md`) unchanged — wrapper prompt at the call-site supplies spec-specific context.
+
+Steps:
+
+1. `source config-loader.sh --spec <feature>` → loads ceiling, scope, agents.
+2. If `validate_scope ∈ {per-spec, both}`: execute **union** of spec-eligible gates (FR-2 `applies_to` filter ∩ FR-3 spec ceiling) against the spec's cumulative diff (first task branch-point → HEAD).
+3. Spawn Karen with a wrapper prompt containing:
+   - Parsed FR list from `specs/<feature>/spec.md` (every `### FR-N:` heading).
+   - `specs/<feature>/prd.md` IN/OUT scope.
+   - Task list with final statuses.
+   - Report paths under `specs/<feature>/reports/`.
+   - Git diff range (branch-point → HEAD).
+   - Explicit instruction: produce an FR × status matrix (`implemented | partial | missing`), list orphan code not traceable to any FR, flag over-engineering.
+4. Write Karen's report to `specs/<feature>/reports/spec-audit-<ISO8601>.md`.
+5. Emit `spec_audit_start` before, `spec_audit_done` after.
+6. Partial/missing findings route through `/review-findings` accept/reject. Accepted items spawn new `todo` tasks in the spec; rejected items can become project-KB rules.
+7. Clean audit → emit `spec_complete`, set spec frontmatter `status: shipped` in `specs/<feature>/spec.md`.
+
+### FR-16: Last-Task-Done Trigger
+
+`scripts/task-manager.sh set-status <task> done` — after the transition succeeds, run an all-done detector. If every task file under the spec's tasks dir has `status: done` AND no prior `spec_audit_done` event exists in `.monitor.jsonl`, emit `spec_last_task_done` event. `/implement`'s auto-chain listens for this event and auto-invokes `/validate-spec`. Standalone CLI users get the event but not the auto-chain (same pattern as existing event-emission).
+
+### FR-17: Spec Audit Report + `/review-findings` Integration
+
+- Report location: `specs/<feature>/reports/spec-audit-<ISO8601>.md`. Schema: YAML frontmatter (`feature`, `timestamp`, `scope`, `verdict ∈ {complete, reopen}`), markdown body with FR matrix + orphan-code list + over-engineering flags.
+- `/review-findings` accepts a `spec-audit-*.md` report the same way it accepts per-task reports (`source: llm`). Accepted "missing FR" findings auto-create follow-up tasks via `task-manager.sh`; the task name references the FR ID and description. Rejected findings may become project-KB rules via the normal feedback loop.
+- Unknown FR references in Karen's output (e.g. `FR-99` when spec only declares FR-1..17) → fail closed; no task auto-created; error lists the unknown IDs.
+
+## BDD Scenarios
+
+### Core Flow
+
+**Scenario: Explore writes config after approval**
+```
+Given a new spec "payments-api" with a PRD describing a Rust backend
+When the user runs /explore payments-api
+Then the config-inferencer agent runs first
+And a summary of proposed gates and per-phase agents is displayed
+When the user presses the approval key
+Then specs/payments-api/config.yml is written with inferencer output
+And a config_inferred monitor event is emitted
+And a config_approved monitor event is emitted
+```
+
+**Scenario: Validate applies ceiling semantics** *(T004 — per-task cadence only; scope branching layered in T016)*
+```
+Given a task with ground_rules [general:security/general.md, general:languages/rust.md]
+And a spec config.yml with gates [rust-clippy, semgrep-security]
+And a gates.yml entry rust-test applies_to [rust]
+And validate_scope is per-task (default; pre-T013)
+When /validate runs for this task
+Then rust-clippy runs (in spec ∩ ground_rules language)
+And semgrep-security runs (any applies to all)
+And rust-test does NOT run (not in spec ceiling)
+And a gate_skip event is emitted for rust-test
+```
+
+**Scenario: Missing spec config falls back to legacy**
+```
+Given a done spec with no config.yml file
+When /validate runs for one of its tasks
+Then the command executes the full legacy gate set from task ground_rules
+And no error or warning is raised
+```
+
+**Scenario: Gates registry loads with `applies_to` tags** *(FR-2; owned by T001)*
+```
+Given gates.yml at knowledge-base/gates.yml containing
+  - id: rust-clippy, applies_to: [rust], category: lint, blocking: true
+  - id: semgrep-security, applies_to: [any], category: security, blocking: true
+When config-loader.sh parses gates.yml
+Then each gate's applies_to list is preserved verbatim
+And duplicate id or unknown applies_to value causes fail-closed exit 3
+And gates with applies_to [any] match every language bucket
+```
+
+**Scenario: Config loader exports WF_* env vars on first source** *(FR-10; owned by T002)*
+```
+Given .workflow.yml at repo root with spec_storage=specs/ and a spec "payments-api" with config.yml
+When a caller sources scripts/config-loader.sh and calls `wf_load_config --spec payments-api`
+Then WF_CONFIG_LOADED=1 is exported
+And WF_REPO_ROOT, WF_SPEC_STORAGE, WF_GATE_POOL, WF_AGENT_POOL are exported as absolute paths
+And WF_SPEC_GATES contains newline-separated gate IDs from the spec config
+And WF_SPEC_AGENTS_<PHASE> is exported per phase in the spec config
+When the same process sources the loader again in a subshell
+Then yq is NOT re-invoked (single-parse guard via WF_CONFIG_LOADED)
+And exported vars are inherited unchanged
+```
+
+**Scenario: Monitor walks up for .workflow.yml**
+```
+Given .workflow.yml at repo root with spec_storage=/tmp/vault
+And current working directory is a nested subdirectory
+When monitor.sh logs an event
+Then the event is written under /tmp/vault/<feature>/.monitor.jsonl
+```
+
+**Scenario: Bootstrap writes starter config**
+```
+Given a fresh repo with no .workflow.yml
+When /bootstrap runs
+Then .workflow.yml is created at repo root
+And it contains spec_storage, gate_pool, agent_pool defaults
+```
+
+**Scenario: Config command regenerates spec config**
+```
+Given an existing spec with config.yml
+When the user runs /config <feature> --regenerate
+Then the config-inferencer agent re-runs
+And the user is shown a diff against the existing config
+And on approval the file is overwritten
+```
+
+### Edge Cases & Errors
+
+**Scenario: Unknown gate ID in spec config fails closed**
+```
+Given specs/foo/config.yml lists a gate id "nonexistent-gate"
+When /validate runs
+Then the command exits non-zero
+And the error names the unknown ID and the registry consulted
+```
+
+**Scenario: gates.yml parse error fails closed**
+```
+Given knowledge-base/gates.yml contains malformed YAML
+When /validate runs
+Then config-loader returns non-zero
+And no gates execute
+And the error is reported to the user
+```
+
+**Scenario: yq timeout on config parse**
+```
+Given a pathologically nested YAML file
+When config-loader.sh parses it
+Then yq is killed after 5 seconds
+And the loader fails closed
+And no downstream command proceeds
+```
+
+**Scenario: Legacy scanner tolerates missing config.yml**
+```
+Given a specs/ directory with 3 legacy specs (no config.yml) and 1 new spec
+When the TUI scanner runs
+Then all 4 specs render in the list
+And legacy specs show a "no config" indicator rather than erroring
+```
+
+**Scenario: Inferencer failure falls back to manual**
+```
+Given the config-inferencer agent times out
+When /explore reaches step 0
+Then the user is shown a manual-entry prompt
+And a default template is written if the user skips manual entry
+```
+
+### Validate Scope + Spec Audit
+
+**Scenario: per-spec mode skips per-task validate**
+```
+Given a spec with validate_scope=per-spec in config.yml
+And three tasks in the spec, each ready to run /validate
+When /implement auto-chain reaches the /validate step for any task
+Then /validate emits a gate_skip event with reason "scope=per-spec"
+And the auto-chain proceeds directly to /review-findings with zero findings
+And no gate command is executed for that task
+```
+
+**Scenario: last-task-done triggers spec audit**
+```
+Given a spec with three tasks, two already in status done and one in status implemented
+When task-manager.sh set-status <last-task> done succeeds
+Then a spec_last_task_done event is emitted on the spec's .monitor.jsonl
+And /implement auto-chain invokes /validate-spec <feature>
+And Karen is spawned with a wrapper prompt containing spec.md FR list, prd.md scope, task list, and git diff range
+```
+
+**Scenario: clean audit marks spec shipped**
+```
+Given every FR in spec.md has corresponding implemented code traceable via Karen's matrix
+When /validate-spec completes
+Then the report verdict field is "complete"
+And a spec_complete monitor event is emitted
+And spec.md frontmatter status is updated to "shipped"
+```
+
+**Scenario: Karen finds missing FR → spec reopens**
+```
+Given an FR in spec.md has no corresponding implementation
+When /validate-spec runs
+Then the audit report lists that FR with status "missing"
+And /review-findings presents the missing FR as an accept/reject finding
+When the user accepts the finding
+Then a new follow-up task is created in tasks/ with status todo referencing the FR id
+And the spec's aggregate status remains in-progress until the new task reaches done
+```
+
+**Scenario: Reaudit cycle after follow-up tasks land** *(FR-17; owned by T017)*
+```
+Given a spec with a prior spec_audit_done event in .monitor.jsonl from a previous audit
+And one or more follow-up tasks created by create-followup have reached status done
+When the user runs /validate-spec --reaudit
+Then a spec_reaudit_requested sentinel event is appended to .monitor.jsonl
+And no prior event is mutated, rewritten, or deleted (append-only discipline)
+And the T015 detector sees spec_reaudit_requested as the newest of {spec_audit_done, spec_reaudit_requested}
+And the detector fires spec_last_task_done → /validate-spec once more
+When the new audit completes
+Then a fresh spec_audit_done is appended
+And the guard is re-closed until the next explicit --reaudit
+```
+
+**Scenario: per-spec mode runs union at /validate-spec**
+```
+Given a spec config.yml with gates [rust-clippy, semgrep-security]
+And validate_scope=per-spec
+And two tasks with disjoint ground_rules (one rust, one shell)
+When /validate-spec executes
+Then rust-clippy runs once across the cumulative diff
+And semgrep-security runs once across the cumulative diff
+And the gate execution count equals the size of the union, not the task count times the union
+```
+
+## Security Scenarios
+
+_From Security Engineer STRIDE analysis. All scenarios fail closed._
+
+**Scenario: Shell injection via gate ID rejected (Elevation of Privilege — Critical)**
+```
+Given a spec config.yml with gate id "; rm -rf ~"
+When /validate reads the config
+Then the ID allowlist check fails (regex ^[a-zA-Z0-9_-]{1,64}$)
+And the command exits non-zero before any shell execution
+And no command from gates.yml is executed
+```
+
+**Scenario: Path traversal via spec_storage rejected (Information Disclosure — High)**
+```
+Given a .workflow.yml with spec_storage "../../etc"
+When config-loader resolves the path
+Then realpath normalization detects escape from $HOME / repo root
+And the loader fails closed
+And no file is read from the target path
+```
+
+**Scenario: Symlink ancestor in spec_storage rejected (Information Disclosure — High)**
+```
+Given spec_storage points to a directory whose parent is a symlink to /etc
+When config-loader validates the path
+Then the symlink ancestor check rejects the path
+And the loader fails closed
+```
+
+**Scenario: yq parse bomb DoS mitigated (DoS — Medium)**
+```
+Given a .workflow.yml with deeply nested YAML (billion-laughs style)
+When config-loader parses it
+Then timeout 5 yq kills the process at 5 seconds
+And the loader returns non-zero
+And no downstream script proceeds
+```
+
+**Scenario: Tampered spec config detected at ship (Tampering — High)**
+```
+Given /implement snapshots config.yml into task state at start
+And the config.yml is edited mid-task to remove a blocking gate
+When /ship runs the final validation
+Then the snapshot comparison detects the drift
+And ship refuses to proceed until config is re-approved or restored
+```
+
+**Scenario: Cross-project vault leak prevented (Information Disclosure — High)**
+```
+Given spec_storage points to a shared vault directory used by two projects
+When monitor.sh logs a spec event from project A
+Then the event is scoped strictly to the configured path (no global fallback)
+And no file handles from project B are opened
+```
+
+**Scenario: Monitor events redact absolute paths (Information Disclosure — Medium)**
+```
+Given a monitor event referencing a path under $HOME
+When the event is written to JSONL
+Then the path is rendered with $HOME replaced by ~
+And the raw YAML body is never embedded in the event
+```
+
+**Scenario: Unknown gate/agent ID spoofing rejected (Spoofing — Medium)**
+```
+Given spec config.yml references an agent id not present in agent_pool
+When the phase command loads the agent list
+Then the command rejects the unknown ID with an explicit error
+And does not silently fall back to defaults
+```
+
+**Scenario: gates.yml tracked-state warning (Tampering — High)**
+```
+Given knowledge-base/gates.yml has uncommitted modifications
+When config-loader reads gates.yml
+Then a loud warning is displayed to the user
+And the loader still executes (trust boundary is filesystem, not block)
+```
+
+**Scenario: Unknown FR id in Karen audit output rejected (Spoofing — High)**
+```
+Given spec.md declares FR-1 through FR-17
+And Karen's audit report references "FR-99 missing"
+When /review-findings processes the audit report
+Then the unknown FR id is rejected before any task auto-creation
+And the command exits non-zero naming the unknown id(s) and the FR list consulted
+And no follow-up task is written to tasks/
+```
+
+**Scenario: validate_scope enum enforced (Tampering — Medium)**
+```
+Given .workflow.yml sets validate_scope to "disabled"
+When config-loader parses it
+Then the enum allowlist check fails (only per-task, per-spec, both accepted)
+And the loader returns exit 2
+And no downstream command proceeds
+```
+
+## Security Requirements
+
+- **Authentication:** N/A — local developer tool, no network surface. Trust boundary = filesystem ACLs.
+- **Authorization:** `.workflow.yml` and `gates.yml` edits gated by repo write access. `specs/<feature>/config.yml` edits flow through `/config` or `/explore` approval; direct YAML edits discouraged (mirrors task-manager pattern).
+- **Data handling:** All config files are plaintext YAML, committed to git — must contain zero secrets. Monitor events redact `$HOME` → `~`, log only event type + ID + git SHA, never embed raw YAML bodies. Inferencer must not read `.env*`, `*.pem`, `id_*`, `.git/config`.
+- **Input validation:**
+  - Gate/agent IDs: `^[a-zA-Z0-9_-]{1,64}$`
+  - `spec_storage`: absolute path under `$HOME` (or explicit allowlist), `realpath`-resolved, no symlink ancestors, must exist and be a directory
+  - `gate_pool` / `agent_pool`: resolves inside repo root or `~/.claude/`, no `..`
+  - `gates.yml` schema: `id` (ID regex), `command` (string ≤ 256 chars), `applies_to` (list of enum), `category` (enum), `blocking` (bool)
+  - YAML parsing: `timeout 5 yq` wrapper, fail closed on non-zero exit
+  - `validate_scope`: enum {`per-task`, `per-spec`, `both`}; unknown → fail closed
+  - FR ids in audit report: must match `^FR-[0-9]{1,3}$` AND exist in `spec.md` `### FR-N:` heading list; unknown → fail closed, no task auto-create
+
+## Applicable Ground Rules
+
+All applicable rules live in the **General KB** (installed globally at `~/.claude/knowledge-base/`). No project-KB layer exists for the dev-workflow repo itself.
+
+- `general:security/general.md` — input validation, path traversal, secret handling, least privilege
+- `general:architecture/general.md` — small modules, explicit interfaces, boundary validation
+- `general:architecture/code-analysis.md` — systematic impact analysis
+- `general:testing/principles.md` — pure functions, Given/When/Then, unit over integration
+- `general:code-review/general.md` — review discipline for shell + Rust diffs
+- `general:documentation/general.md` — docs/CLAUDE.md/onboarding update discipline
+- `general:languages/shell.md` — shellcheck, bash -n, 150-line module cap
+- `general:languages/rust.md` — TUI parser and widget patterns
+
+## Out of Scope
+
+Per PRD:
+- Phase reordering, custom phases, custom ship/commit flows, custom hooks per repo
+- Task state machine or frontmatter schema changes
+- Runtime conditional `when:` DSL
+- Vault sync strategy (user handles via iCloud/git/Dropbox)
+- Trust-on-first-use prompt for unknown `.workflow.yml`
+- `.workflow.local.yml` override
+- Migration of existing done specs
+- E2E scripted Claude session tests
+- LLM inference golden fixtures

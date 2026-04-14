@@ -13,6 +13,10 @@ Visual map of the spec-driven development workflow: slash commands, agent spawns
 
 The core auto-chain (`/implement` → `/validate` → `/review-findings` → `/learn-from-reports` → `/ship`) runs without user intervention between steps. Human gates appear only at PR merge, at finding review, and at rule-candidate review. Side commands (`/spec-status`, `/continue-task`, `/pr-review`, etc.) are invokable anytime.
 
+When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-spec` (spec-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings` and spawns follow-up tasks.
+
+Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-spec`.
+
 ```mermaid
 graph LR
     subgraph Setup["One-time setup"]
@@ -27,6 +31,11 @@ graph LR
         REV["/review-findings"]
         LEARN["/learn-from-reports"]
         SHIP["/ship"]
+    end
+
+    subgraph Audit["Spec-completion audit"]
+        VSPEC["/validate-spec"]
+        KAREN["Karen agent"]
     end
 
     subgraph Side["Side commands"]
@@ -44,10 +53,16 @@ graph LR
     IMPL --> VAL
     VAL -->|findings| REV
     VAL -->|zero findings| LEARN
+    VAL -.->|scope=per-spec: skip| LEARN
     REV -->|re-validate| VAL
     REV -->|skip| LEARN
     LEARN --> SHIP
     SHIP -.->|PR merged| IMPL
+    SHIP -.->|last task done| VSPEC
+    VSPEC --> KAREN
+    KAREN --> VSPEC
+    VSPEC -->|verdict=complete| Core
+    VSPEC -.->|verdict=reopen| REV
 
     CONT -.-> IMPL
     CONT -.-> VAL
