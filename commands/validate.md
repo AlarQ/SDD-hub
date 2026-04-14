@@ -70,8 +70,8 @@ Before determining the final status, verify ALL gates produced a report:
 - If zero findings across all gates and all gates have `status: pass`:
   1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
   2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
-  3. Delete all reports (`rm -rf specs/$ARGUMENTS/reports/`)
-  4. Now proceed to the shipping phase: read and follow `~/.claude/commands/ship.md` with the same $ARGUMENTS value
+  3. Do NOT delete reports here — `/learn-from-reports` mines passing reports for borderline LLM advisories and owns deletion.
+  4. Now proceed to the mining phase: read and follow `~/.claude/commands/learn-from-reports.md` with the same $ARGUMENTS value
 
 Report schema:
 - gate: <gate-name>
