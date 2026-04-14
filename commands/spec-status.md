@@ -39,7 +39,7 @@ Only show tasks that participate in dependencies (have `blocked_by` or are refer
 ### 5. Display health diagnostics
 Flag any unhealthy states that need human attention:
 
-- **Stuck in-progress**: Task is `in-progress` but may need manual intervention (stale branch, abandoned work). Suggest: "Reset status to `todo` in the task file YAML frontmatter and clean up the branch."
+- **Stuck in-progress**: Task is `in-progress` but may need manual intervention (stale branch, abandoned work). Suggest: "Run `/continue-task $ARGUMENTS` to resume, or reset via `~/.claude/scripts/task-manager.sh set-status <task-file> todo` and clean up the branch. Do not hand-edit YAML frontmatter."
 - **Deadlocked**: All remaining tasks are `blocked` with none `todo` or `in-progress` — nothing can progress. Suggest: "Check dependency IDs for errors. A task may reference a non-existent dependency."
 - **Orphan dependency**: A task's `blocked_by` references an ID that doesn't exist in any task file. Suggest: "Fix the `blocked_by` field — ID not found."
 - **Circular dependency**: Tasks that form a cycle where A blocks B blocks A (directly or transitively). Suggest: "Break the cycle by removing one dependency."

@@ -76,4 +76,4 @@ IMPORTANT:
 - DO auto-chain into validation for the current task: read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value. `/validate` then chains into `/review-findings` (if findings) or `/ship` (zero findings).
 
 ## Error Recovery
-If implementation is aborted mid-task (crash, user cancels), the task is stuck at `in-progress`. The user can manually edit the task file's YAML frontmatter to reset `status` back to `todo` and clean up the partial branch. If the post-implementation quality check was in progress, any accepted fixes will already be on the branch.
+If implementation is aborted mid-task (crash, user cancels), the task is stuck at `in-progress`. Run `/continue-task $ARGUMENTS` to resume from the correct phase, or reset via `~/.claude/scripts/task-manager.sh set-status <task-file> todo` and clean up the partial branch manually. Never hand-edit task YAML frontmatter — it bypasses state-machine validation and the pre-commit hook. If the post-implementation quality check was in progress, any accepted fixes will already be on the branch.
