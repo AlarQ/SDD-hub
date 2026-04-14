@@ -10,7 +10,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research)
+- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, learn-from-reports, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research)
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Installed globally to `~/.claude/knowledge-base/` by `setup.sh`.
 - `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Installed to `~/.claude/knowledge-base-rules.md` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
@@ -63,7 +63,7 @@ Elm-like architecture with file-system watching for live reload:
 - Commands receive feature name via `$ARGUMENTS`
 - All task status changes go through `task-manager.sh` — never edit YAML frontmatter directly
 - Task state machine: `blocked -> todo -> in-progress -> implemented -> review -> done` (canonical source: `scripts/task-manager.sh`; full docs: `plan.md`)
-- Auto-chained flow per task: `/implement` automatically chains into validate -> review-findings (if findings) -> ship. The user only types `/implement` and interacts during finding review. Individual commands (`/validate`, `/review-findings`, `/ship`) remain available for edge cases.
+- Auto-chained flow per task: `/implement` automatically chains into validate -> review-findings (if findings) -> learn-from-reports -> ship. The user only types `/implement` and interacts during finding review and rule-candidate review. Individual commands (`/validate`, `/review-findings`, `/learn-from-reports`, `/ship`) remain available for edge cases.
 - Serial execution only — one task in flight at a time
 
 ## Dual Knowledge Base
@@ -90,8 +90,10 @@ Task `ground_rules` use prefix convention: `general:security/general.md`, `proje
 - `/review-findings` groups related findings (same file + overlapping/nearby lines, or same file + same category) into review units for single accept/reject decisions — reduces redundant decisions across gates
 - Accepted finding groups spawn background sub-agents for parallel fix application; file-level mutual exclusion prevents concurrent edits to the same file
 - Rejected findings can become new project knowledge-base rules (feedback loop) — never modify the general KB
+- `/learn-from-reports` runs after `/review-findings` (or after `/validate` zero-findings) and mines reports for cross-finding patterns — recurring categories, clustered LLM findings, rejection reasoning, generalizable accepted fixes — proposing new project-KB rules in a single batched review. Report deletion is centralized in this command so both paths converge through mining before `/ship`. Complements inline rule creation in `/review-findings` (which catches one-off rules) by catching patterns that span findings.
 - PreToolUse hook blocks `--no-verify` and `--no-gpg-sign` — enforces fixing failing hooks rather than bypassing them
 - Stop hook blocks dismissive language ("pre-existing", "not our code") and bypass language ("temporarily disable", "skip the hook") — forces unconditional issue resolution
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
 - `/continue-task` detects resume phase by checking task status and existing artifacts (reports, branches, PR state)
 - `/research` activates anti-hallucination mode with citation discipline — useful for bug investigation and API contract review
+- Flow changes (command chain, task state machine, validation gates, agent spawns, hooks, artifact flow) MUST trigger review of `docs/workflow-diagram.md` — update affected Mermaid diagrams in the same change. Minor wording tweaks exempt; any structural/edge/node change is not.

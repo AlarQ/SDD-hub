@@ -21,6 +21,7 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing. After implementation completes, chain into validation: read and follow `~/.claude/commands/validate.md` |
 | `implemented`, no reports in `specs/$ARGUMENTS/reports/` for this task | Validation needed | Read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value |
 | `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Read and follow `~/.claude/commands/review-findings.md` with the same $ARGUMENTS value |
+| `done`, reports still exist in `specs/$ARGUMENTS/reports/` (mining did not run) | Mining needed | Read and follow `~/.claude/commands/learn-from-reports.md` with the same $ARGUMENTS value |
 | `done`, no `pr_url` in task frontmatter | Ship needed | Read and follow `~/.claude/commands/ship.md` with the same $ARGUMENTS value |
 | `done`, `pr_url` exists, PR state is `OPEN` | Merge needed | Remind: "Merge the PR, then run `/implement $ARGUMENTS` for the next task" |
 

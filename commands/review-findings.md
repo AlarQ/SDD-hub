@@ -37,7 +37,10 @@ Feature name: $ARGUMENTS
 8. Report summary: X groups accepted (N findings), Y groups rejected (M findings), Z noted (informational), W new rules added
 
 ## Status Update
-- If any fixes were applied (accepted actionable findings — informational findings do not count): ask the user whether they want to re-run validation or skip re-validation and proceed to shipping.
-  - If user wants re-validation: delete all reports (`rm -rf specs/$ARGUMENTS/reports/`), run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`, then proceed to re-validation: read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value
-  - If user wants to skip: run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then delete all reports (`rm -rf specs/$ARGUMENTS/reports/`), then proceed to the shipping phase: read and follow `~/.claude/commands/ship.md` with the same $ARGUMENTS value
-- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then delete all reports (`rm -rf specs/$ARGUMENTS/reports/`), then proceed to the shipping phase: read and follow `~/.claude/commands/ship.md` with the same $ARGUMENTS value
+
+Reports are NOT deleted here — `/learn-from-reports` mines them first and owns deletion.
+
+- If any fixes were applied (accepted actionable findings — informational findings do not count): ask the user whether they want to re-run validation or skip re-validation and proceed to mining + shipping.
+  - If user wants re-validation: delete all reports (`rm -rf specs/$ARGUMENTS/reports/`) — they will be regenerated — then run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`, then proceed to re-validation: read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value
+  - If user wants to skip: run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then proceed to the mining phase: read and follow `~/.claude/commands/learn-from-reports.md` with the same $ARGUMENTS value
+- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`, then proceed to the mining phase: read and follow `~/.claude/commands/learn-from-reports.md` with the same $ARGUMENTS value
