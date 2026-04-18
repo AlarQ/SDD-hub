@@ -132,7 +132,7 @@ agents:
 
 ## Security Model
 
-1. Shell injection via IDs — `validate_id` allowlist in all scripts reading gate/agent IDs. Reuse helper from `monitor.sh:64-70`.
+1. Shell injection via IDs — `validate_id` allowlist in all scripts reading gate/agent IDs. T001 tightens the existing helper at `monitor.sh:64-70` to the stricter regex `^[a-zA-Z0-9_-]{1,64}$` (current helper lacks the length cap); all scripts then reuse the updated version.
 2. Path traversal via `spec_storage` — `realpath` + symlink ancestor rejection + absolute-or-`$HOME`. Fail closed.
 3. Cross-project info disclosure in vault — scope strictly to configured path, no global fallback.
 4. yq parse-bomb DoS — `timeout 5` wrapper, fail closed.
@@ -160,7 +160,7 @@ Only hot spot: `yq` fork cost multiplied by config layer. Mitigation = `config-l
 - `general:languages/shell.md` — `set -euo pipefail`, quoted expansions
 - `general:languages/rust.md` — TUI parser additions
 
-No project-KB layer exists for the dev-workflow repo itself; every rule this spec relies on lives in the General KB above (installed at `~/.claude/knowledge-base/`).
+The `knowledge-base/` directory at this repo's root serves dual purpose: it is the General KB source (installed globally to `~/.claude/knowledge-base/` by `setup.sh`) and this repo's own project KB. Rules cited by this spec map to their installed General KB paths at `~/.claude/knowledge-base/`. Language files that exist only in the General KB (e.g. `typescript.md`, `nextjs.md`, `scala.md`) are not present in this repo and must be referenced by their full installed path.
 
 ## Agent Insights (Explore Phase)
 

@@ -11,6 +11,16 @@ Externalize "which gates/agents run" and "where specs live" into YAML config. LL
 
 See `prd.md` for full problem framing and rationale.
 
+## Terminology
+
+**Ceiling** — the spec's eligible-gate set: the union of gate IDs listed in `specs/<feature>/config.yml` `gates:`. Acts as an upper bound; no gate outside this set runs for this spec.
+
+**Per-task execution** — ceiling ∩ gates applicable to the task's `ground_rules` (language + category match). Computed fresh each task.
+
+**Per-spec execution** — for each task, compute (ceiling ∩ task-applicable gates); take the union of those sets across all tasks; execute each gate once against the cumulative diff (branch-point → HEAD). Gates that would have been skipped per-task due to scope=per-spec are not double-counted.
+
+Cross-references: FR-7 (per-task), FR-14 (validate_scope field), FR-15 (/validate-spec union execution).
+
 ## Functional Scope
 
 ### FR-1: Repo Config (`.workflow.yml`)
@@ -93,7 +103,22 @@ Executes **intersection** of spec-eligible gates (from `config.yml`) ∩ gates a
 
 ### FR-9: Monitor Event Categories
 
-`scripts/monitor.sh` accepts new event categories: `config_inferred`, `config_approved`, `agent_spawn`, `gate_skip`. Existing categories unchanged.
+`scripts/monitor.sh` accepts new event categories. Existing categories unchanged. Ownership by task:
+
+| Category | Added by |
+|---|---|
+| `config_inferred` | T003 |
+| `config_approved` | T003 |
+| `agent_spawn` | T003 |
+| `gate_skip` | T003 |
+| `spec_audit_start` | T014 |
+| `spec_audit_done` | T014 |
+| `spec_complete` | T015 |
+| `spec_reopened` | T015 |
+| `spec_last_task_done` | T015 |
+| `spec_reaudit_requested` | T017 |
+
+Each task that adds categories must also extend `monitor.sh`'s closed allowlist in the same PR.
 
 ### FR-10: Config Loader Script
 
@@ -260,6 +285,15 @@ When the user runs /config <feature> --regenerate
 Then the config-inferencer agent re-runs
 And the user is shown a diff against the existing config
 And on approval the file is overwritten
+```
+
+**Scenario: Config command opens existing config for edit** *(FR-11; owned by T010)*
+```
+Given an existing spec with config.yml
+When the user runs /config <feature>
+Then config.yml opens for edit in the user's editor
+And no inferencer run occurs
+And the file is saved with any user changes on exit
 ```
 
 ### Edge Cases & Errors
@@ -487,7 +521,7 @@ And no downstream command proceeds
 
 ## Applicable Ground Rules
 
-All applicable rules live in the **General KB** (installed globally at `~/.claude/knowledge-base/`). No project-KB layer exists for the dev-workflow repo itself.
+All applicable rules live in the **General KB** (installed globally at `~/.claude/knowledge-base/`). No project-KB layer exists for the dev-workflow repo itself. Note: language files such as `typescript.md`, `nextjs.md`, and `scala.md` exist only in the General KB at `~/.claude/knowledge-base/languages/` — they are not present in this repo. Any task editing those files must reference their full installed path, not a repo-relative path.
 
 - `general:security/general.md` — input validation, path traversal, secret handling, least privilege
 - `general:architecture/general.md` — small modules, explicit interfaces, boundary validation

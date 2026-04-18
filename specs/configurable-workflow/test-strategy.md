@@ -66,6 +66,8 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
   - Pre-commit CLI `eval` mode
 - **Shared fixtures (creates):** `tests/fixtures/nested-subdir-repo/` (real git init for hook cwd reproduction)
 
+> T003 also owns adding `config_inferred`, `config_approved`, `agent_spawn`, `gate_skip` to the `monitor.sh` closed allowlist. T014 adds `spec_audit_start`, `spec_audit_done`. T015 adds `spec_complete`, `spec_reopened`, `spec_last_task_done`. T017 adds `spec_reaudit_requested`. Each task's test cases must include a grep check that the new categories appear in the allowlist.
+
 ### T004 — phase-commands-read-spec-config
 - **Theme:** ceiling semantics — intersection, fail-closed empty, drift detection
 - **Owns:**

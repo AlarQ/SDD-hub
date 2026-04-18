@@ -246,7 +246,7 @@ Validator: `task-manager.sh validate` rejects non-bool values (e.g., string `"ye
 | `WF_SPEC_GATES` | newline-separated IDs | `rust-clippy\nsemgrep-security` |
 | `WF_SPEC_AGENTS_<PHASE>` | space-separated fully-qualified IDs | `WF_SPEC_AGENTS_VALIDATE="engineering/security-engineer code-quality-pragmatist"` |
 | `WF_SPEC_HAS_CONFIG` | `0`/`1` | `0` = legacy fallback |
-| `WF_VALIDATE_SCOPE` | enum | `per-task` / `per-spec` / `both` (default `per-task`) — **added in T013**, not T002. Loader leaves a hook for this export; T013 wires parsing and resolution. |
+| `WF_VALIDATE_SCOPE` | enum | `per-task` / `per-spec` / `both` (default `per-task`) — exported by T002 alongside other `WF_*` vars. T013 extends parsing with the enum allowlist check and spec-level override; T002 exports the field with the repo-default value only. |
 
 **Return codes:** `0` ok (incl. missing-with-defaults); `2` invalid path in `.workflow.yml`; `3` `gates.yml` invalid/missing when referenced; `4` spec `config.yml` invalid; `5` `yq` timeout; `6` unexpected (yq missing).
 
@@ -256,7 +256,7 @@ Validator: `task-manager.sh validate` rejects non-bool values (e.g., string `"ye
 
 ### Caller integration
 
-- **`monitor.sh`** — replaces `find_project_root` (currently scans for `specs/` dir) with a walk-up for `.workflow.yml`. Reads `$WF_SPEC_STORAGE` if set; falls back to hardcoded `specs/` until E2E green (dogfood safety). Keeps existing `validate_id` helper at `monitor.sh:64-70` as canonical when sourced standalone; delegates to `config-paths.sh` version when loader is loaded.
+- **`monitor.sh`** — replaces `find_project_root` (currently scans for `specs/` dir) with a walk-up for `.workflow.yml`. Reads `$WF_SPEC_STORAGE` if set; falls back to hardcoded `specs/` until E2E green (dogfood safety). Keeps `validate_id` helper at `monitor.sh:64-70` as canonical when sourced standalone — T001 tightens its regex to `^[a-zA-Z0-9_-]{1,64}$` (adds length cap); delegates to `config-paths.sh` version when loader is loaded.
 - **`task-manager.sh`** — same env-var read pattern. Uses `$WF_SPEC_STORAGE` to locate task files. Legacy fallback.
   - **New subcommand (added in T017):** `task-manager.sh create-followup <feature> <fr-id> <description>`. First subcommand that *creates* task files; extends the canonical CLI set documented in CLAUDE.md (`validate`, `set-status`, `unblock`, `next`, `check-unvalidated`, `status`) to seven verbs.
     - **Inputs:** `<feature>` — spec id (must exist under `$WF_SPEC_STORAGE`); `<fr-id>` — must match one of the `### FR-N:` headings in `spec.md` (FR-id allowlist, per FR-17 security); `<description>` — free text, ≤256 chars, escaped when written.
