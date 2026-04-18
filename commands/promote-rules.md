@@ -21,6 +21,8 @@ Graduates rules from the project KB (`knowledge-base/`) to the general KB (`~/.c
    - Not a duplicate of a rule already present in the general KB.
    - Stated in language that applies to *any* repository, not just this one (no project-specific names, paths, or tooling).
 
+2b. **Auto-remove project-KB duplicates.** For every rule collected in Step 1 that was filtered out because it duplicates an existing general KB rule at the rule level (not merely file-level coverage): automatically remove the duplicate entry from the project KB file without user review. If removing leaves the file empty or header-only, delete the file and remove its row from `knowledge-base/_index.md`. Report: "Removed N duplicate rule(s) from project KB (already present in general KB): [list of rule summaries]." This cleanup runs before the candidate review below.
+
 3. **Present candidates as a single batched review.** If no candidates qualify, report: "No rules qualify for promotion." and stop.
 
    For each candidate, display:
