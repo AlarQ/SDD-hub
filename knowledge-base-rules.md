@@ -34,6 +34,6 @@ Project rules override general rules on the same topic.
 
 ## Important Rules
 
-- **Never modify the general knowledge base** (`~/.claude/knowledge-base/`). New rules from `/review-findings` or rejected PR findings always go to the project knowledge base (`knowledge-base/`).
+- **Never modify the general knowledge base** (`~/.claude/knowledge-base/`). New rules from `/review-findings` or rejected PR findings always go to the project knowledge base (`knowledge-base/`). The sole exception is `/promote-rules`, which is explicitly designed to graduate project rules to the general KB.
 - **Both knowledge bases are mandatory** — commands that depend on ground rules must refuse to proceed if either is missing.
 - **`ground_rules` on each task is the single source of truth** for which rules apply during `/implement` and `/validate`.
