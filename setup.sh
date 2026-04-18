@@ -72,9 +72,16 @@ safe_copy() {
       echo "             diff \"$src\" \"$dest\""
       return 1
     fi
+  elif [ -f "$dest" ] && [ "$FORCE" = true ]; then
+    if diff -q "$src" "$dest" >/dev/null 2>&1; then
+      echo -e "  ${DIM}[skip]${RESET} $name ${DIM}(identical)${RESET}"
+    else
+      cp "$src" "$dest"
+      echo -e "  ${YELLOW}[updated]${RESET} $name"
+    fi
   else
     cp "$src" "$dest"
-    echo -e "  ${GREEN}[ok]${RESET} $name"
+    echo -e "  ${GREEN}[installed]${RESET} $name"
   fi
   return 0
 }

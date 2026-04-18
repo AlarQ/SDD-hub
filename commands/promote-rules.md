@@ -37,8 +37,6 @@ Graduates rules from the project KB (`knowledge-base/`) to the general KB (`~/.c
 4. **Apply accepted promotions.** For each accepted candidate:
    a. If the target general KB file exists, read it first, then append the rule. If it does not exist, create it with an appropriate title header matching the general KB style.
    b. Update `~/.claude/knowledge-base/_index.md` — add or update the row for the target file (preserve existing table format).
-   c. Ask: **Remove from project KB?** (y/n)
-      - **Yes:** remove the rule entry from its source file. If removing leaves the file empty or header-only, delete the file and remove its row from `knowledge-base/_index.md`.
-      - **No:** leave the project KB unchanged. The general KB version will take precedence per `knowledge-base-rules.md` project-overrides-general rule — note the duplication for the user.
+   c. **Remove from project KB.** Remove the rule entry from its source file automatically — keeping it in both bases is pointless duplication and causes the project version to silently shadow the general one. If removing leaves the file empty or header-only, delete the file and remove its row from `knowledge-base/_index.md`.
 
-5. **Report summary.** "Promoted N rules to general KB (A accepted, R rejected, E edited). Removed M rules from project KB."
+5. **Report summary.** "Promoted N rules to general KB (A accepted, R rejected, E edited). Removed N corresponding entries from project KB."
