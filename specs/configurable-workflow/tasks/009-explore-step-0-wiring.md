@@ -4,6 +4,7 @@ name: "Wire config-inferencer into /explore step 0"
 status: blocked
 blocked_by: ["003", "004", "008"]
 max_files: 1
+empty_intersection_ok: true
 estimated_files:
   - commands/explore.md
 test_cases:

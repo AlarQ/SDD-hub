@@ -15,7 +15,7 @@ test_cases:
   - "/validate runs intersection of spec ceiling and ground_rules eligible gates"
   - "/validate emits gate_skip event for ground_rules gate outside spec ceiling"
   - "/validate empty intersection on code task fails closed and blocks transition to done"
-  - "/validate missing config.yml runs full legacy ground_rules gate set without warning"
+  - "/validate (and every active phase command) with missing config.yml exits non-zero (loader exit 4), names the spec and expected path, executes no gate, spawns no agent"
   - "/implement snapshots spec config at task start and /ship detects mid-task drift"
   - "Unknown agent ID in spec config causes phase command to exit non-zero (no silent fallback)"
   - "Doc-only task with empty-OK declaration succeeds with zero gates"
@@ -49,9 +49,9 @@ Skipped gates emit `gate_skip` monitor events with explicit reason (`not in spec
 
 `/implement` snapshots the resolved spec config at task start (writes to `.monitor-context` or task state); `/ship` re-reads `config.yml`, compares against snapshot, refuses to proceed on drift until config is re-approved or restored.
 
-## Legacy Fallback
+## Mandatory spec config — no fallback
 
-When `WF_SPEC_HAS_CONFIG=0` (no per-spec `config.yml`), commands fall back to current hardcoded behavior — full gate set from task `ground_rules`, default agent lists from command markdown. No error or warning.
+`config.yml` is required for every active phase command. Loader `--spec <feature>` against a spec without `config.yml` returns exit 4; phase commands propagate the non-zero exit, print an explicit error naming the spec and expected path, and do not execute any gate or spawn any agent. There is no hardcoded-default fallback. Pre-existing done specs (shipped before this feature) are not processed by active commands and are out of scope. No TUI work in this spec.
 
 ## Implementation Notes
 

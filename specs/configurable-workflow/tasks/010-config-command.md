@@ -4,6 +4,7 @@ name: "/config command for editing and regenerating spec config"
 status: blocked
 blocked_by: ["008", "009"]
 max_files: 1
+empty_intersection_ok: true
 estimated_files:
   - commands/config.md
 test_cases:

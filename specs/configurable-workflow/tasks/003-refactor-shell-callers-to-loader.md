@@ -16,6 +16,7 @@ test_cases:
   - "monitor.sh accepts the four new event categories config_inferred, config_approved, agent_spawn, gate_skip"
   - "monitor.sh rejects unknown event categories"
   - "Monitor event with path under HOME renders with ~ prefix (no absolute paths leaked)"
+  - "monitor.sh log_event rejects or truncates any event payload containing a YAML document body (multi-line value with leading '---' or a 'gates:' key); only event type + ID + git SHA permitted in the payload"
   - "task-manager.sh validate locates task file from deep subdir via walk-up"
   - "pre-commit-hook.sh walks up when run from subdir using git rev-parse --show-toplevel"
   - "Vault case: spec_storage=/tmp/vault, events land under /tmp/vault, never ./specs"

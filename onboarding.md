@@ -58,7 +58,7 @@ This creates the project-specific `knowledge-base/` with:
 - `languages/` — per-language validation tool definitions (asks which languages the project uses)
 - `conventions/` — empty directory for project-specific rules discovered over time
 
-General rules (security, architecture, testing, style) are already installed globally at `~/.claude/knowledge-base/` by `setup.sh`. The `/bootstrap` command only creates project-specific content.
+General rules (security, architecture, testing, style) live in the dev-workflow repo under `knowledge-base/`. The `/bootstrap` command only creates project-specific content.
 
 ### 2. Add project instructions
 
@@ -115,7 +115,7 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 
 ### Stage 0: `/bootstrap` (once per project)
 
-**What it does:** Creates the project-specific `knowledge-base/` with language files and a `conventions/` directory. General rules (security, architecture, testing, style) are already installed globally by `setup.sh`. Asks which languages the project uses and generates language files with `validation_tools` frontmatter.
+**What it does:** Creates the project-specific `knowledge-base/` with language files and a `conventions/` directory. General rules (security, architecture, testing, style) live in the dev-workflow repo. Asks which languages the project uses and generates language files with `validation_tools` frontmatter.
 
 **Produces:** `knowledge-base/` directory with `_index.md`, `languages/`, and `conventions/`.
 
@@ -441,7 +441,7 @@ main
 
 Two knowledge bases work together:
 
-**General KB** — universal rules installed globally at `~/.claude/knowledge-base/` by `setup.sh`. Contains: security, architecture, testing, style, documentation, code-review, and language rules.
+**General KB** — universal rules that live in the dev-workflow repo at `knowledge-base/`. Contains: security, architecture, testing, style, documentation, code-review, and language rules.
 
 **Project KB** — project-specific rules at `knowledge-base/`:
 - Created by `/bootstrap`
@@ -450,7 +450,7 @@ Two knowledge bases work together:
 ### Structure
 
 ```
-~/.claude/knowledge-base/        # General KB (global)
+<dev-workflow-repo>/knowledge-base/   # General KB (in repo)
 ├── _index.md
 ├── security/general.md
 ├── architecture/
@@ -482,7 +482,7 @@ Task `ground_rules` use prefixes to reference rules from either KB:
 
 ### Rule flow
 
-1. **`setup.sh`** — installs general rules globally (security, architecture, testing, style, documentation, code-review, languages)
+1. **General KB** — lives in the dev-workflow repo (security, architecture, testing, style, documentation, code-review, languages)
 2. **`/bootstrap`** — creates project-specific rules (languages, conventions)
 3. **`/explore`** — reads both `_index.md` files to identify relevant rules conversationally
 4. **`/propose`** — selects rules from both KBs and writes them into each task's `ground_rules` field with prefixes

@@ -4,6 +4,7 @@ name: "Update CLAUDE.md, workflow-diagram, and onboarding docs"
 status: blocked
 blocked_by: ["011"]
 max_files: 3
+empty_intersection_ok: true
 estimated_files:
   - CLAUDE.md
   - docs/workflow-diagram.md

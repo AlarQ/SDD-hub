@@ -13,9 +13,13 @@ See `prd.md` for full problem framing and rationale.
 
 ## Terminology
 
-**Ceiling** — the spec's eligible-gate set: the union of gate IDs listed in `specs/<feature>/config.yml` `gates:`. Acts as an upper bound; no gate outside this set runs for this spec.
+**Ceiling** (a.k.a. **eligible set**) — the spec's eligible-gate set: the union of gate IDs listed in `specs/<feature>/config.yml` `gates:`. Acts as an upper bound; no gate outside this set runs for this spec. "Ceiling" and "eligible set" are strict aliases — the same union from `config.yml gates:`.
 
-**Per-task execution** — ceiling ∩ gates applicable to the task's `ground_rules` (language + category match). Computed fresh each task.
+**Effective set** — the per-task intersection result: `ceiling ∩ gates-applicable-to-ground_rules`. This is the set actually executed for a given task.
+
+**Terminology discipline:** use **ceiling** in configuration docs and schema references; use **effective set** in audit reports, error messages, and per-task output; never swap the two. Do not introduce new aliases ("gate pool", "ID allowlist", "ceiling intersection") — those are stale wording and must be normalized to the two canonical terms above.
+
+**Per-task execution** — computes the **effective set** (ceiling ∩ gates applicable to the task's `ground_rules`; language + category match). Computed fresh each task.
 
 **Per-spec execution** — for each task, compute (ceiling ∩ task-applicable gates); take the union of those sets across all tasks; execute each gate once against the cumulative diff (branch-point → HEAD). Gates that would have been skipped per-task due to scope=per-spec are not double-counted.
 
@@ -33,7 +37,7 @@ gate_pool: knowledge-base/gates.yml
 agent_pool: ~/.claude/agents
 ```
 
-Defaults apply when file absent (`spec_storage: specs/`, others resolved from install layout). Loader walks up from CWD to find it — does not require running from repo root.
+File is **required** for any active invocation (phase commands, monitor, task-manager, pre-commit hook). Missing file → loader exit 2 with explicit error naming the repo root and instructing the user to run `/bootstrap`. Per-field defaults apply only **within** a present file — a missing field inside the file resolves to its default (`spec_storage: specs/`, others from install layout). Loader walks up from CWD to find it — does not require running from repo root.
 
 ### FR-2: Gate Registry (`knowledge-base/gates.yml`)
 
@@ -74,7 +78,7 @@ agents:
 
 Agent IDs are **fully qualified** (`<category>/<name>` or bare `<name>` for root-level agents). Resolution rule and full grammar: see `design.md §Backend Design §Schemas §Agent ID grammar and resolution`.
 
-Missing file = legacy behavior (default agents per command markdown, full gate set from task `ground_rules`).
+`config.yml` is **required** for any spec created after this feature ships. Missing file on active processing paths (`/propose`, `/implement`, `/validate`, `/pr-review`, `/review-findings`, `/validate-impl`, `/ship`) → fail closed with explicit error naming the spec and expected path. No hardcoded-default fallback.
 
 ### FR-4: Config Inferencer Agent
 
@@ -91,7 +95,7 @@ Before normal explore flow:
 
 ### FR-6: Phase Commands Read Spec Config
 
-`/propose`, `/implement`, `/validate`, `/pr-review`, `/review-findings` read agent list from `config.yml`. Legacy fallback to hardcoded defaults if file missing.
+`/propose`, `/implement`, `/validate`, `/pr-review` read agent list from `config.yml` (the `agents` map keys are ∈ {`explore`, `propose`, `implement`, `validate`, `pr-review`} — see design.md §Backend Design §specs/<feature>/config.yml). Missing file → fail closed (loader exit 4, see FR-10). No hardcoded-default fallback. Note: `/review-findings` is **not** a consumer of the `agents` map; it is wired through other FRs (e.g. spec-audit report handling, T017) and does not spawn phase agents.
 
 ### FR-7: `/validate` Ceiling Semantics
 
@@ -99,7 +103,7 @@ Executes **intersection** of spec-eligible gates (from `config.yml`) ∩ gates a
 
 ### FR-8: Path Resolution Refactor
 
-`scripts/monitor.sh`, `scripts/task-manager.sh`, `scripts/pre-commit-hook.sh`, `workflow-tui/src/parse/scanner.rs` walk up from CWD to find `.workflow.yml`, resolve `spec_storage`, then scan from there. Fall back to hardcoded `specs/` until E2E green (dogfood safety).
+`scripts/monitor.sh`, `scripts/task-manager.sh`, `scripts/pre-commit-hook.sh` walk up from CWD to find `.workflow.yml`, resolve `spec_storage`, then scan from there. Fall back to hardcoded `specs/` until E2E green (dogfood safety).
 
 ### FR-9: Monitor Event Categories
 
@@ -135,15 +139,20 @@ New `commands/config.md`. Edits or regenerates `specs/<feature>/config.yml` post
 
 ### FR-12: `/bootstrap` Generates `.workflow.yml`
 
-When initializing a new repo, write starter `.workflow.yml` alongside project KB.
+`/bootstrap` writes starter `.workflow.yml` at repo root (alongside project KB). Must work on **existing** repos, not only fresh ones — existing repos are the primary target.
 
-### FR-13: TUI Additions
+**Behavior:**
 
-- `workflow-tui/src/parse/workflow_config.rs` — parse `.workflow.yml`
-- `workflow-tui/src/parse/spec_config.rs` — parse `specs/<feature>/config.yml`
-- `workflow-tui/src/ui/pipeline.rs` — pipeline widget showing configured gates/agents per phase
-- `workflow-tui/src/watcher.rs` — watch `.workflow.yml` for live reload
-- Pipeline widget renders `scope: per-task | per-spec | both` badge and a terminal "audit" column (FR-14..17).
+- Fresh repo (no `.workflow.yml`): write starter file from `templates/workflow.yml.template` with defaults. Exit 0.
+- Existing `.workflow.yml` present: **no-op + print current config, exit 0**. No modification without an explicit flag.
+- `/bootstrap --force`: show diff against template defaults, ask single-key confirmation, then overwrite. Refuses when target path is a symlink (security — writer never follows symlinks into untrusted locations).
+- `/bootstrap --repair`: regenerate only missing fields, preserve existing values. Never overwrites a present field.
+
+Writer touches only `.workflow.yml`. Other repo files untouched. Idempotent: second run on a repo with `.workflow.yml` is a no-op — the file is not opened for write and `mtime` is unchanged (observable property, not a byte-equality claim).
+
+### FR-13: TUI Additions — **DEFERRED**
+
+Postponed pending TUI-vs-web-UI decision. See `DEFERRED.md`. FR number reserved so downstream cross-references (if any) remain stable; no TUI work ships in this spec.
 
 ### FR-14: `validate_scope` Config Field
 
@@ -178,7 +187,7 @@ New `commands/validate-impl.md`. Runs once when all spec tasks reach `done`. Reu
 Steps:
 
 1. `source config-loader.sh --spec <feature>` → loads ceiling, scope, agents.
-2. If `validate_scope ∈ {per-spec, both}`: execute **union** of spec-eligible gates (FR-2 `applies_to` filter ∩ FR-3 spec ceiling) against the spec's cumulative diff (first task branch-point → HEAD).
+2. If `validate_scope ∈ {per-spec, both}`: execute **union** of spec-eligible gates (FR-2 `applies_to` filter ∩ FR-3 spec ceiling) against the spec's cumulative diff (first task branch-point → HEAD). **Gate-failure path:** if any blocking gate in the union exits non-zero, the audit report verdict is forced to `reopen` AND Karen is still spawned — the wrapper prompt includes the failing-gate output as additional evidence alongside the Karen inputs in step 3. Non-blocking gate failures are recorded but do not force `reopen`.
 3. Spawn Karen with a wrapper prompt containing:
    - Parsed FR list from `specs/<feature>/spec.md` (every `### FR-N:` heading).
    - `specs/<feature>/prd.md` IN/OUT scope.
@@ -230,12 +239,13 @@ And rust-test does NOT run (not in spec ceiling)
 And a gate_skip event is emitted for rust-test
 ```
 
-**Scenario: Missing spec config falls back to legacy**
+**Scenario: Missing spec config blocks active processing**
 ```
-Given a done spec with no config.yml file
-When /validate runs for one of its tasks
-Then the command executes the full legacy gate set from task ground_rules
-And no error or warning is raised
+Given a spec with no config.yml file
+When /validate (or any active phase command) runs for one of its tasks
+Then the command exits non-zero with exit code 4
+And the error names the spec and the expected config.yml path
+And no gate executes and no agent spawns
 ```
 
 **Scenario: Gates registry loads with `applies_to` tags** *(FR-2; owned by T001)*
@@ -270,12 +280,43 @@ When monitor.sh logs an event
 Then the event is written under /tmp/vault/<feature>/.monitor.jsonl
 ```
 
-**Scenario: Bootstrap writes starter config**
+**Scenario: Bootstrap writes starter config on fresh repo**
 ```
 Given a fresh repo with no .workflow.yml
 When /bootstrap runs
 Then .workflow.yml is created at repo root
 And it contains spec_storage, gate_pool, agent_pool defaults
+```
+
+**Scenario: Missing .workflow.yml blocks active commands** *(FR-1; owned by T002)*
+```
+Given an existing repo with no .workflow.yml at root
+When any active workflow command (/validate, /implement, monitor.sh, task-manager.sh, pre-commit-hook.sh) runs
+Then config-loader exits 2
+And the error message names the resolved repo root and instructs the user to run /bootstrap
+And no gate executes, no agent spawns, no monitor event is written
+```
+
+**Scenario: Bootstrap on existing repo adds only .workflow.yml** *(FR-12; owned by T011)*
+```
+Given an existing repo with prior files but no .workflow.yml
+When /bootstrap runs
+Then .workflow.yml is created at repo root with template defaults
+And no other file in the repo is modified, created, or deleted
+And exit code is 0
+```
+
+**Scenario: Bootstrap is idempotent when .workflow.yml already exists** *(FR-12; owned by T011)*
+```
+Given a repo with an existing .workflow.yml
+When /bootstrap runs without --force
+Then the file is not modified (byte-identical)
+And the current config is printed to stdout
+And exit code is 0
+When /bootstrap --force runs
+Then a diff against template defaults is shown
+And on single-key confirmation the file is overwritten
+And when the target path is a symlink, /bootstrap --force refuses with a non-zero exit
 ```
 
 **Scenario: Config command regenerates spec config**
@@ -324,14 +365,6 @@ And the loader fails closed
 And no downstream command proceeds
 ```
 
-**Scenario: Legacy scanner tolerates missing config.yml**
-```
-Given a specs/ directory with 3 legacy specs (no config.yml) and 1 new spec
-When the TUI scanner runs
-Then all 4 specs render in the list
-And legacy specs show a "no config" indicator rather than erroring
-```
-
 **Scenario: Inferencer failure falls back to manual**
 ```
 Given the config-inferencer agent times out
@@ -359,6 +392,18 @@ When task-manager.sh set-status <last-task> done succeeds
 Then a spec_last_task_done event is emitted on the spec's .monitor.jsonl
 And /implement auto-chain invokes /validate-impl <feature>
 And Karen is spawned with a wrapper prompt containing spec.md FR list, prd.md scope, task list, and git diff range
+```
+
+**Scenario: union gate failure forces reopen with Karen evidence**
+```
+Given a spec with validate_scope ∈ {per-spec, both}
+And the union of spec-eligible gates includes at least one blocking gate
+When /validate-impl executes union gate execution
+And at least one blocking gate exits non-zero
+Then the audit report verdict is "reopen"
+And Karen is still spawned with the failing gate output embedded in the wrapper prompt as additional evidence
+And spec_audit_done is emitted after Karen completes
+And spec.md frontmatter status is NOT updated to shipped
 ```
 
 **Scenario: clean audit marks spec shipped**
@@ -469,6 +514,8 @@ When the event is written to JSONL
 Then the path is rendered with $HOME replaced by ~
 And the raw YAML body is never embedded in the event
 ```
+*(Test ownership: T003 — both legs covered by monitor.sh test cases: `$HOME → ~` prefix rendering + rejection/truncation of YAML-body payloads.)*
+
 
 **Scenario: Unknown gate/agent ID spoofing rejected (Spoofing — Medium)**
 ```
@@ -508,7 +555,7 @@ And no downstream command proceeds
 ## Security Requirements
 
 - **Authentication:** N/A — local developer tool, no network surface. Trust boundary = filesystem ACLs.
-- **Authorization:** `.workflow.yml` and `gates.yml` edits gated by repo write access. `specs/<feature>/config.yml` edits flow through `/config` or `/explore` approval; direct YAML edits discouraged (mirrors task-manager pattern).
+- **Authorization:** `.workflow.yml` and `gates.yml` edits gated by repo write access. `/bootstrap` writer refuses to write through a symlink at the `.workflow.yml` target path. `specs/<feature>/config.yml` edits flow through `/config` or `/explore` approval; direct YAML edits discouraged (mirrors task-manager pattern).
 - **Data handling:** All config files are plaintext YAML, committed to git — must contain zero secrets. Monitor events redact `$HOME` → `~`, log only event type + ID + git SHA, never embed raw YAML bodies. Inferencer must not read `.env*`, `*.pem`, `id_*`, `.git/config`.
 - **Input validation:**
   - Gate/agent IDs: `^[a-zA-Z0-9_-]{1,64}$`
@@ -521,7 +568,9 @@ And no downstream command proceeds
 
 ## Applicable Ground Rules
 
-All applicable rules live in the **General KB** (installed globally at `~/.claude/knowledge-base/`). No project-KB layer exists for the dev-workflow repo itself. Note: language files such as `typescript.md`, `nextjs.md`, and `scala.md` exist only in the General KB at `~/.claude/knowledge-base/languages/` — they are not present in this repo. Any task editing those files must reference their full installed path, not a repo-relative path.
+All applicable rules live in the **General KB** (installed globally at `~/.claude/knowledge-base/`). No project-KB layer exists for the dev-workflow repo itself.
+
+**Resolution rule:** The `general:` prefix always resolves against `~/.claude/knowledge-base/` (the installed global KB), never against this repo's own `knowledge-base/`. The repo's `knowledge-base/` directory is the *source* that `setup.sh` installs globally; it is not a fallback resolution root. Tasks and runners must read `general:` rules from `~/.claude/knowledge-base/`. Any task editing those files must reference their full installed path, not a repo-relative path.
 
 - `general:security/general.md` — input validation, path traversal, secret handling, least privilege
 - `general:architecture/general.md` — small modules, explicit interfaces, boundary validation
@@ -530,7 +579,6 @@ All applicable rules live in the **General KB** (installed globally at `~/.claud
 - `general:code-review/general.md` — review discipline for shell + Rust diffs
 - `general:documentation/general.md` — docs/CLAUDE.md/onboarding update discipline
 - `general:languages/shell.md` — shellcheck, bash -n, 150-line module cap
-- `general:languages/rust.md` — TUI parser and widget patterns
 
 ## Out of Scope
 

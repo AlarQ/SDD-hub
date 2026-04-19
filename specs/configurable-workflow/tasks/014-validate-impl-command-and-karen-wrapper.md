@@ -19,6 +19,8 @@ test_cases:
   - "Clean audit sets spec.md frontmatter status: shipped and emits spec_complete event"
   - "Audit verdict=reopen leaves spec.md status unchanged and emits spec_reopened event"
   - "Karen agent is spawned via Agent tool with subagent_type=karen (no agent definition edits)"
+  - "Union gate failure path: blocking gate exit non-zero forces audit verdict=reopen AND Karen still spawned with failing-gate output embedded in wrapper prompt as additional evidence"
+  - "Non-blocking gate failure is recorded in audit report but does not force verdict=reopen"
 ground_rules:
   - general:languages/shell.md
   - general:security/general.md
@@ -46,6 +48,6 @@ New slash command `/validate-impl <feature>` that runs the spec-completion audit
 ## Implementation Notes
 
 - Karen wrapper prompt is the only specialization surface. Keep it as a Markdown block in `commands/validate-impl.md` so it's versioned alongside the command.
-- Monitor event categories `spec_audit_start`, `spec_audit_done`, `spec_complete`, `spec_reopened`, `spec_last_task_done` must be added to `scripts/monitor.sh` accept-list alongside FR-9's existing categories.
+- Monitor event categories `spec_audit_start` and `spec_audit_done` must be added to `scripts/monitor.sh` accept-list alongside FR-9's existing categories. The remaining FR-9 categories (`spec_complete`, `spec_reopened`, `spec_last_task_done`, `spec_reaudit_requested`) are owned by T015/T017 per the FR-9 ownership table.
 - Gate execution (union mode) is NOT in this task — T016 owns scope-dependent gate invocation. `/validate-impl` calls into T016's helper once it exists.
 - Fixture spec under `tests/fixtures/spec-audit/sample-spec/` with 3 FRs and 2 tasks — used for end-to-end smoke without hitting real Karen; stub agent invocation to return a canned report for tests.
