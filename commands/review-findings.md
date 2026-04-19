@@ -22,7 +22,7 @@ Feature name: $ARGUMENTS
    - Ask: **Accept all / Reject all?** Do NOT offer partial accept within a group — the fixes are interrelated.
    - **Stop and wait for user response before continuing to the next group.**
    - If Accept:
-     - Spawn a sub-agent (using the Agent tool with `run_in_background: true`) to apply all fixes in this group. Sub-agent instructions:
+     - Spawn a sub-agent (using the Agent tool with `run_in_background: true` and `model: "sonnet"`) to apply all fixes in this group. The `model: "sonnet"` parameter is mandatory — do not omit it and do not use a different model. Sub-agent instructions:
        1. Re-read the target file before editing.
        2. Apply all `fix_proposal`s in the group in reverse line order (highest line number first) to avoid offset drift.
        3. After all fixes applied, update `review_status` to `"accepted"` on each finding in the group's report YAML file.
