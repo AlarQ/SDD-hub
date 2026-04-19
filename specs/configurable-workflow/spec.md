@@ -19,7 +19,7 @@ See `prd.md` for full problem framing and rationale.
 
 **Per-spec execution** — for each task, compute (ceiling ∩ task-applicable gates); take the union of those sets across all tasks; execute each gate once against the cumulative diff (branch-point → HEAD). Gates that would have been skipped per-task due to scope=per-spec are not double-counted.
 
-Cross-references: FR-7 (per-task), FR-14 (validate_scope field), FR-15 (/validate-spec union execution).
+Cross-references: FR-7 (per-task), FR-14 (validate_scope field), FR-15 (/validate-impl union execution).
 
 ## Functional Scope
 
@@ -163,7 +163,7 @@ validate_scope: per-spec
 
 Semantics:
 
-| Mode | `/validate` per task | `/validate-spec` at last-task `done` |
+| Mode | `/validate` per task | `/validate-impl` at last-task `done` |
 |---|---|---|
 | `per-task` (default) | runs | runs |
 | `per-spec` | skipped in `/implement` auto-chain (emit `gate_skip` with `reason=scope=per-spec`) | runs, executes **union** of spec-eligible gates |
@@ -171,9 +171,9 @@ Semantics:
 
 Validation: enum allowlist. Unknown value → fail closed (loader exit 2). Missing field → `per-task`. Loader exports `WF_VALIDATE_SCOPE`.
 
-### FR-15: `/validate-spec` Command + Karen Wrapper
+### FR-15: `/validate-impl` Command + Karen Wrapper
 
-New `commands/validate-spec.md`. Runs once when all spec tasks reach `done`. Reuses existing **Karen agent** (`agents/karen.md`) unchanged — wrapper prompt at the call-site supplies spec-specific context.
+New `commands/validate-impl.md`. Runs once when all spec tasks reach `done`. Reuses existing **Karen agent** (`agents/karen.md`) unchanged — wrapper prompt at the call-site supplies spec-specific context.
 
 Steps:
 
@@ -193,7 +193,7 @@ Steps:
 
 ### FR-16: Last-Task-Done Trigger
 
-`scripts/task-manager.sh set-status <task> done` — after the transition succeeds, run an all-done detector. If every task file under the spec's tasks dir has `status: done` AND no prior `spec_audit_done` event exists in `.monitor.jsonl`, emit `spec_last_task_done` event. `/implement`'s auto-chain listens for this event and auto-invokes `/validate-spec`. Standalone CLI users get the event but not the auto-chain (same pattern as existing event-emission).
+`scripts/task-manager.sh set-status <task> done` — after the transition succeeds, run an all-done detector. If every task file under the spec's tasks dir has `status: done` AND no prior `spec_audit_done` event exists in `.monitor.jsonl`, emit `spec_last_task_done` event. `/implement`'s auto-chain listens for this event and auto-invokes `/validate-impl`. Standalone CLI users get the event but not the auto-chain (same pattern as existing event-emission).
 
 ### FR-17: Spec Audit Report + `/review-findings` Integration
 
@@ -357,14 +357,14 @@ And no gate command is executed for that task
 Given a spec with three tasks, two already in status done and one in status implemented
 When task-manager.sh set-status <last-task> done succeeds
 Then a spec_last_task_done event is emitted on the spec's .monitor.jsonl
-And /implement auto-chain invokes /validate-spec <feature>
+And /implement auto-chain invokes /validate-impl <feature>
 And Karen is spawned with a wrapper prompt containing spec.md FR list, prd.md scope, task list, and git diff range
 ```
 
 **Scenario: clean audit marks spec shipped**
 ```
 Given every FR in spec.md has corresponding implemented code traceable via Karen's matrix
-When /validate-spec completes
+When /validate-impl completes
 Then the report verdict field is "complete"
 And a spec_complete monitor event is emitted
 And spec.md frontmatter status is updated to "shipped"
@@ -373,7 +373,7 @@ And spec.md frontmatter status is updated to "shipped"
 **Scenario: Karen finds missing FR → spec reopens**
 ```
 Given an FR in spec.md has no corresponding implementation
-When /validate-spec runs
+When /validate-impl runs
 Then the audit report lists that FR with status "missing"
 And /review-findings presents the missing FR as an accept/reject finding
 When the user accepts the finding
@@ -385,22 +385,22 @@ And the spec's aggregate status remains in-progress until the new task reaches d
 ```
 Given a spec with a prior spec_audit_done event in .monitor.jsonl from a previous audit
 And one or more follow-up tasks created by create-followup have reached status done
-When the user runs /validate-spec --reaudit
+When the user runs /validate-impl --reaudit
 Then a spec_reaudit_requested sentinel event is appended to .monitor.jsonl
 And no prior event is mutated, rewritten, or deleted (append-only discipline)
 And the T015 detector sees spec_reaudit_requested as the newest of {spec_audit_done, spec_reaudit_requested}
-And the detector fires spec_last_task_done → /validate-spec once more
+And the detector fires spec_last_task_done → /validate-impl once more
 When the new audit completes
 Then a fresh spec_audit_done is appended
 And the guard is re-closed until the next explicit --reaudit
 ```
 
-**Scenario: per-spec mode runs union at /validate-spec**
+**Scenario: per-spec mode runs union at /validate-impl**
 ```
 Given a spec config.yml with gates [rust-clippy, semgrep-security]
 And validate_scope=per-spec
 And two tasks with disjoint ground_rules (one rust, one shell)
-When /validate-spec executes
+When /validate-impl executes
 Then rust-clippy runs once across the cumulative diff
 And semgrep-security runs once across the cumulative diff
 And the gate execution count equals the size of the union, not the task count times the union

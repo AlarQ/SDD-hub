@@ -205,10 +205,10 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
 - **Integration seams:** loader ↔ `config-paths.sh` (enum helper reuse)
 - **Shared fixtures (creates):** `tests/fixtures/config/workflow-scope-per-task.yml`, `workflow-scope-per-spec.yml`, `workflow-scope-invalid.yml`, `spec-config-scope-override.yml`
 
-### T014 — validate-spec-command-and-karen-wrapper
+### T014 — validate-impl-command-and-karen-wrapper
 - **Theme:** audit command orchestration + Karen wrapper contract (no agent edits)
 - **Owns:**
-  - `/validate-spec` loads scope via config-loader `--spec`
+  - `/validate-impl` loads scope via config-loader `--spec`
   - FR id parsing from spec.md `### FR-N:` headings
   - Karen wrapper prompt includes FR list + PRD scope + task list + report paths + git diff range
   - Report frontmatter written with `{feature, timestamp, scope, verdict}`
@@ -217,7 +217,7 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
   - `verdict=reopen` → `spec_reopened` emitted, spec status unchanged
   - Karen invocation uses existing `agents/karen.md` (no diff to agent file)
 - **Must NOT test:** trigger detection (T015), scope-dependent gate execution (T016), review-findings integration (T017)
-- **Integration seams:** `/validate-spec` ↔ config-loader (`--spec`) ↔ Karen (via Agent tool) ↔ monitor events
+- **Integration seams:** `/validate-impl` ↔ config-loader (`--spec`) ↔ Karen (via Agent tool) ↔ monitor events
 - **Shared fixtures (creates):** `tests/fixtures/spec-audit/sample-spec/` (3 FRs, 2 tasks, stubbed Karen output for deterministic test)
 
 ### T015 — last-task-done-trigger
@@ -226,7 +226,7 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
   - `set-status done` on the last non-done task emits `spec_last_task_done`
   - Detector ignores transitions when any task still non-done
   - Detector is idempotent via prior `spec_audit_done` event guard
-  - `/implement` auto-chain observes the event and invokes `/validate-spec`
+  - `/implement` auto-chain observes the event and invokes `/validate-impl`
   - Standalone CLI `task-manager.sh set-status done` emits the event but does NOT auto-invoke (parity with existing monitor behaviour)
   - Serial-execution assumption holds: tail-grep guard is sufficient, no file lock needed
 - **Must NOT test:** audit command internals (T014), scope semantics (T016), follow-up task creation (T017)
@@ -234,17 +234,17 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
 - **Shared fixtures (creates):** `tests/fixtures/last-task-done/` (3 task files + empty `.monitor.jsonl`)
 
 ### T016 — per-spec-gate-skip-and-union-execution
-- **Theme:** scope semantics — `/validate` skip + `/validate-spec` union
+- **Theme:** scope semantics — `/validate` skip + `/validate-impl` union
 - **Owns:**
   - `/validate` under `per-spec` emits `gate_skip` with `reason=scope=per-spec` and runs no gates
   - `/validate` under `per-task` matches T004 baseline
   - `/validate` under `both` matches T004 baseline AND allows T014 audit to run
-  - `/validate-spec` union computation: each gate in `WF_SPEC_GATES` ∩ union of task language rules runs exactly once
+  - `/validate-impl` union computation: each gate in `WF_SPEC_GATES` ∩ union of task language rules runs exactly once
   - Union execution against cumulative diff range (branch-point → HEAD)
   - Empty union on code spec fails closed even under `per-spec` (ADR-003 preserved)
   - Doc-only empty-OK tasks pass under all three modes
 - **Must NOT test:** scope field parsing (T013), trigger detection (T015), audit command wrapper (T014)
-- **Integration seams:** `WF_VALIDATE_SCOPE` ↔ `/validate` branch ↔ `/validate-spec` union helper ↔ `monitor.sh` accept-list
+- **Integration seams:** `WF_VALIDATE_SCOPE` ↔ `/validate` branch ↔ `/validate-impl` union helper ↔ `monitor.sh` accept-list
 - **Shared fixtures (creates):** `tests/fixtures/scope/rust-spec-per-spec/` (2 tasks disjoint ground_rules), `tests/fixtures/scope/doc-only-per-spec/`
 
 ### T017 — spec-audit-report-review-findings-integration
@@ -256,7 +256,7 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
   - Unknown FR id in report → fail closed, no task created, error names unknown ids + the FR list consulted
   - Rejected finding remains available for `/learn-from-reports` mining
   - `--reaudit` flag clears the `spec_audit_done` idempotency guard so T015 trigger can re-fire
-  - Cycle convergence: after follow-up tasks reach done, chain re-runs `/validate-spec` until verdict=complete
+  - Cycle convergence: after follow-up tasks reach done, chain re-runs `/validate-impl` until verdict=complete
 - **Must NOT test:** Karen spawn (T014), scope execution (T016), trigger detection (T015)
 - **Integration seams:** audit report ↔ `/review-findings` accept/reject ↔ `task-manager.sh create-followup` ↔ spec.md FR allowlist
 - **Shared fixtures (creates):** `tests/fixtures/spec-audit/reopen-report-with-missing-fr.md`, `tests/fixtures/spec-audit/reopen-report-unknown-fr.md`
@@ -294,7 +294,7 @@ Every BDD scenario from `spec.md` → exactly one owning task.
 | clean audit marks spec shipped | T014 |
 | Karen finds missing FR → spec reopens | T017 |
 | Reaudit cycle after follow-up tasks land | T017 |
-| per-spec mode runs union at /validate-spec | T016 |
+| per-spec mode runs union at /validate-impl | T016 |
 | Unknown FR id in Karen audit output rejected | T017 (allowlist); T014 reports event |
 | validate_scope enum enforced | T013 |
 
@@ -326,9 +326,9 @@ No unowned scenarios. The deliberate split (loader-level rejection in T001/T002;
 | Watcher ↔ parse ↔ app state rebuild | T006 | Scanner integration owns the reload path |
 | `/explore` step 0 ↔ inferencer agent ↔ monitor event emission | T009 | `/explore` orchestrates all three |
 | Full-stack dogfood: `.workflow.yml` → loader → callers → commands → TUI | T011 | Cleanup task is final gate; E2E against `/tmp/vault` is defining deliverable |
-| `WF_VALIDATE_SCOPE` ↔ `/validate` skip branch ↔ `/validate-spec` union | T016 | `/validate-spec` is the sole union-execution authority; `/validate` is the sole skip-branch authority |
+| `WF_VALIDATE_SCOPE` ↔ `/validate` skip branch ↔ `/validate-impl` union | T016 | `/validate-impl` is the sole union-execution authority; `/validate` is the sole skip-branch authority |
 | `task-manager.sh set-status done` ↔ `.monitor.jsonl` event ↔ `/implement` chain invocation | T015 | Detector + auto-chain form a single feedback edge; splitting their tests hides race/idempotency bugs |
-| `/validate-spec` ↔ Karen (Agent tool) ↔ audit report schema | T014 | Wrapper prompt + report frontmatter form the agent contract; stub Karen for determinism |
+| `/validate-impl` ↔ Karen (Agent tool) ↔ audit report schema | T014 | Wrapper prompt + report frontmatter form the agent contract; stub Karen for determinism |
 | audit report ↔ `/review-findings` ↔ `task-manager.sh create-followup` ↔ FR-id allowlist | T017 | Reopen flow spans four components; allowlist is the critical security boundary — must be tested end-to-end not just unit |
 
 ## Risk Flags
@@ -342,7 +342,7 @@ No unowned scenarios. The deliberate split (loader-level rejection in T001/T002;
 | **MEDIUM** | T004 "tampered spec config" test — snapshot format instability causes false positives on yq canonicalization. | Snapshot compares normalized JSON of effective fields (`gates[]`, `agents` map), not raw YAML text. Cover: whitespace-only → no drift; gate removed/added → drift; agent reordering → drift if order-significant (document choice). |
 | **LOW** | T003 pre-commit hook subdir test must reproduce git's hook invocation context (cwd = subdir, GIT_DIR set). Naive `cd subdir && run` misses git env. | Real git init fixture under `tests/fixtures/nested-subdir-repo/`; invoke via `git -C subdir commit --dry-run` or call hook directly with `PWD=subdir` AND `GIT_DIR` set. Do not rely on bare cd. |
 | **LOW** | T007 parity test brittleness — shell and Rust may produce intersection results in different orders. | Canonicalize to sorted list before comparison on both sides. Parity fixture emits JSON `{"executed":[sorted],"skipped":[sorted]}`. Shell loader gets tiny test-only helper to emit same shape. |
-| **MEDIUM** | T014 Karen-stub drift — tests use a stubbed Karen for determinism; stub could lag real Karen's output format. | Stub output and real-Karen prompt live in the same `commands/validate-spec.md` file; schema-shape test validates both stub output AND any real-Karen output against the frontmatter + FR-matrix section contract. CI periodically replays the stubbed prompt against real Karen and diffs shape only. |
+| **MEDIUM** | T014 Karen-stub drift — tests use a stubbed Karen for determinism; stub could lag real Karen's output format. | Stub output and real-Karen prompt live in the same `commands/validate-impl.md` file; schema-shape test validates both stub output AND any real-Karen output against the frontmatter + FR-matrix section contract. CI periodically replays the stubbed prompt against real Karen and diffs shape only. |
 | **MEDIUM** | T017 follow-up task creation could create duplicate tasks if the same `spec-audit-*.md` report is processed twice. | `task-manager.sh create-followup` writes a `source_report` field into the task frontmatter; creation is a no-op when an existing task already references that report+FR pair. |
 | **LOW** | T015 all-done detector false-negative on concurrent completion — two near-simultaneous `set-status done` calls could both think another task is still pending. | Serial execution rule (CLAUDE.md) forbids concurrent task completion; detector verifies by re-reading all task statuses after the transition rather than trusting prior state. |
 | **LOW** | T016 union computation silently drops a gate when spec_storage sits on a case-insensitive filesystem (macOS default) — gate id collisions across case. | `validate_id` regex already rejects non-ASCII; add unit test ensuring duplicate-id detection in `gates.yml` is case-sensitive (reject exact-match duplicates; document that case-differing ids are valid). |

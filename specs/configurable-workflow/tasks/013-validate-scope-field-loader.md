@@ -41,4 +41,4 @@ Add `validate_scope` cadence knob to the config loader chain. Extends `.workflow
 - Update `templates/workflow.yml.template` with commented-out default documenting all three values.
 - Update `templates/spec-config.yml.template` to show optional override example.
 - Fixture additions under `tests/fixtures/config/` (no new top-level directories): `workflow-scope-per-task.yml`, `workflow-scope-per-spec.yml`, `workflow-scope-invalid.yml`, `spec-config-scope-override.yml`.
-- Loader does NOT invoke `/validate-spec` — it only exposes the field. Cadence enforcement lives in T016.
+- Loader does NOT invoke `/validate-impl` — it only exposes the field. Cadence enforcement lives in T016.

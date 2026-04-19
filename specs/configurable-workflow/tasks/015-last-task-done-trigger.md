@@ -14,8 +14,8 @@ test_cases:
   - "Detector scans the feature's tasks/ dir and confirms every task file has status: done before emitting"
   - "Detector does NOT emit spec_last_task_done when at least one task is still non-done"
   - "Detector does NOT emit when a prior spec_audit_done event already exists on the feature's .monitor.jsonl (idempotency)"
-  - "/implement auto-chain observes spec_last_task_done and invokes /validate-spec <feature>"
-  - "Standalone CLI task-manager.sh set-status done emits the event but does NOT auto-invoke /validate-spec (parity with existing monitoring pattern)"
+  - "/implement auto-chain observes spec_last_task_done and invokes /validate-impl <feature>"
+  - "Standalone CLI task-manager.sh set-status done emits the event but does NOT auto-invoke /validate-impl (parity with existing monitoring pattern)"
   - "Concurrent set-status calls do not double-emit (file-lock or last-write-wins sentinel check)"
 ground_rules:
   - general:languages/shell.md
@@ -25,7 +25,7 @@ ground_rules:
 
 ## Description
 
-Wire the trigger that fires `/validate-spec` automatically when the final task in a spec transitions to `done`. Detection is shell-level (always-on); auto-invocation is `/implement`-level (interactive chain only), matching the existing event-emission pattern for `task_transition` events.
+Wire the trigger that fires `/validate-impl` automatically when the final task in a spec transitions to `done`. Detection is shell-level (always-on); auto-invocation is `/implement`-level (interactive chain only), matching the existing event-emission pattern for `task_transition` events.
 
 ## Public API
 
@@ -34,7 +34,7 @@ Wire the trigger that fires `/validate-spec` automatically when the final task i
   2. Counts tasks in the feature's tasks dir with `status != done`. If zero:
   3. Greps the feature's `.monitor.jsonl` for a prior `spec_audit_done` event. If absent:
   4. Emit `spec_last_task_done` via `log_event`.
-- `commands/implement.md` — auto-chain step added: after its own `set-status done` invocation, check the feature's `.monitor.jsonl` tail for `spec_last_task_done` (emitted moments earlier); if present, invoke `/validate-spec "$feature"` as the final chain step before the chain exits.
+- `commands/implement.md` — auto-chain step added: after its own `set-status done` invocation, check the feature's `.monitor.jsonl` tail for `spec_last_task_done` (emitted moments earlier); if present, invoke `/validate-impl "$feature"` as the final chain step before the chain exits.
 
 ## Implementation Notes
 

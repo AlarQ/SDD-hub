@@ -10,7 +10,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, implement, validate, review-findings, learn-from-reports, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research, promote-rules)
+- `commands/*.md` — Slash command definitions (bootstrap, explore, propose, validate-spec, implement, validate, review-findings, learn-from-reports, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research, promote-rules)
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Installed globally to `~/.claude/knowledge-base/` by `setup.sh`.
 - `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Installed to `~/.claude/knowledge-base-rules.md` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
@@ -96,4 +96,5 @@ Task `ground_rules` use prefix convention: `general:security/general.md`, `proje
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
 - `/continue-task` detects resume phase by checking task status and existing artifacts (reports, branches, PR state)
 - `/research` activates anti-hallucination mode with citation discipline — useful for bug investigation and API contract review
+- `/validate-spec` is a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent — audits `specs/<feature>/` for contract gaps, logic gaps, missing pieces, and repo misalignment before `/implement` is allowed to start. Auto-chains from `/propose`. Findings flow through `/review-findings` and patch the spec/design/tasks files (not code). Distinct from `/validate-impl` (post-implementation Karen audit of claimed-vs-actual completion, per configurable-workflow ADR-008).
 - Flow changes (command chain, task state machine, validation gates, agent spawns, hooks, artifact flow) MUST trigger review of `docs/workflow-diagram.md` — update affected Mermaid diagrams in the same change. Minor wording tweaks exempt; any structural/edge/node change is not.

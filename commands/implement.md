@@ -4,10 +4,11 @@ Feature name: $ARGUMENTS
 
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
-2. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
+2. **Spec coherence gate** — read `specs/$ARGUMENTS/reports/spec-review.yaml`. Refuse to proceed unless the file exists and has `status: pass`. If missing or `status: findings|error`, stop and instruct: "Spec coherence gate not passed. Run `/validate-spec $ARGUMENTS` and resolve any findings before starting implementation."
+3. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
    - If no eligible task found, report which tasks are blocked and by which task IDs
    - If any task has `status: in-progress`, warn: "Task [ID] is stuck at in-progress (likely from a crashed session). Run `/continue-task $ARGUMENTS` to resume or manually reset its status."
-3. Check if any `done` tasks have an unmerged PR:
+4. Check if any `done` tasks have an unmerged PR:
    - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
    - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/$ARGUMENTS`. Merge it before starting the next task."
    - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."

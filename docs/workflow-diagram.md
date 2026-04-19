@@ -13,9 +13,11 @@ Visual map of the spec-driven development workflow: slash commands, agent spawns
 
 The core auto-chain (`/implement` → `/validate` → `/review-findings` → `/learn-from-reports` → `/ship`) runs without user intervention between steps. Human gates appear only at PR merge, at finding review, and at rule-candidate review. Side commands (`/spec-status`, `/continue-task`, `/pr-review`, etc.) are invokable anytime.
 
-When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-spec` (spec-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings` and spawns follow-up tasks.
+Before `/implement` starts, `/propose` auto-chains into `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
 
-Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-spec`.
+When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings` and spawns follow-up tasks.
+
+Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
 ```mermaid
 graph LR
@@ -26,6 +28,7 @@ graph LR
     subgraph Core["Core spec-driven flow"]
         EXP["/explore"]
         PROP["/propose"]
+        VSPEC_PRE["/validate-spec"]
         IMPL["/implement"]
         VAL["/validate"]
         REV["/review-findings"]
@@ -33,8 +36,8 @@ graph LR
         SHIP["/ship"]
     end
 
-    subgraph Audit["Spec-completion audit"]
-        VSPEC["/validate-spec"]
+    subgraph Audit["Implementation-completion audit"]
+        VIMPL["/validate-impl"]
         KAREN["Karen agent"]
     end
 
@@ -49,7 +52,9 @@ graph LR
 
     BOOT -.-> EXP
     EXP -.-> PROP
-    PROP -.-> IMPL
+    PROP --> VSPEC_PRE
+    VSPEC_PRE -->|findings| REV
+    VSPEC_PRE -->|pass| IMPL
     IMPL --> VAL
     VAL -->|findings| REV
     VAL -->|zero findings| LEARN
@@ -58,11 +63,11 @@ graph LR
     REV -->|skip| LEARN
     LEARN --> SHIP
     SHIP -.->|PR merged| IMPL
-    SHIP -.->|last task done| VSPEC
-    VSPEC --> KAREN
-    KAREN --> VSPEC
-    VSPEC -->|verdict=complete| Core
-    VSPEC -.->|verdict=reopen| REV
+    SHIP -.->|last task done| VIMPL
+    VIMPL --> KAREN
+    KAREN --> VIMPL
+    VIMPL -->|verdict=complete| Core
+    VIMPL -.->|verdict=reopen| REV
 
     CONT -.-> IMPL
     CONT -.-> VAL
@@ -252,6 +257,20 @@ graph LR
 ```mermaid
 graph LR
     PRR["/pr-review"] --> CR[Code Reviewer]
+```
+
+### 5f. `/validate-spec` — pre-implementation spec coherence
+
+```mermaid
+graph LR
+    VSPEC["/validate-spec"] --> SR[Spec Reviewer]
+```
+
+### 5g. `/validate-impl` — implementation-completion audit
+
+```mermaid
+graph LR
+    VIMPL["/validate-impl"] --> KAREN[Karen]
 ```
 
 ---
