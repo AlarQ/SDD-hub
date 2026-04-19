@@ -150,10 +150,10 @@ ADR-005.
 
 - **Status:** Accepted
 - **Context:** Spec-level audit needs an agent that specializes in claimed-vs-actual gap analysis across a feature's full artifact set. Options: (a) reuse existing Karen agent, (b) enhance Karen with spec-specific affordances, (c) fork a purpose-built `spec-completion-auditor`.
-- **Decision:** Reuse Karen unchanged. Supply spec-specific context (spec.md FR list, prd.md scope, task list, report paths, git diff range) via a wrapper prompt at the call-site in `commands/validate-spec.md`. Karen's existing ethos — "distinguish claimed vs actual completion, identify half-implemented features, produce realistic gap analysis" — is already the right shape; explicit spec/PRD parsing lives in the wrapper, not the agent definition.
+- **Decision:** Reuse Karen unchanged. Supply spec-specific context (spec.md FR list, prd.md scope, task list, report paths, git diff range) via a wrapper prompt at the call-site in `commands/validate-impl.md`. Karen's existing ethos — "distinguish claimed vs actual completion, identify half-implemented features, produce realistic gap analysis" — is already the right shape; explicit spec/PRD parsing lives in the wrapper, not the agent definition.
 - **Consequences:**
   - Positive: zero agent-definition churn; Karen's identity stays generic and useful elsewhere; wrapper prompt is the only specialization surface and is easy to iterate; matches existing pattern of `/validate` Phase 2 spawning generic agents with phase-specific context.
-  - Negative: wrapper-prompt drift (mitigated by a single wrapper template versioned under `commands/validate-spec.md`); Karen output format not strictly schema-constrained at the agent level (mitigated by FR-id allowlist + Markdown section headers enforced in the wrapper).
+  - Negative: wrapper-prompt drift (mitigated by a single wrapper template versioned under `commands/validate-impl.md`); Karen output format not strictly schema-constrained at the agent level (mitigated by FR-id allowlist + Markdown section headers enforced in the wrapper).
 - **Alternatives:** (b) enhance Karen with spec-awareness (rejected — couples Karen to this workflow, bloats agent definition); (c) fork `spec-completion-auditor` (rejected — duplicates Karen's ethos, two agents to maintain, no functional gain).
 
 ## Backend Design
@@ -260,7 +260,7 @@ Validator: `task-manager.sh validate` rejects non-bool values (e.g., string `"ye
 - **`task-manager.sh`** — same env-var read pattern. Uses `$WF_SPEC_STORAGE` to locate task files. Legacy fallback.
   - **New subcommand (added in T017):** `task-manager.sh create-followup <feature> <fr-id> <description>`. First subcommand that *creates* task files; extends the canonical CLI set documented in CLAUDE.md (`validate`, `set-status`, `unblock`, `next`, `check-unvalidated`, `status`) to seven verbs.
     - **Inputs:** `<feature>` — spec id (must exist under `$WF_SPEC_STORAGE`); `<fr-id>` — must match one of the `### FR-N:` headings in `spec.md` (FR-id allowlist, per FR-17 security); `<description>` — free text, ≤256 chars, escaped when written.
-    - **Outputs:** writes one new task file at `$WF_SPEC_STORAGE/<feature>/tasks/<NNN>-<slug>.md` with `status: todo`, `blocked_by: []`, `ground_rules` inherited verbatim from `spec.md §Applicable Ground Rules`. Prints the created filename on stdout; no JSONL event (the caller — `/validate-spec` — emits the audit-level monitor event).
+    - **Outputs:** writes one new task file at `$WF_SPEC_STORAGE/<feature>/tasks/<NNN>-<slug>.md` with `status: todo`, `blocked_by: []`, `ground_rules` inherited verbatim from `spec.md §Applicable Ground Rules`. Prints the created filename on stdout; no JSONL event (the caller — `/validate-impl` — emits the audit-level monitor event).
     - **Idempotency:** re-running with the same `<feature>, <fr-id>` returns exit 0 and prints the existing filename without creating a duplicate (lookup by `FR-<id>` token in task `name`). Different `<description>` on a re-run is ignored; the original file is authoritative.
     - **State transition:** introduces a new *create* transition `∅ → todo` (no prior state). The transition is author-time only — it does not participate in the existing `blocked → todo → in-progress → implemented → review → done` machine for existing tasks.
     - **Docs:** `docs/workflow-diagram.md` MUST be updated in the same PR (T017 estimated file) to show the audit → `/review-findings` → `create-followup` → new-task edge and the reopen loop.
@@ -405,7 +405,7 @@ all-done detector: count tasks where status != done
 emit spec_last_task_done event
    │
    ▼
-/implement auto-chain observes event → invokes /validate-spec <feature>
+/implement auto-chain observes event → invokes /validate-impl <feature>
    │
    ├─ source config-loader.sh --spec <feature>
    │  → WF_VALIDATE_SCOPE, WF_SPEC_GATES
@@ -441,8 +441,8 @@ verdict branch:
 | **LOW** | Empty gate intersection at `/validate` — false-green ship. | Fail closed when intersection is empty AND task category is code-bearing. Loud `gate_skip` event with reason `empty intersection`. Block transition to `done`. Doc-only tasks declare empty-OK explicitly. |
 | **LOW** | Referential integrity across the three config files — spec config references IDs in `gates.yml` and `~/.claude/agents/`; either side can drift. | `config-loader.sh` validates all referenced IDs at parse time; fails closed listing missing IDs. `/config` re-resolves against current pools. |
 | **MEDIUM** | `per-spec` mode delays gate failure feedback until spec end; a bad change caught only after N tasks are already committed. | Mandatory Karen audit + FR × status matrix catches behavioural gaps at end; `both` mode available when user wants per-task safety net plus end-of-spec audit; report verdict `reopen` spawns follow-up tasks rather than silently merging. |
-| **LOW** | Karen wrapper-prompt drift — spec-audit quality depends on one prompt template not the agent definition. | Template versioned in `commands/validate-spec.md`; schema-shape test on audit report verifies FR-matrix presence + status enum + orphan-code section; FR-id allowlist rejects hallucinated IDs. |
-| **LOW** | All-done detector races — concurrent `set-status done` calls could double-fire `spec_last_task_done`. | Detector checks prior `spec_audit_done` event before emitting; `/validate-spec` is idempotent within a single done-sweep; serial execution rule (CLAUDE.md) already forbids concurrent task completion. |
+| **LOW** | Karen wrapper-prompt drift — spec-audit quality depends on one prompt template not the agent definition. | Template versioned in `commands/validate-impl.md`; schema-shape test on audit report verifies FR-matrix presence + status enum + orphan-code section; FR-id allowlist rejects hallucinated IDs. |
+| **LOW** | All-done detector races — concurrent `set-status done` calls could double-fire `spec_last_task_done`. | Detector checks prior `spec_audit_done` event before emitting; `/validate-impl` is idempotent within a single done-sweep; serial execution rule (CLAUDE.md) already forbids concurrent task completion. |
 
 ## Scaling / Integration Notes
 
@@ -457,9 +457,9 @@ verdict branch:
 
 **New (Rust):** `workflow-tui/src/model/workflow_config.rs`, `workflow-tui/src/model/spec_config.rs`, `workflow-tui/src/model/gate.rs`, `workflow-tui/src/parse/workflow_config.rs`, `workflow-tui/src/parse/spec_config.rs`, `workflow-tui/src/parse/gates.rs`, `workflow-tui/src/ui/pipeline.rs`
 
-**New (commands/agents):** `commands/config.md`, `commands/validate-spec.md`, `agents/engineering/engineering-config-inferencer.md`
+**New (commands/agents):** `commands/config.md`, `commands/validate-impl.md`, `agents/engineering/engineering-config-inferencer.md`
 
-**Unchanged agents (reused):** `agents/karen.md` — spawned from `/validate-spec` with wrapper prompt (ADR-008)
+**Unchanged agents (reused):** `agents/karen.md` — spawned from `/validate-impl` with wrapper prompt (ADR-008)
 
 **Modified (shell):** `scripts/monitor.sh`, `scripts/task-manager.sh`, `scripts/pre-commit-hook.sh`, `setup.sh`
 
