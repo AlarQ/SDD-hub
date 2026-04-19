@@ -2,6 +2,7 @@
 id: "001"
 name: "Scaffold config-paths.sh and gates.yml registry"
 status: done
+pr_url: "https://github.com/AlarQ/SDD-hub/pull/30"
 blocked_by: []
 max_files: 5
 estimated_files:
