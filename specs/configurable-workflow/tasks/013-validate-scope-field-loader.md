@@ -1,7 +1,7 @@
 ---
 id: "013"
 name: "validate_scope field + loader export"
-status: blocked
+status: todo
 blocked_by: ["002"]
 max_files: 5
 estimated_files:
