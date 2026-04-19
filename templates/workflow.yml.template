@@ -1,0 +1,17 @@
+# .workflow.yml — repo-root config (stable lifecycle). Written by /bootstrap.
+# All fields optional; defaults shown. Loader fails closed if this file is
+# absent in an active workflow invocation (see ADR-001, ADR-005).
+
+# spec_storage: specs/
+#   Path (relative to repo root or absolute) where specs/ live. Must resolve
+#   under $HOME or the repo root; no symlink ancestors; no '..' segments.
+
+# gate_pool: knowledge-base/gates.yml
+#   Location of the canonical gate registry.
+
+# agent_pool: ~/.claude/agents
+#   Directory containing agent definitions referenced by per-spec config.
+
+# validate_scope: per-task
+#   One of: per-task, per-spec, both. Governs when /validate runs gates.
+#   See ADR-007.

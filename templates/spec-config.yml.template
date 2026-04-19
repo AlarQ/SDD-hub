@@ -1,0 +1,23 @@
+# specs/<feature>/config.yml — per-spec config (ephemeral lifecycle).
+# Produced by /explore step 0 (config-inferencer) and edited via /config.
+# All fields optional; defaults shown.
+
+# tags: []
+#   Free-form spec tags. Each matches ^[a-zA-Z0-9_-]{1,32}$.
+
+# gates: []
+#   Gate ceiling for this spec. Each id must exist in knowledge-base/gates.yml.
+#   /validate runs the intersection of these and the task's ground_rules
+#   eligible set (ADR-003).
+
+# agents:
+#   explore: []
+#   propose: []
+#   implement: []
+#   validate: []
+#   pr-review: []
+#   Fully-qualified agent ids (<category>/<name> or bare <name>). Each must
+#   resolve under agent_pool. See design.md Agent ID grammar.
+
+# validate_scope: per-task
+#   Optional override of .workflow.yml validate_scope. ADR-007.

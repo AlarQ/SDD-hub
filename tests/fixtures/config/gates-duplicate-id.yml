@@ -1,0 +1,11 @@
+gates:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: rust-clippy
+    command: "cargo clippy --all-targets"
+    applies_to: [rust]
+    category: lint
+    blocking: true

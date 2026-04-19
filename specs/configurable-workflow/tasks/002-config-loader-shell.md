@@ -1,7 +1,7 @@
 ---
 id: "002"
 name: "Implement scripts/config-loader.sh sourced loader"
-status: blocked
+status: todo
 blocked_by: ["001"]
 max_files: 3
 estimated_files:
