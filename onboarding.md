@@ -10,6 +10,7 @@ Install these before running setup:
 |------|---------|---------|
 | `yq` | `brew install yq` | YAML parsing in task-manager.sh |
 | `gh` | `brew install gh` | GitHub CLI for PRs and `/pr-review` |
+| `perl` | ships with macOS | macOS fallback for GNU `timeout`/`gtimeout` in `scripts/config-loader.sh::wf__timeout`; not needed on Linux (GNU coreutils `timeout` is preferred there) |
 | Claude Code | [claude.ai/claude-code](https://claude.ai/claude-code) | Slash command host |
 
 Language-specific validation tools (linters, test runners, semgrep) are installed later, after `/bootstrap` creates language files for your project.

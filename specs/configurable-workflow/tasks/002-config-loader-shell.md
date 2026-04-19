@@ -1,13 +1,17 @@
 ---
 id: "002"
 name: "Implement scripts/config-loader.sh sourced loader"
-status: todo
+status: done
 blocked_by: ["001"]
-max_files: 3
+max_files: 7
 estimated_files:
   - scripts/config-loader.sh
   - tests/test-config-loader.sh
   - tests/fixtures/config/README.md
+  - tests/fixtures/config/workflow-vault.yml
+  - tests/fixtures/config/spec-config-valid.yml
+  - tests/fixtures/config/spec-config-unknown-gate.yml
+  - tests/fixtures/config/billion-laughs.yml
 test_cases:
   - "Loader exports WF_SPEC_STORAGE from valid .workflow.yml"
   - "Missing .workflow.yml fails closed with exit 2, naming repo root and instructing the user to run /bootstrap; no silent defaults, no WF_* exports partially written"
@@ -66,3 +70,12 @@ Sourced shell loader that parses `.workflow.yml`, `gates.yml`, and (optionally) 
 - Loader writes nothing to disk; never executes values from YAML.
 - `gates.yml` uncommitted-state check: `git diff --quiet -- knowledge-base/gates.yml || warn`.
 - Test fixtures live under `tests/fixtures/config/` (valid, malformed, parse-bomb, traversal cases).
+
+### Decisions made during T002 implementation
+
+- **Portable timeout:** macOS ships without GNU `timeout`. Added `wf__timeout` helper that prefers `timeout`/`gtimeout` and falls back to a Perl `alarm` fork/exec that returns rc 124 on timeout. Keeps the single 5-second budget promise without hard-requiring coreutils.
+- **yq coalescing:** mikefarah/yq rejects the jq-style `// empty` token. Use `.gates[]?` / `.agents.<phase>[]?` (returns no output on missing) instead. `wf__json_get` uses a literal sentinel `__WF_NULL__` for default handling since the `//` operator needs a quoted expression.
+- **Exit-code mapping:** `.workflow.yml` malformed → 2 (per spec table: "invalid path in it"); `gates.yml` malformed → 3; per-spec `config.yml` missing/malformed/unknown-id → 4; any `yq` timeout → 5; yq binary missing → 6.
+- **Spec-storage validation order:** literal `..` rejection first (catches `../../etc` before realpath), then `realpath_safe`, then directory-existence check. Matches T001's `realpath_safe` contract.
+- **Agent-phase exports:** `WF_SPEC_AGENTS_<PHASE>` uses `tr '[:lower:]-' '[:upper:]_'` so `pr-review` → `PR_REVIEW`. Only phases in the ADR-004 allowlist (`explore|propose|implement|validate|pr-review`) are accepted; unknown phases fail closed with exit 4.
+- **Partial unset on error:** every failure path calls `wf__unset_partials` before `return`, which also unsets `WF_SPEC_AGENTS_*` via `compgen`. Guarantees "no partial `WF_*` exports" contract from spec row for `WF_SPEC_HAS_CONFIG`.
