@@ -3,11 +3,13 @@ id: "017"
 name: "Spec audit report + /review-findings integration + reopen flow"
 status: blocked
 blocked_by: ["014"]
-max_files: 5
+max_files: 7
 estimated_files:
+  - CLAUDE.md
   - commands/review-findings.md
   - commands/validate-impl.md
   - scripts/task-manager.sh
+  - scripts/monitor.sh
   - docs/workflow-diagram.md
   - tests/test-spec-audit-integration.sh
 test_cases:
@@ -21,6 +23,8 @@ test_cases:
   - "Report frontmatter schema validated: {feature, timestamp, scope, verdict} required; verdict ∈ {complete, reopen}"
   - "Audit report body contains FR matrix section with explicit status per FR ∈ {implemented, partial, missing}"
   - "docs/workflow-diagram.md documents the create-followup transition and the audit → /review-findings → follow-up-task reopen loop"
+  - "spec_reaudit_requested appears in monitor.sh closed allowlist"
+  - "CLAUDE.md task-manager CLI list includes create-followup as the seventh verb"
 ground_rules:
   - general:languages/shell.md
   - general:security/general.md

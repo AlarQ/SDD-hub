@@ -7,11 +7,11 @@ type: test-strategy
 
 ## Overview
 
-Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs, exits), T005 mirrors them in Rust, T003 owns cwd-walk-up integration for shell callers, T007 owns the single intersection computation in Rust with shell/Rust parity, T004 owns phase-command ceiling semantics, T011 owns end-to-end dogfood against a non-default `spec_storage`.
+Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs, exits), T003 owns cwd-walk-up integration for shell callers, T004 owns phase-command ceiling semantics, T011 owns end-to-end dogfood against a non-default `spec_storage`. TUI parity and pipeline-widget tests are deferred with the TUI work (see `DEFERRED.md`).
 
 ## Fixture Ownership
 
-`tests/fixtures/config/` is shared across T001 (creates), T002 (extends), T005 (consumes read-only from Rust), T013 (extends with `validate_scope` variants), and others that reuse fixtures.
+`tests/fixtures/config/` is shared across T001 (creates), T002 (extends), T013 (extends with `validate_scope` variants), and others that reuse fixtures.
 
 **Single-owner rule for fixture *schema*:** T001 owns the shape of every fixture file it creates. Any task that needs to **change an existing fixture's shape** (rename a key, add a required field, remove a field, alter a value's semantics) MUST edit T001's test suite in the same PR so its assertions stay coherent.
 
@@ -37,7 +37,7 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
 - **Theme:** loader contract — WF_* exports, exit codes, single-parse caching
 - **Owns:**
   - WF_SPEC_STORAGE export from valid `.workflow.yml`
-  - Missing file → exit 0 with defaults
+  - Missing `.workflow.yml` → **exit 2** with error naming repo root and instructing `/bootstrap` (no silent defaults)
   - `gates.yml` malformed → exit 3; unknown spec gate → exit 4; path traversal → exit 2
   - yq billion-laughs → exit 5 within 5 s
   - Idempotency guard (`WF_CONFIG_LOADED=1`)
@@ -74,59 +74,24 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
   - `/validate` intersection (spec ceiling ∩ ground_rules eligible)
   - `gate_skip` emission for ground_rules gate outside ceiling
   - Empty intersection on code task blocks `done` transition
-  - Missing `config.yml` legacy fallback (full ground_rules set, silent)
+  - Missing `config.yml` on active phase command → fail closed exit 4, explicit error, no gate executes, no agent spawns
   - `/implement` snapshot + `/ship` mid-task drift detection (normalized JSON compare: whitespace edit → no drift; gate removed/added → drift)
   - Unknown agent ID in spec config → phase command exits non-zero
   - Doc-only empty-OK task passes with zero gates
-- **Must NOT test:** loader exit codes (T002), TUI pipeline rendering (T007)
+- **Must NOT test:** loader exit codes (T002)
 - **Integration seams:**
   - Phase command ↔ loader `--spec` ↔ `gates.yml` filter
   - `/implement` snapshot ↔ `/ship` drift comparison
 - **Shared fixtures (creates):** `tests/fixtures/config/task-rust-ground-rules.md`, `task-doc-only-empty-ok.md`
 
-### T005 — tui-config-parsers-and-models
-- **Theme:** Rust parser parity with shell loader
-- **Owns:**
-  - `parse::workflow_config::load` walk-up from nested cwd
-  - Rust realpath defense against `../../etc`
-  - `parse::spec_config::parse` returns `Ok(None)` for missing file
-  - `gates.rs` duplicate IDs / unknown `applies_to` / unknown `category` rejection
-  - `spec_config` rejects unknown gate/agent IDs
-  - No-panic guarantee on malformed YAML (`Result::Err` only)
-- **Must NOT test:** scanner integration (T006), intersection rendering (T007)
-- **Integration seams:** Rust parser ↔ shared YAML fixtures (parity: same fixture, same verdict as shell)
-- **Shared fixtures:** REUSES `tests/fixtures/config/*` from T001/T002 — MUST NOT duplicate. Rust reads via `CARGO_MANIFEST_DIR/../tests/fixtures/config/`.
+### T005/T006/T007 — DEFERRED (TUI)
 
-### T006 — tui-scanner-spec-list-watcher-integration
-- **Theme:** scanner honors `spec_storage` + watcher debounce + graceful legacy handling
-- **Owns:**
-  - Scanner reads non-default `spec_storage`
-  - Legacy spec renders with "no config" indicator
-  - `.workflow.yml` edit → single reload within debounce window
-  - Parse error → last-good config retained + `ParseWarning` surfaced
-  - `Spec.config = None` when `config.yml` absent
-  - `app.rs` holds `WorkflowConfig` at top; UI gets immutable refs
-- **Must NOT test:** parser-level schema (T005), pipeline widget rendering (T007)
-- **Integration seams:** watcher ↔ parse ↔ app state rebuild
-- **Shared fixtures:** REUSES T001/T002 fixtures; adds `workflow-tui/tests/fixtures/legacy-spec/`
-
-### T007 — tui-pipeline-widget
-- **Theme:** single source of truth for intersection rendering + shell/Rust parity
-- **Owns:**
-  - Pipeline widget renders ceiling gates for Rust task
-  - Ceiling-skipped vs executed visual distinction
-  - Empty intersection on code task → fail-closed indicator
-  - Doc-only empty-OK → OK state
-  - **Parity test:** intersection result equals shell loader's on same fixture (both sides emit sorted JSON `{executed, skipped}` for byte-equal compare)
-  - Architectural test: no other UI module computes effective gates
-- **Must NOT test:** watcher/scanner plumbing (T006), actual gate execution (T004)
-- **Integration seams:** SHELL ↔ RUST intersection parity (owns this seam — final context holder)
-- **Shared fixtures:** REUSES T001/T002 + T004 task fixtures; parity fixture bytes identical across shell and Rust.
+TUI parser, scanner integration, and pipeline widget are postponed with the rest of FR-13. See `DEFERRED.md`. Task IDs 005–007 are left unused; future-UI spec will pick these up.
 
 ### T008 — config-inferencer-agent
 - **Theme:** schema-shape validity + secret-read prohibition + fallback
 - **Owns:**
-  - Emitted `config.yml` parses against T002/T005 validators
+  - Emitted `config.yml` parses against T002 validator
   - All emitted gate IDs resolve in `gates.yml`
   - All emitted agent IDs resolve under `agent_pool`
   - Prompt-contract test: forbids reading `.env*`, `*.pem`, `id_*`, `.git/config`
@@ -167,19 +132,22 @@ Layer tests by trust boundary: T001/T002 own shell loader invariants (paths, IDs
 - **Theme:** dogfood E2E against non-default `spec_storage` + fallback removal cleanup
 - **Owns:**
   - `/bootstrap` writes `.workflow.yml` with defaults in fresh repo
+  - `/bootstrap` on existing repo (prior files, no `.workflow.yml`) writes only `.workflow.yml` — other files untouched
+  - `/bootstrap` is idempotent: re-run on a repo that already has `.workflow.yml` exits 0, prints current config, does not modify the file
+  - `/bootstrap --force` shows diff against template defaults and overwrites on single-key confirmation
+  - `/bootstrap --force` refuses (non-zero exit) when `.workflow.yml` target path is a symlink
   - `setup.sh --force` installs all new artifacts globally
   - **E2E against `/tmp/vault`** — must explicitly exercise:
     (a) `/bootstrap` writes `.workflow.yml` in throwaway repo with `spec_storage=/tmp/vault`
     (b) `/explore` step 0 produces `config.yml` under `/tmp/vault`
     (c) monitor events land under `/tmp/vault` (not `./specs`)
-    (d) TUI scanner discovers the spec
-    (e) `/validate` runs a non-empty intersection
-    (f) `/ship` snapshot comparison succeeds
+    (d) `/validate` runs a non-empty intersection
+    (e) `/ship` snapshot comparison succeeds
   - Grep guard: no `specs/` hardcoded fallback remains
   - All `knowledge-base/languages/*.md` mark `validation_tools` display-only
   - Existing tests still green after fallback removal
 - **Must NOT test:** individual loader units (T002), individual caller cwd tests (T003)
-- **Integration seams:** FULL STACK — `.workflow.yml` → loader → callers → phase commands → TUI
+- **Integration seams:** FULL STACK — `.workflow.yml` → loader → callers → phase commands
 - **Shared fixtures (creates):** `tests/fixtures/e2e/vault-repo/` scratch workspace
 
 ### T012 — docs-update
@@ -270,11 +238,14 @@ Every BDD scenario from `spec.md` → exactly one owning task.
 |---|---|
 | Explore writes config after approval | T009 |
 | Validate applies ceiling semantics | T004 |
-| Missing spec config falls back to legacy | T004 |
+| Missing spec config blocks active processing | T004 |
 | Gates registry loads with `applies_to` tags (FR-2) | T001 |
 | Config loader exports WF_* env vars on first source (FR-10) | T002 |
 | Monitor walks up for `.workflow.yml` | T003 |
-| Bootstrap writes starter config | T011 |
+| Bootstrap writes starter config on fresh repo | T011 |
+| Missing .workflow.yml blocks active commands | T002 |
+| Bootstrap on existing repo adds only .workflow.yml | T011 |
+| Bootstrap is idempotent when .workflow.yml already exists | T011 |
 | Config command regenerates spec config | T010 |
 
 ### Edge Cases & Errors
@@ -283,7 +254,6 @@ Every BDD scenario from `spec.md` → exactly one owning task.
 | Unknown gate ID in spec config fails closed | T002 |
 | `gates.yml` parse error fails closed | T002 |
 | yq timeout on config parse | T002 |
-| Legacy scanner tolerates missing `config.yml` | T006 |
 | Inferencer failure falls back to manual | T009 (UX); T008 owns timeout → template fallback |
 
 ### Validate Scope + Spec Audit
@@ -321,11 +291,8 @@ No unowned scenarios. The deliberate split (loader-level rejection in T001/T002;
 | Loader WF_* contract ↔ shell callers (monitor/task-manager/pre-commit) | T003 | Callers are consumers with full knowledge of both sides and cwd/hook context |
 | Loader `--spec` output ↔ phase command intersection ↔ ground_rules | T004 | `/validate` is the intersection authority |
 | `/implement` snapshot ↔ `/ship` drift comparison | T004 | Both ends of snapshot live in phase-command layer |
-| Shared YAML fixture ↔ shell verdict ↔ Rust verdict (parser parity) | T005 | Rust is newcomer against established shell contract |
-| Intersection parity: shell loader vs TUI pipeline widget | T007 | Widget is sole Rust renderer of intersection; sorted JSON byte-compare against shell fixture |
-| Watcher ↔ parse ↔ app state rebuild | T006 | Scanner integration owns the reload path |
 | `/explore` step 0 ↔ inferencer agent ↔ monitor event emission | T009 | `/explore` orchestrates all three |
-| Full-stack dogfood: `.workflow.yml` → loader → callers → commands → TUI | T011 | Cleanup task is final gate; E2E against `/tmp/vault` is defining deliverable |
+| Full-stack dogfood: `.workflow.yml` → loader → callers → commands | T011 | Cleanup task is final gate; E2E against `/tmp/vault` is defining deliverable |
 | `WF_VALIDATE_SCOPE` ↔ `/validate` skip branch ↔ `/validate-impl` union | T016 | `/validate-impl` is the sole union-execution authority; `/validate` is the sole skip-branch authority |
 | `task-manager.sh set-status done` ↔ `.monitor.jsonl` event ↔ `/implement` chain invocation | T015 | Detector + auto-chain form a single feedback edge; splitting their tests hides race/idempotency bugs |
 | `/validate-impl` ↔ Karen (Agent tool) ↔ audit report schema | T014 | Wrapper prompt + report frontmatter form the agent contract; stub Karen for determinism |
@@ -336,12 +303,10 @@ No unowned scenarios. The deliberate split (loader-level rejection in T001/T002;
 | Severity | Risk | Mitigation |
 |---|---|---|
 | **HIGH** | Dogfood breakage during T003 path-resolution refactor. Half-migrated call sites strand in-flight specs and block commits. | T003 runs full test matrix against BOTH default repo AND `/tmp/vault` repo in same CI job. T003→T011 form unbreakable chain — do not mark T003 done until T011 vault E2E is green on throwaway repo. Keep hardcoded `specs/` fallback behind feature flag until T011 removes it. |
-| **HIGH** | Shared-fixture drift between T001/T002 (shell) and T005/T007 (Rust). If each side maintains copies, parity assertion in T007 becomes meaningless. | Canonicalize under `tests/fixtures/config/` at repo root (NOT under `workflow-tui/tests/`). Rust reads via `CARGO_MANIFEST_DIR/../tests/fixtures/config/`. T001 creates; T002/T005/T007 consume same bytes. CI check fails if `workflow-tui/tests/fixtures/config/` duplicates shared set. |
 | **MEDIUM** | LLM nondeterminism in T008 — schema-shape tests pass on semantically wrong configs (e.g., python gates for Rust repo). | Negative-shape assertions: given Cargo.toml-only, output MUST include ≥1 Rust gate and MUST NOT include python/js-only gates. Log inferencer inputs + outputs to monitor events for offline review. |
-| **MEDIUM** | T011 E2E vault test ambiguity — "goes green end-to-end" undefined. Risk of shallow smoke test. | T011 E2E must explicitly exercise steps (a)–(f) listed in its task owns section above. Assert each step produces its expected artifact. |
+| **MEDIUM** | T011 E2E vault test ambiguity — "goes green end-to-end" undefined. Risk of shallow smoke test. | T011 E2E must explicitly exercise steps (a)–(e) listed in its task owns section above. Assert each step produces its expected artifact. |
 | **MEDIUM** | T004 "tampered spec config" test — snapshot format instability causes false positives on yq canonicalization. | Snapshot compares normalized JSON of effective fields (`gates[]`, `agents` map), not raw YAML text. Cover: whitespace-only → no drift; gate removed/added → drift; agent reordering → drift if order-significant (document choice). |
 | **LOW** | T003 pre-commit hook subdir test must reproduce git's hook invocation context (cwd = subdir, GIT_DIR set). Naive `cd subdir && run` misses git env. | Real git init fixture under `tests/fixtures/nested-subdir-repo/`; invoke via `git -C subdir commit --dry-run` or call hook directly with `PWD=subdir` AND `GIT_DIR` set. Do not rely on bare cd. |
-| **LOW** | T007 parity test brittleness — shell and Rust may produce intersection results in different orders. | Canonicalize to sorted list before comparison on both sides. Parity fixture emits JSON `{"executed":[sorted],"skipped":[sorted]}`. Shell loader gets tiny test-only helper to emit same shape. |
 | **MEDIUM** | T014 Karen-stub drift — tests use a stubbed Karen for determinism; stub could lag real Karen's output format. | Stub output and real-Karen prompt live in the same `commands/validate-impl.md` file; schema-shape test validates both stub output AND any real-Karen output against the frontmatter + FR-matrix section contract. CI periodically replays the stubbed prompt against real Karen and diffs shape only. |
 | **MEDIUM** | T017 follow-up task creation could create duplicate tasks if the same `spec-audit-*.md` report is processed twice. | `task-manager.sh create-followup` writes a `source_report` field into the task frontmatter; creation is a no-op when an existing task already references that report+FR pair. |
 | **LOW** | T015 all-done detector false-negative on concurrent completion — two near-simultaneous `set-status done` calls could both think another task is still pending. | Serial execution rule (CLAUDE.md) forbids concurrent task completion; detector verifies by re-reading all task statuses after the transition rather than trusting prior state. |

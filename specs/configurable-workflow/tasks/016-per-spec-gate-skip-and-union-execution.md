@@ -2,7 +2,7 @@
 id: "016"
 name: "Per-spec gate skip + union execution at /validate-impl"
 status: blocked
-blocked_by: ["013", "004"]
+blocked_by: ["013", "004", "014"]
 max_files: 4
 estimated_files:
   - commands/validate.md
@@ -18,6 +18,8 @@ test_cases:
   - "gate_skip event for per-spec-skipped tasks includes task id, feature, scope, and gate ids skipped"
   - "/implement auto-chain under scope=per-spec proceeds to /review-findings with zero findings after gate_skip"
   - "Doc-only tasks with empty_intersection_ok: true pass cleanly under all three scope modes"
+  - "Union execution: blocking gate non-zero exit → audit verdict forced to reopen; failing-gate output passed to Karen wrapper as evidence"
+  - "Union execution: non-blocking gate failure recorded but does not force reopen"
 ground_rules:
   - general:languages/shell.md
   - general:architecture/general.md
@@ -37,7 +39,7 @@ Make scope semantics real. `/validate` honors `WF_VALIDATE_SCOPE` and short-circ
 ## Implementation Notes
 
 - "Cumulative diff" range = first-task branch-point → current HEAD. Same range used by Karen wrapper prompt in T014.
-- Union computation is deterministic given sorted inputs — document the sort order so the parity test in T007 stays stable.
+- Union computation is deterministic given sorted inputs — document the sort order.
 - Gate execution paralysm: same parallelism model as current `/validate` (spawn agents in parallel per existing `/validate` Phase 2 pattern).
 - Empty-intersection fail-closed rule (ADR-003) still applies: if the union is empty AND at least one task is code-bearing, `/validate-impl` fails closed before spawning Karen.
 - Do NOT bypass fail-closed when `scope=per-spec` — an empty union on a code spec is still a bug.

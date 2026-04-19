@@ -30,7 +30,7 @@ ground_rules:
 
 ## Description
 
-Create the leaf shell helper module `scripts/config-paths.sh` and seed the canonical gate registry `knowledge-base/gates.yml`. Pure helpers — no sourcing of any workflow script. Also write the two YAML templates that `/bootstrap` and `/explore` will use later.
+Create the leaf shell helper module `scripts/config-paths.sh` and seed the canonical gate registry `knowledge-base/gates.yml`. Pure helpers — no sourcing of any workflow script. Also write the two YAML templates that `/bootstrap` and `/explore` will use later. (Implements ADR-001 three-file split: `gates.yml` is the canonical gate registry.)
 
 ## Public API (config-paths.sh)
 

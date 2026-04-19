@@ -10,7 +10,7 @@ estimated_files:
   - tests/fixtures/config/README.md
 test_cases:
   - "Loader exports WF_SPEC_STORAGE from valid .workflow.yml"
-  - "Missing .workflow.yml returns 0 with default spec_storage=specs/"
+  - "Missing .workflow.yml fails closed with exit 2, naming repo root and instructing the user to run /bootstrap; no silent defaults, no WF_* exports partially written"
   - "Malformed gates.yml fails closed with exit 3"
   - "Unknown spec gate ID fails closed with exit 4 naming the missing ID"
   - "spec_storage path traversal (../../etc) fails closed with exit 2"
@@ -20,7 +20,7 @@ test_cases:
   - "Uncommitted gates.yml prints warning to stderr but loader still succeeds"
   - "CI grep guard: loader contains no source reference to any workflow script"
   - "--spec sets WF_SPEC_GATES, WF_SPEC_AGENTS_<PHASE>, WF_SPEC_HAS_CONFIG"
-  - "Missing per-spec config.yml sets WF_SPEC_HAS_CONFIG=0 with no error"
+  - "Missing per-spec config.yml when --spec provided fails closed with exit 4; no partial WF_* exports written"
   - "gates.yml tracked-state warning printed when file has uncommitted modifications"
   - "Integration seam: loader composes config-paths.sh primitives under unified WF_* contract"
   - "Extends shared fixture set under tests/fixtures/config/ (workflow-vault.yml, spec-config-valid.yml, spec-config-unknown-gate.yml, billion-laughs.yml)"
@@ -33,7 +33,9 @@ ground_rules:
 
 ## Description
 
-Sourced shell loader that parses `.workflow.yml`, `gates.yml`, and (optionally) `specs/<feature>/config.yml` once per process. Validates against the schemas in `design.md §Backend Design`. Exports `WF_*` env vars. Provides `export` CLI mode for git hooks that cannot source.
+Sourced shell loader that parses `.workflow.yml`, `gates.yml`, and (optionally) `specs/<feature>/config.yml` once per process. (Implements ADR-006: sourced loader with a strict one-way dependency on `config-paths.sh`; loader sources no other workflow script.) Validates against the schemas in `design.md §Backend Design`. Exports `WF_*` env vars. Provides `export` CLI mode for git hooks that cannot source.
+
+`.workflow.yml` is **required**: the loader fails closed (exit 2) when the file is absent. No missing-with-defaults path. Per-field defaults in the schema apply only to fields missing **inside a present file**.
 
 ## Public API
 
@@ -49,8 +51,8 @@ Sourced shell loader that parses `.workflow.yml`, `gates.yml`, and (optionally) 
 
 | Code | Meaning |
 |---|---|
-| 0 | OK (incl. missing-with-defaults) |
-| 2 | Invalid path in `.workflow.yml` |
+| 0 | OK (file present and valid) |
+| 2 | `.workflow.yml` missing OR invalid path in it (error distinguishes the two; missing case points at `/bootstrap`) |
 | 3 | `gates.yml` invalid or missing when referenced |
 | 4 | Spec `config.yml` invalid or unknown ID |
 | 5 | `yq` timeout |

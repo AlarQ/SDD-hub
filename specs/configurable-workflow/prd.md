@@ -23,16 +23,15 @@ Externalize "which gates/agents run" and "where specs live" into config. LLM cur
 
 **IN**
 
-- `.workflow.yml` at repo root: `spec_storage` path, gate pool reference, agent pool reference
+- `.workflow.yml` at repo root: `spec_storage` path, gate pool reference, agent pool reference. **Required** for any active invocation — missing file fails closed (loader exit 2). `/bootstrap` is the sole writer and must run on existing repos (idempotent; no-op when file already present; `--force` overwrites after diff confirmation and refuses through symlinks).
 - `knowledge-base/gates.yml`: explicit deterministic-gate registry with `applies_to` tags (language-specific or `[any]` for cross-cutting)
 - `specs/<feature>/config.yml` per-spec: chosen gates + agents-per-phase, LLM-proposed at `/explore` time, user-approved
 - `config-inferencer` agent: reads repo signals (`Cargo.toml`, `package.json`, `go.mod`, etc.), gates.yml, `agents/` directory, spec description; emits draft `config.yml`
 - `/explore` step 0: spawn inferencer, render summary, one-key approve / `/config` override, write draft
-- All phase commands (`/propose`, `/implement`, `/validate`, `/pr-review`, `/review-findings`) read agent lists from spec config with legacy fallback
+- Phase commands (`/propose`, `/implement`, `/validate`, `/pr-review`) read agent lists from spec `config.yml`; missing file → fail closed, no hardcoded-default fallback. (`/review-findings` is not an `agents`-map consumer — the schema excludes it.) `config.yml` is mandatory for any active processing of a spec created after this feature ships. Pre-existing done specs are untouched (see OUT).
 - `/validate` applies **ceiling semantics**: executes intersection of spec-eligible gates ∩ task `ground_rules`
-- Path resolution refactor: walk up for `.workflow.yml` instead of `specs/` across `monitor.sh`, `task-manager.sh`, `pre-commit-hook.sh`, TUI scanner
+- Path resolution refactor: walk up for `.workflow.yml` instead of `specs/` across `monitor.sh`, `task-manager.sh`, `pre-commit-hook.sh`
 - Monitor event categories: `config_inferred`, `config_approved`, `agent_spawn`, `gate_skip`
-- TUI: `workflow_config.rs`, `spec_config.rs`, pipeline widget, watcher for `.workflow.yml`
 - `/config` command to edit/regenerate spec config post-creation
 - `/bootstrap` generates `.workflow.yml` for new repos
 - Security: `realpath` + symlink rejection + absolute-or-`$HOME` requirement on `spec_storage`; `[a-zA-Z0-9_-]+` ID allowlist in every script that reads gate/agent IDs; `timeout 5 yq` on every parse; fail-closed on errors
@@ -49,7 +48,8 @@ Externalize "which gates/agents run" and "where specs live" into config. LLM cur
 - Vault sync strategy (user handles via iCloud/git/Dropbox)
 - Trust-on-first-use prompt for unknown `.workflow.yml`
 - `.workflow.local.yml` override pattern (single file)
-- Migration of existing done specs (they stay as-is, scanner tolerates missing `config.yml`)
+- Migration of existing done specs (they stay as-is)
+- TUI additions (`workflow_config.rs`, `spec_config.rs`, pipeline widget, `.workflow.yml` watcher) — deferred pending TUI-vs-web-UI decision; see `DEFERRED.md`
 - End-to-end scripted Claude session tests
 - LLM inference golden-fixture tests (brittle)
 
@@ -114,7 +114,6 @@ agents:
 - `commands/explore.md`, `commands/propose.md`, `commands/implement.md`, `commands/validate.md`, `commands/pr-review.md`, `commands/review-findings.md`, `commands/bootstrap.md`, new `commands/config.md`, new `commands/validate-impl.md`
 - `agents/engineering/engineering-config-inferencer.md` (new; ID `engineering/config-inferencer`)
 - `knowledge-base/gates.yml` (new)
-- `workflow-tui/src/parse/scanner.rs`, new `workflow_config.rs`, new `spec_config.rs`, `model/spec.rs`, new `ui/pipeline.rs`, `watcher.rs`
 - `templates/workflow.yml.template` (new), `templates/spec-config.yml.template` (new), `setup.sh`
 - `CLAUDE.md`, `docs/workflow-diagram.md`, `onboarding.md`
 
@@ -127,8 +126,7 @@ agents:
 - `tests/test-config-loader.sh` — valid parse, missing file defaults, path traversal rejected, symlink rejected, malformed YAML fails closed, yq timeout, ID allowlist
 - `tests/test-path-resolution.sh` — `spec_storage` to temp dir, confirm files land in configured location
 - `tests/test-config-inferencer.sh` — schema shape check only (LLM nondeterministic; no golden fixtures)
-- `cargo test` in `workflow-tui/`
-- Backward compat: scanner handles missing `config.yml` on done specs
+- Backward compat: done specs predating this feature are ignored by active commands
 
 ## Security Model
 
@@ -146,6 +144,7 @@ Only hot spot: `yq` fork cost multiplied by config layer. Mitigation = `config-l
 ## Risks
 
 - **HIGH — dogfood breakage during path-resolution rollout.** dev-workflow's own `specs/` dir could break mid-work. Mitigation: keep `specs/` fallback until E2E green, then remove.
+- **HIGH — existing-repo adoption friction.** Primary target is existing repos that have no `.workflow.yml`; a bad `/bootstrap` writer could overwrite unrelated files or clobber an existing config. Mitigation: writer touches only `.workflow.yml`; idempotent (no-op when present); `--force` required to overwrite, shows diff + confirmation; refuses when target path is a symlink.
 - **MEDIUM — gates.yml / language-file drift** if generated far apart. Mitigation: generate gates.yml from current `validation_tools` frontmatter in the same commit.
 - **MEDIUM — config-inferencer nondeterminism** — test schema shape only.
 - **LOW — circular source deps.** `config-loader.sh` must not source `monitor.sh`.
@@ -158,9 +157,8 @@ Only hot spot: `yq` fork cost multiplied by config layer. Mitigation = `config-l
 - `general:architecture/general.md` — small modules, explicit interfaces
 - `general:testing/principles.md` — unit over integration, no brittle fixtures
 - `general:languages/shell.md` — `set -euo pipefail`, quoted expansions
-- `general:languages/rust.md` — TUI parser additions
 
-The `knowledge-base/` directory at this repo's root serves dual purpose: it is the General KB source (installed globally to `~/.claude/knowledge-base/` by `setup.sh`) and this repo's own project KB. Rules cited by this spec map to their installed General KB paths at `~/.claude/knowledge-base/`. Language files that exist only in the General KB (e.g. `typescript.md`, `nextjs.md`, `scala.md`) are not present in this repo and must be referenced by their full installed path.
+The `knowledge-base/` directory at this repo's root is the General KB **source** — `setup.sh` installs it to `~/.claude/knowledge-base/`. The `general:` prefix always resolves against the installed global KB at `~/.claude/knowledge-base/`, never against this repo's own `knowledge-base/`. Rules cited by this spec map to their installed General KB paths. Language files that exist only in the General KB (e.g. `typescript.md`, `nextjs.md`, `scala.md`) must be referenced by their full installed path.
 
 ## Agent Insights (Explore Phase)
 

@@ -3,9 +3,10 @@ id: "015"
 name: "Last-task-done trigger + /implement auto-chain"
 status: blocked
 blocked_by: ["014"]
-max_files: 4
+max_files: 5
 estimated_files:
   - scripts/task-manager.sh
+  - scripts/monitor.sh
   - commands/implement.md
   - tests/test-task-manager.sh
   - tests/fixtures/last-task-done/
@@ -17,6 +18,7 @@ test_cases:
   - "/implement auto-chain observes spec_last_task_done and invokes /validate-impl <feature>"
   - "Standalone CLI task-manager.sh set-status done emits the event but does NOT auto-invoke /validate-impl (parity with existing monitoring pattern)"
   - "Concurrent set-status calls do not double-emit (file-lock or last-write-wins sentinel check)"
+  - "spec_complete, spec_reopened, spec_last_task_done appear in monitor.sh closed allowlist"
 ground_rules:
   - general:languages/shell.md
   - general:architecture/general.md

@@ -9,9 +9,9 @@ This document combines the Software Architect's trade-off analysis and ADRs with
 
 ## Architecture Overview
 
-Three new YAML files (`.workflow.yml`, `knowledge-base/gates.yml`, `specs/<feature>/config.yml`), one new sourced shell loader (`scripts/config-loader.sh`), a path-resolution refactor across existing scripts, and new Rust parsers + a pipeline widget in `workflow-tui/`. Phase structure stays hardcoded — only gate/agent *selection* becomes pluggable.
+Three new YAML files (`.workflow.yml`, `knowledge-base/gates.yml`, `specs/<feature>/config.yml`), one new sourced shell loader (`scripts/config-loader.sh`), and a path-resolution refactor across existing scripts. Phase structure stays hardcoded — only gate/agent *selection* becomes pluggable. TUI parser + pipeline widget work is **deferred** (see `DEFERRED.md`).
 
-Loader is a leaf module: parse + validate + export. Workflow scripts source it (or invoke its CLI mode for hooks). Loader sources nothing from workflow scripts. Same parse logic mirrored in Rust (`workflow-tui/src/parse/`) so the TUI and shell agree on what's eligible.
+Loader is a leaf module: parse + validate + export. Workflow scripts source it (or invoke its CLI mode for hooks). Loader sources nothing from workflow scripts.
 
 ## Trade-off Analysis
 
@@ -119,8 +119,8 @@ ADR-005.
 ### ADR-005 — Walk-up `.workflow.yml` for path resolution
 
 - **Status:** Accepted
-- **Context:** Scripts and TUI currently hardcode `specs/`. Making storage configurable requires cwd-independent root discovery.
-- **Decision:** All scripts and the TUI scanner walk parent directories until they find `.workflow.yml`, git-style. `realpath` normalizes before the walk.
+- **Context:** Scripts currently hardcode `specs/`. Making storage configurable requires cwd-independent root discovery.
+- **Decision:** All scripts walk parent directories until they find `.workflow.yml`, git-style. `realpath` normalizes before the walk. (TUI scanner parity deferred with the rest of the TUI work.)
 - **Consequences:**
   - Positive: works from any cwd including git-hook invocation in subdirs; matches established mental model (git, node, direnv); single unambiguous marker.
   - Negative: filesystem probe per invocation (bounded, cheap); symlinked worktrees need realpath defense; new "marker not found" fail-closed error path.
@@ -169,7 +169,7 @@ ADR-005.
 | `agent_pool` | string (path) | no | `~/.claude/agents` | resolves inside repo root or `~/.claude/`; is dir | exit 2 |
 | `validate_scope` | enum | no | `per-task` | one of `per-task`,`per-spec`,`both` (strict); see ADR-007 | exit 2 |
 
-Unknown top-level keys → warning, ignored. File absent → all defaults, loader returns 0.
+Unknown top-level keys → warning, ignored. **File absent → fail closed, loader exit 2** with an error naming the resolved repo root and instructing the user to run `/bootstrap`. Per-field defaults in the table apply only to a field missing **inside a present file**.
 
 #### `knowledge-base/gates.yml`
 
@@ -194,7 +194,7 @@ Duplicate `id`, unknown `applies_to`, or unknown `category` → fail closed, exi
 | `agents` | map<phase,list<string>> | no | `{}` | keys ∈ {`explore`,`propose`,`implement`,`validate`,`pr-review`}; values match **Agent ID grammar** below; each resolves to an existing file under `agent_pool` |
 | `validate_scope` | enum | no | inherits from `.workflow.yml` (else `per-task`) | one of `per-task`,`per-spec`,`both` (strict); see ADR-007. Spec-level value overrides repo-level |
 
-File absent = legacy fallback (no error). Malformed or unknown ID = fail closed, exit 4.
+File absent on active processing (`--spec` provided) = fail closed, exit 4. Malformed or unknown ID = fail closed, exit 4.
 
 ##### Agent ID grammar and resolution
 
@@ -226,6 +226,8 @@ Semantics: when `/validate` computes the ceiling intersection (spec-eligible gat
 
 Validator: `task-manager.sh validate` rejects non-bool values (e.g., string `"yes"`, integer `1`) with exit code 2. Unknown frontmatter fields continue to warn-and-ignore per existing task-manager behavior.
 
+Prose declarations in task body are inert: only the YAML frontmatter key `empty_intersection_ok: true` is honored by `/validate`. A task describing itself as doc-only in the body but omitting the frontmatter key will still hit the fail-closed rule.
+
 ### `scripts/config-loader.sh` API
 
 **Invocation:** `source scripts/config-loader.sh` then call `wf_load_config [--spec <feature>]`. CLI mode: `config-loader.sh export` prints `KEY=VAL` lines for hooks to `eval`.
@@ -245,10 +247,10 @@ Validator: `task-manager.sh validate` rejects non-bool values (e.g., string `"ye
 | `WF_SPEC_CONFIG_FILE` | abs path or empty | set only with `--spec` |
 | `WF_SPEC_GATES` | newline-separated IDs | `rust-clippy\nsemgrep-security` |
 | `WF_SPEC_AGENTS_<PHASE>` | space-separated fully-qualified IDs | `WF_SPEC_AGENTS_VALIDATE="engineering/security-engineer code-quality-pragmatist"` |
-| `WF_SPEC_HAS_CONFIG` | `0`/`1` | `0` = legacy fallback |
+| `WF_SPEC_HAS_CONFIG` | `1` (only value ever exported) | Always `1` when exported; loader fails closed with exit 4 on missing spec config when `--spec` is provided, so `0` is never observed. No tolerance flag is specified; if one is introduced later, this row must be updated to document the `0` path. |
 | `WF_VALIDATE_SCOPE` | enum | `per-task` / `per-spec` / `both` (default `per-task`) — exported by T002 alongside other `WF_*` vars. T013 extends parsing with the enum allowlist check and spec-level override; T002 exports the field with the repo-default value only. |
 
-**Return codes:** `0` ok (incl. missing-with-defaults); `2` invalid path in `.workflow.yml`; `3` `gates.yml` invalid/missing when referenced; `4` spec `config.yml` invalid; `5` `yq` timeout; `6` unexpected (yq missing).
+**Return codes:** `0` ok (file present and valid); `2` `.workflow.yml` missing OR invalid path in it (error message distinguishes the two cases and, for missing, points at `/bootstrap`); `3` `gates.yml` invalid/missing when referenced; `4` spec `config.yml` invalid/missing when `--spec` provided; `5` `yq` timeout; `6` unexpected (yq missing).
 
 **Caching:** single `timeout 5 yq e -o=json . <file>` per file per process. `WF_CONFIG_LOADED=1` guards re-entry. Subshells inherit via exported env — only the outermost shell parses.
 
@@ -286,43 +288,9 @@ config-paths.sh ──▶ config-loader.sh ──▶ monitor.sh / task-manager.s
 
 `config-loader.sh` MUST NOT `source` any workflow script. Logging from the loader goes to plain stderr, never via `monitor.sh`.
 
-### Service boundaries — Rust (`workflow-tui/`)
+### Service boundaries — Rust (`workflow-tui/`) — **DEFERRED**
 
-```
-workflow-tui/src/
-  model/
-    workflow_config.rs     # NEW: WorkflowConfig { spec_storage, gate_pool, agent_pool }
-    spec_config.rs         # NEW: SpecConfig { tags, gates, agents: HashMap<Phase, Vec<String>> }
-    gate.rs                # NEW: Gate { id, command, applies_to, category, blocking }
-    spec.rs                # MODIFIED: gains config: Option<SpecConfig>
-  parse/
-    workflow_config.rs     # NEW: ONLY locator/parser of .workflow.yml; walk-up discovery
-    spec_config.rs         # NEW: per-spec parser; tolerates absent file (Ok(None))
-    gates.rs               # NEW: gates.yml parser
-    scanner.rs             # MODIFIED: uses WorkflowConfig.spec_storage instead of "specs/"
-    frontmatter.rs         # UNCHANGED
-  ui/
-    pipeline.rs            # NEW: per-task gate/agent pipeline widget; sole renderer of intersection
-    spec_list.rs           # MODIFIED: reads spec_storage from WorkflowConfig
-  watcher.rs               # MODIFIED: also watches .workflow.yml (debounce ≥100ms)
-  app.rs                   # MODIFIED: holds WorkflowConfig at top of state tree
-```
-
-**Ownership rules:**
-- `parse/workflow_config.rs` is the *only* module that locates and parses `.workflow.yml`. All others receive `&WorkflowConfig`.
-- `parse/gates.rs` owns `gates.yml` exclusively. `model/gate.rs` is pure data — no IO.
-- `parse/spec_config.rs` owns per-spec config. Tolerates missing file (legacy specs).
-- `ui/pipeline.rs` is the sole renderer of the intersection computation. Prevents divergent intersection logic between shell and Rust.
-
-**Dependency direction (inward):**
-
-```
-ui/*  ──▶  model/*  ◀──  parse/*
-                          │
-                          └──▶  std::fs, serde_yml
-```
-
-UI never calls `parse` directly. `app.rs` orchestrates load → hands immutable model refs to UI. Watcher triggers re-parse → new model → UI re-renders. Matches the existing Elm-like architecture.
+TUI parse + UI widget work is postponed. See `DEFERRED.md`. No Rust modules are added or modified by this spec.
 
 ### Boundary validation points
 
@@ -330,8 +298,7 @@ Per `general:architecture/general.md` and `general:security/general.md`:
 
 1. `config-paths.sh::validate_id` — every gate/agent ID before any shell use.
 2. `config-paths.sh::find_workflow_root` — `realpath` + symlink ancestor rejection.
-3. `parse/workflow_config.rs` — same checks in Rust via `std::fs::canonicalize`.
-4. `parse/spec_config.rs` — reject referenced IDs not in gates.yml or agent pool; fail closed with the missing IDs listed.
+3. `config-loader.sh` — reject referenced IDs not in gates.yml or agent pool; fail closed with the missing IDs listed.
 
 ## Data Flow
 
@@ -356,7 +323,6 @@ export WF_SPEC_STORAGE / WF_GATE_POOL / WF_AGENT_POOL / WF_CONFIG_LOADED=1
    ▼
 monitor.sh reads $WF_SPEC_STORAGE → writes <storage>/<feature>/.monitor.jsonl
 task-manager.sh reads $WF_SPEC_STORAGE → locates task file
-TUI watcher notices .workflow.yml mtime change → re-parses → rebuilds scanner root
 ```
 
 ### Flow B — spec config lifecycle
@@ -412,6 +378,10 @@ emit spec_last_task_done event
    ├─ if scope in {per-spec, both}:
    │    union(spec-eligible gates) ∩ gates.yml applies_to
    │    execute once over cumulative diff (branch-point → HEAD)
+   │    ├─ all blocking gates pass → continue to Karen normally
+   │    └─ any blocking gate non-zero → force verdict=reopen;
+   │         Karen still spawned, failing-gate output appended to wrapper prompt
+   │         (non-blocking gate failure is recorded but does not force reopen)
    ├─ spawn Karen agent with wrapper prompt:
    │    spec.md FR list + prd.md scope + tasks status + reports/ + diff range
    │  emit spec_audit_start
@@ -433,13 +403,14 @@ verdict branch:
 
 | Severity | Risk | Mitigation |
 |---|---|---|
-| **HIGH** | Dogfood breakage during path-resolution rollout. Half-migrated walk-up implementation strands in-flight specs mid-task; monitor events stop landing; pre-commit blocks commits. | Keep `specs/` fallback behind a feature flag until all four call sites (monitor, task-manager, pre-commit, TUI) pass E2E against a non-default `spec_storage`. Land path-resolution migration in a single PR. Run TUI against a throwaway repo before cutover. The TUI call site is validated by **T011 E2E step (d)**: scanner discovers the spec at `/tmp/vault`. |
+| **HIGH** | Dogfood breakage during path-resolution rollout. Half-migrated walk-up implementation strands in-flight specs mid-task; monitor events stop landing; pre-commit blocks commits. | Keep `specs/` fallback behind a feature flag until all three shell call sites (monitor, task-manager, pre-commit) pass E2E against a non-default `spec_storage`. Land path-resolution migration in a single PR. |
 | **MEDIUM** | gates.yml vs language-file drift after frontmatter becomes display-only. | Generate initial gates.yml from current `validation_tools` frontmatter in the same commit that marks frontmatter display-only. `/validate` precheck diffs documented commands against gates.yml entries and warns on mismatch. |
 | **MEDIUM** | config-inferencer nondeterminism — LLM-produced config.yml varies run to run; golden-fixture tests would be brittle. | Schema-shape tests only (keys present, values in allowed sets, all referenced IDs resolve). One-key approval makes user the determinism layer. Log exact inputs to a monitor event for replay. |
 | **LOW** | config-loader.sh circular sourcing — if loader ever sources monitor.sh you get an unbootable shell. | Enforce dependency direction in code review and CI grep that fails if `config-loader.sh` contains `source` of any workflow script. Loader logs via plain stderr. |
-| **LOW** | pre-commit hook subdir cwd — git commit from subdir runs hook with cwd = subdir. | `find_workflow_root` walks up unconditionally from `realpath($PWD)`. Test via `tests/test-path-resolution.sh` invoked from a nested tmp dir. Single code path with TUI/loader. |
+| **LOW** | pre-commit hook subdir cwd — git commit from subdir runs hook with cwd = subdir. | `find_workflow_root` walks up unconditionally from `realpath($PWD)`. Test via `tests/test-path-resolution.sh` invoked from a nested tmp dir. |
 | **LOW** | Empty gate intersection at `/validate` — false-green ship. | Fail closed when intersection is empty AND task category is code-bearing. Loud `gate_skip` event with reason `empty intersection`. Block transition to `done`. Doc-only tasks declare empty-OK explicitly. |
 | **LOW** | Referential integrity across the three config files — spec config references IDs in `gates.yml` and `~/.claude/agents/`; either side can drift. | `config-loader.sh` validates all referenced IDs at parse time; fails closed listing missing IDs. `/config` re-resolves against current pools. |
+| **HIGH** | Existing-repo adoption friction — primary target is existing repos with no `.workflow.yml`. A naive `/bootstrap` writer could clobber unrelated files, follow a hostile symlink at the target, or silently re-run with different defaults. | `/bootstrap` writer touches only `.workflow.yml`; idempotent (no-op when file already present, prints current config); `--force` required for overwrite and shows diff + confirmation; writer refuses when target path is a symlink (`lstat` check before write); `--repair` preserves present fields and fills only missing ones. |
 | **MEDIUM** | `per-spec` mode delays gate failure feedback until spec end; a bad change caught only after N tasks are already committed. | Mandatory Karen audit + FR × status matrix catches behavioural gaps at end; `both` mode available when user wants per-task safety net plus end-of-spec audit; report verdict `reopen` spawns follow-up tasks rather than silently merging. |
 | **LOW** | Karen wrapper-prompt drift — spec-audit quality depends on one prompt template not the agent definition. | Template versioned in `commands/validate-impl.md`; schema-shape test on audit report verifies FR-matrix presence + status enum + orphan-code section; FR-id allowlist rejects hallucinated IDs. |
 | **LOW** | All-done detector races — concurrent `set-status done` calls could double-fire `spec_last_task_done`. | Detector checks prior `spec_audit_done` event before emitting; `/validate-impl` is idempotent within a single done-sweep; serial execution rule (CLAUDE.md) already forbids concurrent task completion. |
@@ -447,15 +418,12 @@ verdict branch:
 ## Scaling / Integration Notes
 
 - **yq fork multiplication:** each task run touches ~6 scripts. Without caching, that's 6× yq + path validation. `WF_CONFIG_LOADED=1` guard + env inheritance means only the outermost shell parses; subshells inherit free. CLI-mode callers (pre-commit) `eval` once at hook start.
-- **TUI watcher reload cost:** `.workflow.yml` changes are rare. Debounce file events ≥100 ms in `watcher.rs` to coalesce editor save bursts. Parse errors surface as non-fatal `ParseWarning` — TUI keeps last-good config.
 - **Parse-bomb DoS:** `timeout 5 yq` on every parse, fail closed. Billion-laughs caps at 5 s wall clock.
 - **Cross-project vault collision:** `monitor.sh` uses *only* `$WF_SPEC_STORAGE` when set — no global `~/specs` fallback.
 
 ## Affected Files
 
 **New (shell):** `scripts/config-loader.sh`, `scripts/config-paths.sh`, `knowledge-base/gates.yml`, `templates/workflow.yml.template`, `templates/spec-config.yml.template`
-
-**New (Rust):** `workflow-tui/src/model/workflow_config.rs`, `workflow-tui/src/model/spec_config.rs`, `workflow-tui/src/model/gate.rs`, `workflow-tui/src/parse/workflow_config.rs`, `workflow-tui/src/parse/spec_config.rs`, `workflow-tui/src/parse/gates.rs`, `workflow-tui/src/ui/pipeline.rs`
 
 **New (commands/agents):** `commands/config.md`, `commands/validate-impl.md`, `agents/engineering/engineering-config-inferencer.md`
 
@@ -465,7 +433,7 @@ verdict branch:
 
 **Modified (commands):** `commands/explore.md`, `commands/propose.md`, `commands/implement.md`, `commands/validate.md`, `commands/pr-review.md`, `commands/review-findings.md`, `commands/bootstrap.md`
 
-**Modified (Rust):** `workflow-tui/src/parse/scanner.rs`, `workflow-tui/src/model/spec.rs`, `workflow-tui/src/ui/spec_list.rs`, `workflow-tui/src/watcher.rs`, `workflow-tui/src/app.rs`
+**Deferred (Rust TUI):** see `DEFERRED.md` for the full list of TUI parser and UI modules postponed out of this spec.
 
 **Modified (docs):** `CLAUDE.md`, `docs/workflow-diagram.md`, `onboarding.md`
 
@@ -479,6 +447,5 @@ verdict branch:
 - `general:architecture/code-analysis.md` — systematic impact analysis surfaced dogfood breakage as HIGH risk.
 - `general:security/general.md` — input validation at boundary (ID allowlist, path realpath), fail closed (every error path), least privilege (loader writes nothing).
 - `general:languages/shell.md` — `set -euo pipefail`, quoted expansions, 150-line cap, shellcheck.
-- `general:languages/rust.md` — module boundaries, `Result<T,E>`, no `unwrap` in production parsers.
 - `general:testing/principles.md` — pure parser functions, schema-shape tests only for inferencer, Given/When/Then in BDD scenarios.
 - No project-KB rules apply: the dev-workflow repo has no project-KB layer; every rule above maps into the General KB at `~/.claude/knowledge-base/`.

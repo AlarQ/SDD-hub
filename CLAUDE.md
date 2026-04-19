@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, agents, and a general knowledge base get installed globally to `~/.claude/` via `setup.sh`. Target projects get a project-specific `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, agents, hooks, and templates get installed globally to `~/.claude/` via `setup.sh`. Target projects get a project-specific `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
 
 **This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust TUI dashboard. No application code lives here.
 
 ## Project Structure
 
 - `commands/*.md` — Slash command definitions (bootstrap, explore, propose, validate-spec, implement, validate, review-findings, learn-from-reports, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research, promote-rules)
-- `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Installed globally to `~/.claude/knowledge-base/` by `setup.sh`.
-- `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Installed to `~/.claude/knowledge-base-rules.md` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
+- `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Lives in this repo; not installed globally.
+- `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Lives in this repo; not installed globally. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `scripts/monitor.sh` — Event logger for spec implementation monitoring; appends JSONL events to `specs/<feature>/.monitor.jsonl`
@@ -25,10 +25,10 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Build & Run
 
-### Setup (install commands + general KB globally)
+### Setup (install commands globally)
 
 ```bash
-./setup.sh          # install to ~/.claude/ (commands, agents, hooks, templates, knowledge-base)
+./setup.sh          # install to ~/.claude/ (commands, agents, hooks, templates)
 ./setup.sh --force  # overwrite existing files
 ```
 
@@ -70,7 +70,7 @@ Elm-like architecture with file-system watching for live reload:
 
 Two-layer knowledge base architecture:
 
-- **General KB** — lives in this repo at `knowledge-base/`, installed globally to `~/.claude/knowledge-base/` by `setup.sh`. Contains universal rules: security, architecture, testing, style.
+- **General KB** — lives in this repo at `knowledge-base/`. Contains universal rules: security, architecture, testing, style.
 - **Project KB** — created per-project by `/bootstrap` at `knowledge-base/`. Contains project-specific rules: language files (with `validation_tools`), conventions discovered via `/review-findings`.
 
 All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB.
