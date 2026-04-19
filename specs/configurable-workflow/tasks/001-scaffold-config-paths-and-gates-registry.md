@@ -1,7 +1,7 @@
 ---
 id: "001"
 name: "Scaffold config-paths.sh and gates.yml registry"
-status: todo
+status: done
 blocked_by: []
 max_files: 5
 estimated_files:
@@ -45,3 +45,12 @@ Create the leaf shell helper module `scripts/config-paths.sh` and seed the canon
 - `gates.yml` content seeded by translating current `validation_tools` frontmatter from `knowledge-base/languages/*.md` into structured entries (`id`, `command`, `applies_to: [<lang>]`, `category`, `blocking: true`). Cross-cutting gates (e.g. semgrep) tagged `applies_to: [any]`.
 - Templates contain commented defaults only — no executable values.
 - This task creates files only; no edits to existing scripts. T3 will refactor callers.
+
+## Implementation Notes (T001 delivery)
+
+- `config-paths.sh` is 97 lines (under 150-line cap); sources no workflow script (guarded by `test_config_paths_sources_no_workflow_script`).
+- `validate_id` regex: `^[a-zA-Z0-9_-]{1,64}$`. Canonical home here; `monitor.sh` delegation deferred to T003 per design.md §Caller integration.
+- `realpath_safe` pre-normalize check rejects any literal `..` segment before `realpath`, then walks input-path ancestors and rejects symlinks whose resolved target escapes BOTH `$HOME` and the discovered workflow root. Two-root allowance keeps tests reproducible when `$HOME` ≠ repo root.
+- `gates.yml` seeded only from actually-run `validation_tools` in `knowledge-base/languages/{rust,shell}.md`. Cross-cutting gates (semgrep) deliberately not committed — no one runs them yet — but the `applies_to: [any]` pattern is documented in test fixture `gates-valid.yml`.
+- Tests sandbox under `mktemp -d`, skip (not fail) when host has stray `.workflow.yml` above `/tmp` or lacks `yq`.
+- Test Strategist agent not spawned: T001 is the first task, no completed-task fixtures exist to reuse, and the task's `test_cases` already match `test-strategy.md` T001 ownership verbatim.

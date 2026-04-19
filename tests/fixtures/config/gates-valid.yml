@@ -1,0 +1,16 @@
+gates:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true
