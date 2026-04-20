@@ -17,10 +17,17 @@ setup() {
   TEST_TMPDIR="$(mktemp -d)"
   mkdir -p "$TEST_TMPDIR/specs/test-feature/tasks"
 
+  # .workflow.yml required by find_workflow_root path
+  printf 'spec_storage: specs/\n' > "$TEST_TMPDIR/.workflow.yml"
+
   # Copy scripts so task-manager.sh can source monitor.sh from SCRIPT_DIR
   mkdir -p "$TEST_TMPDIR/scripts"
   cp "$REPO_ROOT/scripts/task-manager.sh" "$TEST_TMPDIR/scripts/"
+  cp "$REPO_ROOT/scripts/task-status.sh" "$TEST_TMPDIR/scripts/"
+  cp "$REPO_ROOT/scripts/task-unblock.sh" "$TEST_TMPDIR/scripts/"
   cp "$REPO_ROOT/scripts/monitor.sh" "$TEST_TMPDIR/scripts/"
+  cp "$REPO_ROOT/scripts/monitor-validators.sh" "$TEST_TMPDIR/scripts/"
+  cp "$REPO_ROOT/scripts/config-paths.sh" "$TEST_TMPDIR/scripts/"
   chmod +x "$TEST_TMPDIR/scripts/"*.sh
 
   cd "$TEST_TMPDIR"

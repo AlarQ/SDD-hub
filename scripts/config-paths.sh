@@ -88,6 +88,21 @@ realpath_safe() {
   printf '%s\n' "$resolved"
 }
 
+# wf_resolve_root [start_dir]
+#   Canonical root resolution: WF_REPO_ROOT env → .workflow.yml walk-up → specs/ walk-up.
+#   Single source of truth; replaces private copies in monitor.sh and task-manager.sh.
+wf_resolve_root() {
+  if [[ -n "${WF_REPO_ROOT:-}" ]]; then printf '%s' "$WF_REPO_ROOT"; return 0; fi
+  local root
+  if root="$(find_workflow_root "${1:-$PWD}" 2>/dev/null)"; then printf '%s' "$root"; return 0; fi
+  local dir="${1:-$PWD}"
+  while [[ "$dir" != "/" ]]; do
+    [[ -d "$dir/specs" ]] && { printf '%s' "$dir"; return 0; }
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
 # validate_id <string>
 #   Canonical gate/agent/feature id regex: ^[a-zA-Z0-9_-]{1,64}$
 #   Returns 0 on match, 1 otherwise. Silent on success; stderr message on reject.
