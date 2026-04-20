@@ -1,0 +1,8 @@
+tags: [sample]
+gates:
+  - rust-clippy
+  - shellcheck
+agents:
+  validate:
+    - code-quality-pragmatist
+validate_scope: per-spec

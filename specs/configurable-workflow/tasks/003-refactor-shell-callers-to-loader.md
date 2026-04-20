@@ -1,7 +1,7 @@
 ---
 id: "003"
 name: "Refactor monitor/task-manager/pre-commit to use config-loader"
-status: blocked
+status: todo
 blocked_by: ["002"]
 max_files: 6
 estimated_files:
