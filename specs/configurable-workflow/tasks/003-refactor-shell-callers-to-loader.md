@@ -1,7 +1,8 @@
 ---
 id: "003"
 name: "Refactor monitor/task-manager/pre-commit to use config-loader"
-status: todo
+status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/33
 blocked_by: ["002"]
 max_files: 6
 estimated_files:
@@ -51,6 +52,15 @@ Refactor the three dogfood-sensitive shell callers to source the new loader (or 
 - The fallback flag lives only here, not in the loader. Loader is the canonical truth; these scripts wrap legacy behavior temporarily.
 - Existing `tests/test-monitor.sh` and `tests/test-task-manager.sh` must stay green.
 - Cross-project vault collision prevented: when `$WF_SPEC_STORAGE` is set, monitor uses *only* that path — no global `~/specs` fallback.
+
+### Decisions made during implementation
+
+- `monitor.sh` sources `config-paths.sh` for `find_workflow_root`, then redefines `validate_id` (with label arg for error messages) so existing tests relying on "Invalid feature" error text stay green.
+- Legacy fallback (`find_project_root` scanning for `specs/`) is implicit (no flag required) for backward compat; `WF_LEGACY_SPECS_FALLBACK=1` explicitly forces the legacy code path (tested in `test-path-resolution.sh`).
+- `task-manager.sh` computes `_WF_TM_REPO_ROOT` at startup (git root → .workflow.yml → specs/ scan → CWD) and uses it for absolute path resolution in `resolve_ground_rule_path` and task file walk-up in `cmd_validate`.
+- `pre-commit-hook.sh` uses `git rev-parse --show-toplevel` for repo root and `eval`s config-loader export to populate WF_* vars.
+- Existing tests updated to create `.workflow.yml` in setup so they exercise the new code path rather than the legacy fallback.
+- `check_yaml_body` rejects payloads containing `---` (YAML doc separator) or `"gates":` key via `grep -qF`.
 
 ## New capability: monitor.sh category allowlist
 
