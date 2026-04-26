@@ -285,12 +285,24 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     export)
       shift
       wf_load_config "$@" || exit $?
+      # Explicit allowlist prevents pre-existing WF_* env vars from being re-exported
+      local _wf_allowed_vars=(
+        WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL
+        WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
+      )
+      for var in "${_wf_allowed_vars[@]}"; do
+        [[ -v "$var" ]] || continue
+        val="${!var}"
+        esc="${val//\'/\'\\\'\'}"
+        printf "%s='%s'\n" "$var" "$esc"
+      done
+      # Also export any WF_SPEC_AGENTS_* vars set during spec load
       while IFS= read -r var; do
         [[ -z "$var" ]] && continue
         val="${!var-}"
         esc="${val//\'/\'\\\'\'}"
         printf "%s='%s'\n" "$var" "$esc"
-      done < <(compgen -v | grep '^WF_' | sort)
+      done < <(compgen -v | grep '^WF_SPEC_AGENTS_' | sort)
       ;;
     *)
       echo "Usage: $(basename "$0") export [--spec <feature>]" >&2

@@ -1,7 +1,7 @@
 ---
 id: "004"
 name: "Phase commands read spec config and apply ceiling semantics"
-status: blocked
+status: todo
 blocked_by: ["002", "003"]
 max_files: 6
 estimated_files:
