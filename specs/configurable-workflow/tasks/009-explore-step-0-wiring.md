@@ -2,6 +2,7 @@
 id: "009"
 name: "Wire config-inferencer into /explore step 0"
 status: done
+pr_url: https://github.com/AlarQ/SDD-hub/pull/36
 blocked_by: ["003", "004", "008"]
 max_files: 1
 empty_intersection_ok: true
