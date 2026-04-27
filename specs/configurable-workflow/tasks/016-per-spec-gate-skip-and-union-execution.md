@@ -1,8 +1,8 @@
 ---
 id: "016"
 name: "Per-spec gate skip + union execution at /validate-impl"
-status: blocked
-blocked_by: ["013", "004", "014"]
+status: todo
+blocked_by: []
 max_files: 4
 estimated_files:
   - commands/validate.md

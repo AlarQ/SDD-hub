@@ -1,8 +1,8 @@
 ---
 id: "014"
 name: "/validate-impl command + Karen wrapper prompt"
-status: blocked
-blocked_by: ["013"]
+status: done
+blocked_by: []
 max_files: 4
 estimated_files:
   - commands/validate-impl.md
@@ -51,3 +51,10 @@ New slash command `/validate-impl <feature>` that runs the spec-completion audit
 - Monitor event categories `spec_audit_start` and `spec_audit_done` must be added to `scripts/monitor.sh` accept-list alongside FR-9's existing categories. The remaining FR-9 categories (`spec_complete`, `spec_reopened`, `spec_last_task_done`, `spec_reaudit_requested`) are owned by T015/T017 per the FR-9 ownership table.
 - Gate execution (union mode) is NOT in this task — T016 owns scope-dependent gate invocation. `/validate-impl` calls into T016's helper once it exists.
 - Fixture spec under `tests/fixtures/spec-audit/sample-spec/` with 3 FRs and 2 tasks — used for end-to-end smoke without hitting real Karen; stub agent invocation to return a canned report for tests.
+
+## Implementation Notes (T014)
+
+- Karen invocation is the slash-command's responsibility (Agent tool, `subagent_type: karen`); shell helpers in `scripts/validate-impl.sh` cover everything else and are unit-testable without spawning the agent.
+- Helpers split: `wf_vi_parse_frs` (FR allowlist), `wf_vi_build_prompt` (wrapper), `wf_vi_write_report` (frontmatter + body), `wf_vi_set_spec_shipped` (yq `--front-matter=process` to edit only the YAML block of a Markdown file — honours the `no awk hacks for YAML` shell rule), `wf_vi_emit_*` (monitor events).
+- Monitor allowlist (`scripts/monitor-validators.sh`): added `spec_audit_start`, `spec_audit_done`, `spec_complete`, `spec_reopened`. Test cases 7/8 require the command to emit `spec_complete`/`spec_reopened`, so they ship in T014's allowlist; the remaining FR-9 categories (`spec_last_task_done`, `spec_reaudit_requested`) are deferred to T015.
+- T016 owns the union-gate executor; `commands/validate-impl.md` Step 2 is documented but inert until that helper lands. Blocking-gate failure forces `verdict=reopen` AND still spawns Karen with failing output as additional evidence — `wf_vi_build_prompt` accepts an `extra_evidence` file argument so the contract is exercised today (`test_build_prompt_includes_extra_evidence`).

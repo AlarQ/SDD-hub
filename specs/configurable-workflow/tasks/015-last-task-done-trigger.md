@@ -1,8 +1,8 @@
 ---
 id: "015"
 name: "Last-task-done trigger + /implement auto-chain"
-status: blocked
-blocked_by: ["014"]
+status: todo
+blocked_by: []
 max_files: 5
 estimated_files:
   - scripts/task-manager.sh
