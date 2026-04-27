@@ -1,7 +1,7 @@
 ---
 id: "016"
 name: "Per-spec gate skip + union execution at /validate-impl"
-status: todo
+status: implemented
 blocked_by: []
 max_files: 4
 estimated_files:
@@ -37,6 +37,20 @@ Make scope semantics real. `/validate` honors `WF_VALIDATE_SCOPE` and short-circ
 - `scripts/monitor.sh` — accept `scope=per-spec` as a valid `gate_skip` reason string alongside existing reasons.
 
 ## Implementation Notes
+
+### T016 delivered
+
+- **Scope short-circuit** in `commands/validate.md` Phase 1: when `WF_VALIDATE_SCOPE=per-spec`, emits `gate_skip` with `reason=scope=per-spec` for every gate in the effective set, writes a zero-findings `*-scope-skip.yaml` report, skips Phase 2. ADR-003 fail-closed still fires before short-circuit.
+- **Union runner** in `scripts/validate-impl.sh` (co-located with `/validate-impl`, keeps `monitor.sh` leaf-clean). Public helpers:
+  - `wf_vi_task_languages` / `wf_vi_union_languages` — parse `ground_rules` for `languages/<x>.md` tags.
+  - `wf_vi_compute_union` — `WF_SPEC_GATES ∩ {g | applies_to ∩ langs ≠ ∅ ∨ "any" ∈ applies_to}`, `sort -u` ⇒ deterministic order; gate ids dedup to once per spec.
+  - `wf_vi_run_union_gates` — executes each gate once against cumulative diff. Stdout `reopen` on blocking-gate non-zero exit, rc 3 on empty union for code-bearing spec (ADR-003), `""` otherwise.
+- `commands/validate-impl.md` Step 2 now calls `wf_vi_run_union_gates` directly (T014 placeholder retired).
+- `scripts/monitor.sh` requires no code change: reasons aren't validated; `scope=per-spec` payload rides existing contract. `test-scope-semantics.sh` asserts round-trip.
+- Sort order: union is `sort -u` over gate ids — alphabetical, unique.
+- Parallelism: kept sequential in helper for deterministic log ordering / fail-closed rc; the Phase-2 advisory-agent parallelism in `/validate` is unchanged.
+
+### Original notes
 
 - "Cumulative diff" range = first-task branch-point → current HEAD. Same range used by Karen wrapper prompt in T014.
 - Union computation is deterministic given sorted inputs — document the sort order.

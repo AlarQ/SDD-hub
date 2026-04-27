@@ -101,6 +101,115 @@ wf_vi_set_spec_shipped() {
   yq --front-matter=process e -i '.status = "shipped"' "$spec_md"
 }
 
+# wf_vi_task_languages <task_md> -> stdout: language tags (one per line, sorted unique)
+# Extracts language tags from a task file's `ground_rules` field.
+wf_vi_task_languages() {
+  local task_md="$1"
+  [[ -f "$task_md" ]] || return 0
+  awk '
+    /^ground_rules:/ { in_gr=1; next }
+    in_gr && /^[a-zA-Z_]+:/ { in_gr=0 }
+    in_gr && /languages\// {
+      sub(/.*languages\//, ""); sub(/\.md.*/, "");
+      print
+    }
+  ' "$task_md" | sort -u
+}
+
+# wf_vi_union_languages <tasks_dir> -> stdout: union of language tags across all tasks (sorted unique)
+wf_vi_union_languages() {
+  local tasks_dir="$1"
+  [[ -d "$tasks_dir" ]] || return 0
+  local f
+  while IFS= read -r f; do
+    wf_vi_task_languages "$f"
+  done < <(find "$tasks_dir" -maxdepth 1 -name '*.md' -print 2>/dev/null | sort) | sort -u
+}
+
+# wf_vi_gate_field <gate_pool> <gate_id> <field> -> stdout
+wf_vi_gate_field() {
+  local pool="$1" id="$2" field="$3"
+  command -v yq >/dev/null 2>&1 || return 90
+  yq e -r ".gates[] | select(.id == \"$id\") | .$field" "$pool" 2>/dev/null
+}
+
+# wf_vi_compute_union <gate_pool> <ceiling_newline_separated> <langs_newline_separated>
+# -> stdout: gate ids in union, one per line, sorted
+# Union = ceiling ∩ {g | g.applies_to ∩ langs ≠ ∅ ∨ "any" ∈ g.applies_to}
+wf_vi_compute_union() {
+  local pool="$1" ceiling="$2" langs="$3"
+  command -v yq >/dev/null 2>&1 || { wf_vi__err "yq required"; return 90; }
+  local lang_set=" any "
+  while IFS= read -r l; do [[ -n "$l" ]] && lang_set="$lang_set$l "; done <<< "$langs"
+  local id applies_json
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    applies_json="$(yq e -r ".gates[] | select(.id == \"$id\") | .applies_to[]" "$pool" 2>/dev/null)" || continue
+    [[ -z "$applies_json" ]] && continue
+    while IFS= read -r tag; do
+      [[ -z "$tag" ]] && continue
+      if [[ "$lang_set" == *" $tag "* ]]; then
+        printf '%s\n' "$id"; break
+      fi
+    done <<< "$applies_json"
+  done <<< "$ceiling" | sort -u
+}
+
+# wf_vi_run_union_gates <feature> <spec_dir> <log_file>
+# Computes the union of spec-eligible gates ∩ language-applicable gates across
+# all tasks in the spec, then executes each gate's `command` once.
+# Stdout: forced verdict ("reopen" if any blocking gate fails, "" otherwise)
+# Side effects: appends each gate's stdout/stderr to <log_file>.
+# Returns: 0 on normal completion (even if gates failed), 3 on empty-union
+# fail-closed (ADR-003), 90 on missing yq.
+wf_vi_run_union_gates() {
+  local feature="$1" spec_dir="$2" log_file="$3"
+  : > "$log_file"
+  local pool="${WF_GATE_POOL:?WF_GATE_POOL must be set}"
+  local ceiling="${WF_SPEC_GATES:-}"
+  local tasks_dir="$spec_dir/tasks"
+  local langs union code_bearing
+  langs="$(wf_vi_union_languages "$tasks_dir")"
+  union="$(wf_vi_compute_union "$pool" "$ceiling" "$langs")"
+  code_bearing=0
+  [[ -n "$langs" ]] && code_bearing=1
+
+  if [[ -z "$union" ]]; then
+    if [[ "$code_bearing" == "1" ]]; then
+      wf_vi__err "Empty union on code-bearing spec — fail-closed (ADR-003)."
+      printf 'EMPTY_UNION_FAIL_CLOSED: spec=%s langs=[%s] ceiling=[%s]\n' \
+        "$feature" "$(echo "$langs" | tr '\n' ' ')" "$(echo "$ceiling" | tr '\n' ' ')" >> "$log_file"
+      return 3
+    fi
+    printf '' # doc-only, empty intersection ok
+    return 0
+  fi
+
+  local forced="" id cmd blocking rc
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    cmd="$(wf_vi_gate_field "$pool" "$id" command)"
+    blocking="$(wf_vi_gate_field "$pool" "$id" blocking)"
+    [[ "$blocking" == "null" || -z "$blocking" ]] && blocking="true"
+    {
+      printf -- '----- gate: %s (blocking=%s) -----\n' "$id" "$blocking"
+      printf 'CMD: %s\n' "$cmd"
+    } >> "$log_file"
+    if [[ -z "$cmd" || "$cmd" == "null" ]]; then
+      printf 'ERROR: gate %s has no command in pool\n' "$id" >> "$log_file"
+      [[ "$blocking" == "true" ]] && forced="reopen"
+      continue
+    fi
+    bash -c "$cmd" >> "$log_file" 2>&1; rc=$?
+    printf 'EXIT: %d\n' "$rc" >> "$log_file"
+    if [[ "$rc" -ne 0 && "$blocking" == "true" ]]; then
+      forced="reopen"
+    fi
+  done <<< "$union"
+
+  printf '%s' "$forced"
+}
+
 # wf_vi_emit_start <feature>
 wf_vi_emit_start() {
   log_event "$1" spec_audit_start "" '{}'

@@ -33,13 +33,23 @@ wf_vi_emit_start "$ARGUMENTS"
 
 If `WF_VALIDATE_SCOPE` is `per-task`: skip this step.
 
-Otherwise execute the union of spec-eligible gates against the cumulative diff (first task branch-point → HEAD):
+Otherwise execute the union of spec-eligible gates against the cumulative diff (first task branch-point → HEAD) via `wf_vi_run_union_gates` (T016):
 
-1. Compute language tags by unioning every task's `ground_rules` language tags (T016 helper once available).
-2. Effective union = `WF_SPEC_GATES` ∩ gates whose `applies_to` matches any of those tags or `any`.
-3. Run each gate's `command` from `gates.yml`. Capture stdout/stderr to `/tmp/spec-audit-gates-$$.log`.
-4. **Blocking gate failure** → set `forced_verdict=reopen` and pass the captured log to the wrapper prompt as `extra_evidence`. Karen is **still** spawned.
-5. **Non-blocking gate failure** → record in audit body but do not force `reopen`.
+```bash
+spec_dir="$WF_SPEC_STORAGE/$ARGUMENTS"
+gate_log="/tmp/spec-audit-gates-$$.log"
+forced_verdict="$(wf_vi_run_union_gates "$ARGUMENTS" "$spec_dir" "$gate_log")"
+extra_evidence=""
+[[ -n "$forced_verdict" || -s "$gate_log" ]] && extra_evidence="$gate_log"
+```
+
+Helper semantics (see `scripts/validate-impl.sh`):
+1. Language tags = union of every task's `ground_rules` language tags (`wf_vi_union_languages`).
+2. Union = `WF_SPEC_GATES` (ceiling) ∩ gates whose `applies_to` ⊇ any tag or includes `any` (`wf_vi_compute_union` — sorted, unique).
+3. Each gate runs **once** against the cumulative diff range (deterministic order from `sort -u`).
+4. **Empty union on a code-bearing spec** → helper returns rc 3 (fail-closed per ADR-003); abort `/validate-impl` before spawning Karen.
+5. **Blocking gate non-zero exit** → helper stdout = `reopen`. Captured log is passed to `wf_vi_build_prompt` as `extra_evidence`; Karen is **still** spawned, but its verdict is overridden to `reopen` in Step 4.
+6. **Non-blocking gate failure** → recorded in `gate_log` but does not force `reopen`.
 
 ## Step 3 — Build Karen Wrapper Prompt
 
