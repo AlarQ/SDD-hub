@@ -222,14 +222,24 @@ One diagram per command. Solid arrow = always spawned. Dashed arrow = conditiona
 
 ### 5a. `/explore` — requirements clarification
 
+Step 0 runs before any perspective questions: the `config-inferencer` agent drafts `config.yml` (gates + agents-per-phase) from repo signal files. User approves (single key) or edits via `/config`. `config.yml` is written before the normal explore flow begins.
+
 ```mermaid
 graph LR
-    EX["/explore"] -.->|after perspective Qs| UXR[UX Researcher]
-    EX -.->|after security Q| SE[Security Engineer]
-    EX -.->|backend kw| BA[Backend Architect]
-    EX -.->|ui kw| UXA[UX Architect]
-    EX -.->|scope| SA[Software Architect]
-    EX -.->|feedback kw| FS[Feedback Synthesizer]
+    EX["/explore"] --> S0{Step 0: config-inferencer}
+    S0 --> CI[config-inferencer agent]
+    CI --> SUMMARY[one-screen summary\ngates + agents-per-phase]
+    SUMMARY -.->|approve| WRITE[write config.yml\nemit config_inferred + config_approved]
+    SUMMARY -.->|edit| CFG["/config override"]
+    CFG --> WRITE
+    WRITE --> PERSP[perspective questions]
+    PERSP -.->|after perspective Qs| UXR[UX Researcher]
+    PERSP -.->|after security Q| SE[Security Engineer]
+    PERSP -.->|backend kw| BA[Backend Architect]
+    PERSP -.->|ui kw| UXA[UX Architect]
+    PERSP -.->|scope| SA[Software Architect]
+    PERSP -.->|feedback kw| FS[Feedback Synthesizer]
+    S0 -.->|inferencer timeout| MANUAL[manual entry prompt]
 ```
 
 ### 5b. `/propose` — spec + design + tasks

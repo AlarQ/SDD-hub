@@ -2,7 +2,7 @@
 id: "011"
 name: "Bootstrap, setup, and cleanup of legacy fallback"
 status: done
-blocked_by: ["004", "010"]
+blocked_by: []
 max_files: 10
 estimated_files:
   - commands/bootstrap.md
