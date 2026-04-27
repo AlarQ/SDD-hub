@@ -2,6 +2,7 @@
 id: "004"
 name: "Phase commands read spec config and apply ceiling semantics"
 status: done
+pr_url: "https://github.com/AlarQ/SDD-hub/pull/34"
 blocked_by: ["002", "003"]
 max_files: 6
 estimated_files:
