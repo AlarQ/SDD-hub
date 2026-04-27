@@ -1,7 +1,7 @@
 ---
 id: "011"
 name: "Bootstrap, setup, and cleanup of legacy fallback"
-status: blocked
+status: todo
 blocked_by: ["004", "010"]
 max_files: 10
 estimated_files:
