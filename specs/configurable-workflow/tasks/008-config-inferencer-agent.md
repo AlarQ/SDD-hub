@@ -1,7 +1,7 @@
 ---
 id: "008"
 name: "Config inferencer agent definition"
-status: todo
+status: implemented
 blocked_by: ["001"]
 max_files: 2
 estimated_files:
