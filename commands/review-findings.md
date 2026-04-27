@@ -5,6 +5,20 @@ Feature name: $ARGUMENTS
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
+## Step 0 — Load Spec Config
+
+Load the spec config before processing any report (substitute actual feature name for `$ARGUMENTS`):
+
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS'
+```
+
+On non-zero exit:
+- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
+- Any other non-zero: stop — print the loader error and halt.
+
+Note: `/review-findings` does not consume the `agents` map from config.yml. The loader is run here solely to validate config existence.
+
 ## Steps
 1. Read all pending reports from `specs/$ARGUMENTS/reports/`
 2. Partition findings: separate `severity: info` findings (informational) from all others (actionable)

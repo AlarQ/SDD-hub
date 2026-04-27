@@ -11,9 +11,23 @@ Feature name: $ARGUMENTS
    - If no task can be identified, refuse and say: "Cannot determine which task this PR belongs to. Run from a task branch or provide the feature name."
 3. Read the task's `ground_rules`, resolving prefixes per `~/.claude/knowledge-base-rules.md`
 
+## Step 0 — Load Spec Config
+
+Load the spec config before spawning any agent (substitute actual feature name for `$ARGUMENTS`):
+
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PR_REVIEW=%s\n" "${WF_SPEC_AGENTS_PR_REVIEW:-}"'
+```
+
+On non-zero exit:
+- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
+- Any other non-zero: stop — print the loader error and halt.
+
+Record `WF_SPEC_AGENTS_PR_REVIEW`. If non-empty, spawn those agent IDs instead of the default `engineering-code-reviewer`. Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
+
 ## Phase 1: Agent-Powered Code Review
 
-Spawn the `Code Reviewer` agent (`engineering-code-reviewer`) to analyze the PR diff proactively — before responding to human comments. The agent receives:
+Spawn the agent(s) from `WF_SPEC_AGENTS_PR_REVIEW` (if non-empty) or fall back to the default `Code Reviewer` agent (`engineering-code-reviewer`) when the list is empty. The agent(s) receive:
 - The full PR diff (`git diff <base-branch>...HEAD`)
 - The task file (scope, acceptance criteria, ground rules)
 - All `ground_rules` files referenced in the task (per `knowledge-base-rules.md`)

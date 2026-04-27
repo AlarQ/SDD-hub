@@ -1,7 +1,7 @@
 ---
 id: "004"
 name: "Phase commands read spec config and apply ceiling semantics"
-status: todo
+status: done
 blocked_by: ["002", "003"]
 max_files: 6
 estimated_files:
@@ -55,9 +55,11 @@ Skipped gates emit `gate_skip` monitor events with explicit reason (`not in spec
 
 ## Implementation Notes
 
-- All five command markdown files document the loader-source step at the top.
-- Unknown agent IDs in `config.yml` exit non-zero — no silent fallback.
-- Reviewer should diff all five files together for consistency.
+- All six command markdown files (propose, implement, validate, pr-review, review-findings, ship) now include a `Step 0 — Load Spec Config` block.
+- `config-loader.sh` CLI mode fixed for bash 3.2 compat: replaced `[[ -v "$var" ]]` with `eval "[[ \"\${${var}+x}\" ]]"` and removed `local` from top-level CLI block. Pre-existing T002 defects, fixed in same PR.
+- Snapshot uses normalized JSON (`{"gates": sorted_list}`) via python3 so whitespace-only edits to config.yml don't trigger drift; adding/removing a gate does.
+- `validate.md` Phase 1 now describes ceiling intersection (WF_SPEC_GATES ∩ language-applicable gates from gates.yml); Phase 2 now reads from `WF_SPEC_AGENTS_VALIDATE` rather than hardcoded 4-agent list.
+- Reviewer should diff all six command files together for consistency of Step 0 blocks.
 
 ## Scope Phasing (out-of-scope for this task)
 
