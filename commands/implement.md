@@ -14,6 +14,20 @@ Feature name: $ARGUMENTS
    - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."
    - **Important**: In bash scripts, never use `status` as a variable name — it is read-only in zsh. Use `task_status` instead.
 
+## Step 0 — Load Spec Config
+
+Before running any step, load the spec config (substituting the actual feature name for `$ARGUMENTS`):
+
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_IMPLEMENT=%s\nWF_SPEC_CONFIG_FILE=%s\n" "${WF_SPEC_AGENTS_IMPLEMENT:-}" "${WF_SPEC_CONFIG_FILE:-}"'
+```
+
+On non-zero exit:
+- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`. No gate or agent will execute."
+- Any other non-zero: stop — print the loader error and halt.
+
+Record `WF_SPEC_AGENTS_IMPLEMENT` (space-separated agent IDs for the post-implementation quality check) and `WF_SPEC_CONFIG_FILE` (absolute path to `config.yml`, used for snapshot).
+
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`
 2. Set monitor context: run `$HOME/.claude/scripts/monitor.sh set_context "$ARGUMENTS" "<task-id>"` (replace `<task-id>` with the numeric ID from the prerequisite step, e.g. `001`)
@@ -24,6 +38,11 @@ Feature name: $ARGUMENTS
    - If starting fresh: delete the branch (`git branch -D feat/$ARGUMENTS/{task-id}-{task-name}`) and create a new one
    - If continuing: checkout the existing branch and proceed
 6. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
+6a. **Snapshot spec config** — write a normalized JSON snapshot of the effective fields to `.monitor-context-snapshot`:
+   ```bash
+   bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && wf_write_snapshot .monitor-context-snapshot'
+   ```
+   This snapshot is compared by `/ship` to detect mid-task `config.yml` drift. Normalized JSON (sorted keys, sorted gate list) ensures whitespace-only edits do not trigger false drift.
 7. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
 8. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
 9. Implement the code changes following the spec and ground rules:
@@ -52,7 +71,7 @@ Feature name: $ARGUMENTS
 12. Add implementation notes to the task file explaining decisions made
 
 ## Post-Implementation Quality Check
-After all code and tests are written (before setting status to `implemented`), spawn the `Code Quality Pragmatist` agent (`code-quality-pragmatist`) for a pre-validation sanity check. The agent receives:
+After all code and tests are written (before setting status to `implemented`), spawn the implement-phase agents from `WF_SPEC_AGENTS_IMPLEMENT` for a pre-validation sanity check. If `WF_SPEC_AGENTS_IMPLEMENT` is empty, skip this step. If it contains `code-quality-pragmatist` or any advisory agent, spawn it using the Agent tool. The spawned agent(s) receive:
 - All changed files (`git diff --name-only --diff-filter=ACMR feat/$ARGUMENTS...HEAD`)
 - The task file (scope, ground rules)
 - The project's `CLAUDE.md`

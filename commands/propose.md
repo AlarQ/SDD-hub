@@ -5,6 +5,20 @@ Feature name: $ARGUMENTS
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
+## Step 0 — Load Spec Config
+
+Before generating any artifact, load the spec config (substituting the actual feature name for `$ARGUMENTS`):
+
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PROPOSE=%s\n" "${WF_SPEC_AGENTS_PROPOSE:-}"'
+```
+
+On non-zero exit:
+- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
+- Any other non-zero: stop — print the loader error and halt.
+
+Record `WF_SPEC_AGENTS_PROPOSE`. If non-empty, it lists the agent IDs to spawn during spec/design generation (overrides the default keyword-based conditional list below). Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
+
 ## Steps
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context
 2. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) — identify all applicable rules from both
@@ -45,11 +59,13 @@ If the agent errors or times out, proceed with spec.md generation without securi
 
 Before writing design.md, spawn agents in parallel using the Agent tool. All agents receive the spec.md content (already generated above), all applicable rules from both knowledge bases, and the project's `CLAUDE.md`.
 
-##### Always spawn:
+**Agent selection:** If `WF_SPEC_AGENTS_PROPOSE` is non-empty (from Step 0), spawn exactly those agents — the keyword-based conditional selection below does not apply. If `WF_SPEC_AGENTS_PROPOSE` is empty, use the default keyword-based selection:
+
+##### Always spawn (default):
 
 **Software Architect** (`engineering-software-architect`): Instruct: "Evaluate the proposed architecture in the spec against the provided architecture rules. For each major architectural decision, produce a trade-off analysis and an ADR. Flag any patterns that introduce irreversible coupling, scaling risks, or that the team is unlikely to sustain. Use the Proposal Output format defined in your agent definition."
 
-##### Conditionally spawn (in parallel with Software Architect):
+##### Conditionally spawn (in parallel with Software Architect, default only):
 
 Check the spec.md content and prd.md for keyword matches:
 

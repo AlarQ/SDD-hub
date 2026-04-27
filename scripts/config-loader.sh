@@ -278,6 +278,47 @@ wf_load_config() {
   return 0
 }
 
+# wf_write_snapshot <outfile>
+# Reads $WF_SPEC_GATES and all WF_SPEC_AGENTS_* env vars; writes normalized JSON
+# {"agents": {...}, "gates": [...]} to <outfile>. Requires python3.
+wf_write_snapshot() {
+  local outfile="$1"
+  python3 -c "
+import os, json
+gates = sorted(l for l in os.environ.get('WF_SPEC_GATES', '').splitlines() if l)
+agents = {k[len('WF_SPEC_AGENTS_'):].lower(): sorted(v.split())
+          for k, v in os.environ.items()
+          if k.startswith('WF_SPEC_AGENTS_') and v}
+print(json.dumps({'agents': agents, 'gates': gates}, sort_keys=True))
+" > "$outfile"
+}
+
+# wf_check_snapshot_drift <snapfile>
+# Re-reads current config state from env, compares against <snapfile>.
+# Echoes SNAPSHOT_OK or SNAPSHOT_DRIFT; returns 0 for OK, 1 for drift.
+# Exits 0 silently if <snapfile> is absent.
+wf_check_snapshot_drift() {
+  local snapfile="$1"
+  [[ -f "$snapfile" ]] || return 0
+  local current snapshot
+  current="$(python3 -c "
+import os, json
+gates = sorted(l for l in os.environ.get('WF_SPEC_GATES', '').splitlines() if l)
+agents = {k[len('WF_SPEC_AGENTS_'):].lower(): sorted(v.split())
+          for k, v in os.environ.items()
+          if k.startswith('WF_SPEC_AGENTS_') and v}
+print(json.dumps({'agents': agents, 'gates': gates}, sort_keys=True))
+")"
+  snapshot="$(cat "$snapfile")"
+  if [[ "$current" == "$snapshot" ]]; then
+    echo "SNAPSHOT_OK"
+    return 0
+  else
+    echo "SNAPSHOT_DRIFT"
+    return 1
+  fi
+}
+
 # CLI mode — evaluable KEY=VAL lines for hooks that cannot source.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   set -euo pipefail
@@ -286,12 +327,14 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
       shift
       wf_load_config "$@" || exit $?
       # Explicit allowlist prevents pre-existing WF_* env vars from being re-exported
-      local _wf_allowed_vars=(
+      # No `local` here — bash CLI mode top-level; local is invalid outside a function.
+      # Use eval-based set-check for bash 3.2 compat ([[ -v ]] requires bash 4.2+)
+      _wf_allowed_vars=(
         WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
       )
       for var in "${_wf_allowed_vars[@]}"; do
-        [[ -v "$var" ]] || continue
+        eval "[[ \"\${${var}+x}\" ]]" 2>/dev/null || continue
         val="${!var}"
         esc="${val//\'/\'\\\'\'}"
         printf "%s='%s'\n" "$var" "$esc"

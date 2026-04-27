@@ -2,6 +2,7 @@
 id: "002"
 name: "Implement scripts/config-loader.sh sourced loader"
 status: done
+pr_url: "https://github.com/AlarQ/SDD-hub/pull/32"
 blocked_by: ["001"]
 max_files: 7
 estimated_files:
