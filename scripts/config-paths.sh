@@ -114,3 +114,15 @@ validate_id() {
   echo "ERROR: validate_id: rejected id: ${value:-<empty>}" >&2
   return 1
 }
+
+# validate_scope_enum_check <value>
+#   Validates value against the validate_scope enum: {per-task, per-spec, both}.
+#   Returns 0 on match, 2 otherwise. Silent on success; stderr names the enum on reject.
+validate_scope_enum_check() {
+  local value="${1:-}"
+  case "$value" in
+    per-task|per-spec|both) return 0 ;;
+    *) echo "ERROR: validate_scope_enum_check: invalid value '${value}'; expected one of: per-task, per-spec, both" >&2
+       return 2 ;;
+  esac
+}

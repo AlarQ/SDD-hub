@@ -176,10 +176,11 @@ wf_load_config() {
   scope="$(wf__json_get "$cfg_json" '.validate_scope' 'per-task')" || {
     wf__err "$WF_CONFIG_FILE: validate_scope extraction failed"; wf__unset_partials; return 5
   }
-  case "$scope" in
-    per-task|per-spec|both) WF_VALIDATE_SCOPE="$scope" ;;
-    *) wf__err "$WF_CONFIG_FILE: validate_scope invalid: $scope"; wf__unset_partials; return 2 ;;
-  esac
+  validate_scope_enum_check "$scope" 2>/dev/null || {
+    wf__err "$WF_CONFIG_FILE: validate_scope invalid: '$scope' (expected: per-task, per-spec, both)"
+    wf__unset_partials; return 2
+  }
+  WF_VALIDATE_SCOPE="$scope"
 
   # gates.yml parse
   local gates_json
@@ -262,10 +263,11 @@ wf_load_config() {
       wf__err "$spec_cfg: validate_scope extraction failed"; wf__unset_partials; return 5
     }
     if [[ -n "$spec_scope" ]]; then
-      case "$spec_scope" in
-        per-task|per-spec|both) WF_VALIDATE_SCOPE="$spec_scope" ;;
-        *) wf__err "$spec_cfg: validate_scope invalid: $spec_scope"; wf__unset_partials; return 4 ;;
-      esac
+      validate_scope_enum_check "$spec_scope" 2>/dev/null || {
+        wf__err "$spec_cfg: validate_scope invalid: '$spec_scope' (expected: per-task, per-spec, both)"
+        wf__unset_partials; return 4
+      }
+      WF_VALIDATE_SCOPE="$spec_scope"
     fi
 
     WF_SPEC_HAS_CONFIG=1

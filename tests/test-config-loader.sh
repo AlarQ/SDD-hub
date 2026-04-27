@@ -221,6 +221,76 @@ test_shared_fixtures_extended() {
      && -f "$FIXTURES/README.md" ]]
 }
 
+# --- validate_scope tests (T013) ---
+
+test_loader_validate_scope_default_per_task() {
+  # Given: .workflow.yml omits validate_scope
+  # When:  wf_load_config succeeds
+  # Then:  WF_VALIDATE_SCOPE=per-task
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  sed '/^validate_scope/d' "$repo/.workflow.yml" > "$repo/.workflow.yml.tmp" \
+    && mv "$repo/.workflow.yml.tmp" "$repo/.workflow.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config \
+      && [[ "$WF_VALIDATE_SCOPE" == "per-task" ]] )
+}
+
+test_loader_validate_scope_per_spec_from_workflow_yml() {
+  # Given: .workflow.yml sets validate_scope: per-spec
+  # When:  wf_load_config succeeds
+  # Then:  WF_VALIDATE_SCOPE=per-spec
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  sed 's/^validate_scope:.*/validate_scope: per-spec/' "$repo/.workflow.yml" > "$repo/.workflow.yml.tmp" \
+    && mv "$repo/.workflow.yml.tmp" "$repo/.workflow.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config \
+      && [[ "$WF_VALIDATE_SCOPE" == "per-spec" ]] )
+}
+
+test_loader_validate_scope_spec_override_wins() {
+  # Given: .workflow.yml sets per-task, spec config.yml sets both
+  # When:  wf_load_config --spec demo
+  # Then:  WF_VALIDATE_SCOPE=both (spec wins)
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  cp "$FIXTURES/spec-config-scope-override.yml" "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_VALIDATE_SCOPE" == "both" ]] )
+}
+
+test_loader_validate_scope_invalid_exits_2_names_enum() {
+  # Given: .workflow.yml sets validate_scope: disabled (unknown value)
+  # When:  wf_load_config runs
+  # Then:  exits 2 and error names the allowed enum
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  sed 's/^validate_scope:.*/validate_scope: disabled/' "$repo/.workflow.yml" > "$repo/.workflow.yml.tmp" \
+    && mv "$repo/.workflow.yml.tmp" "$repo/.workflow.yml"
+  local rc=0 err
+  err="$(cd "$repo" && source "$LOADER"; wf_load_config 2>&1 1>/dev/null)" || rc=$?
+  [[ "$rc" == "2" ]] \
+    && grep -q "per-task" <<<"$err" \
+    && grep -q "per-spec" <<<"$err" \
+    && grep -q "both"     <<<"$err"
+}
+
+test_loader_validate_scope_templates_documented() {
+  # Given: both templates exist
+  # Then:  workflow.yml.template and spec-config.yml.template each reference validate_scope
+  grep -q "validate_scope" "$REPO_ROOT/templates/workflow.yml.template" \
+    && grep -q "validate_scope" "$REPO_ROOT/templates/spec-config.yml.template"
+}
+
+test_loader_no_script_has_inline_source_of_config_loader() {
+  # Ensure no script in scripts/ or commands/ contains an inline 'source config-loader.sh' call.
+  # Callers must use wf_load_config after sourcing, not re-source the loader inline.
+  # grep -v "config-loader.sh" excludes config-loader.sh's own self-reference lines
+  # (the file path appears in grep output as the filename prefix).
+  ! grep -rE '^[[:space:]]*(source|\.)[[:space:]]+[^#]*config-loader\.sh' \
+      "$REPO_ROOT/scripts/" "$REPO_ROOT/commands/" 2>/dev/null \
+    | grep -v "config-loader.sh"
+}
+
 echo "=== test-config-loader.sh ==="
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
@@ -239,6 +309,12 @@ run_test "gates.yml duplicate ids fail closed exit 3" test_loader_gates_duplicat
 run_test "gate_pool with ../ traversal fails closed exit 2" test_loader_gate_pool_traversal_exit_2
 run_test "unresolved agent id fails closed exit 4" test_loader_unresolved_agent_exit_4
 run_test "extended shared fixtures present" test_shared_fixtures_extended
+run_test "validate_scope defaults to per-task when field absent" test_loader_validate_scope_default_per_task
+run_test "validate_scope=per-spec exported from .workflow.yml" test_loader_validate_scope_per_spec_from_workflow_yml
+run_test "validate_scope spec config.yml override wins over repo default" test_loader_validate_scope_spec_override_wins
+run_test "validate_scope=disabled exits 2 and names enum in error" test_loader_validate_scope_invalid_exits_2_names_enum
+run_test "validate_scope documented in both templates" test_loader_validate_scope_templates_documented
+run_test "grep guard: no script has inline source of config-loader.sh" test_loader_no_script_has_inline_source_of_config_loader
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
