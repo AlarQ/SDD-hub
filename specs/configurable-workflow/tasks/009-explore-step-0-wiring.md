@@ -1,7 +1,7 @@
 ---
 id: "009"
 name: "Wire config-inferencer into /explore step 0"
-status: blocked
+status: done
 blocked_by: ["003", "004", "008"]
 max_files: 1
 empty_intersection_ok: true
@@ -37,3 +37,11 @@ Update `commands/explore.md` to add a step 0 that runs the `config-inferencer` a
 
 - Inferencer failure or timeout → manual-entry prompt; if skipped, write default template from `templates/spec-config.yml.template`.
 - This is a single-file change to a slash command markdown definition. Reviewer should verify the step ordering and the event-emission requirement.
+
+## Decisions Made
+
+- Step 0 is entirely non-blocking: every failure path (loader error, agent timeout, user skip) continues to step 1.
+- `[M]` manual-entry option surfaces in the approval prompt so `/config` re-routing is always available without memorizing a separate command; the summary also surfaces [M] as the inferencer-unavailable fallback path.
+- Monitor events use best-effort semantics (non-zero exit is a warning, not a stop) — consistent with how other commands treat monitor.sh.
+- `config_inferred` event fires after the agent returns (before approval) so a crash during approval still leaves an audit trail.
+- If `$ARGUMENTS` is empty the step is skipped silently; config inference is meaningless without a feature name.
