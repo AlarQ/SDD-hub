@@ -74,6 +74,38 @@ emit_transition_event() {
   fi
 }
 
+# Emit spec_last_task_done when the final task in a feature transitions to done.
+# Idempotent: skips if a prior spec_audit_done or spec_last_task_done already exists
+# on the feature's .monitor.jsonl.
+maybe_emit_spec_last_task_done() {
+  local task_file="$1" new_status="$2"
+  [[ "$new_status" == "done" ]] || return 0
+  [[ "$MONITOR_AVAILABLE" = "true" ]] || return 0
+
+  local tasks_dir feature_dir feature monitor_file
+  tasks_dir="$(dirname "$task_file")"
+  feature_dir="$(dirname "$tasks_dir")"
+  feature="$(basename "$feature_dir")"
+  monitor_file="$feature_dir/.monitor.jsonl"
+
+  local f task_status non_done=0
+  for f in "$tasks_dir"/*.md; do
+    [[ -f "$f" ]] || continue
+    task_status=$(read_frontmatter "$f" ".status" 2>/dev/null) || continue
+    [[ "$task_status" != "done" ]] && non_done=$((non_done + 1))
+  done
+  [[ "$non_done" -eq 0 ]] || return 0
+
+  if [[ -f "$monitor_file" ]]; then
+    grep -q '"category":"spec_audit_done"' "$monitor_file" 2>/dev/null && return 0
+    grep -q '"category":"spec_last_task_done"' "$monitor_file" 2>/dev/null && return 0
+  fi
+
+  log_event "$feature" "spec_last_task_done" "" \
+    "$(printf '{"tasks_dir":"%s"}' "$(escape_json_string "$tasks_dir")")" \
+    || echo "WARN: spec_last_task_done emission failed" >&2
+}
+
 # Valid transitions: from -> to
 get_allowed_transitions() {
   case "$1" in
@@ -236,6 +268,7 @@ cmd_set_status() {
   update_frontmatter "$file" ".status = \"$new_status\""
   echo "Status updated: $current_status -> $new_status ($file)"
   emit_transition_event "$task_id" "$current_status" "$new_status" "$file"
+  maybe_emit_spec_last_task_done "$file" "$new_status"
 }
 
 # Check for unvalidated work
@@ -257,7 +290,8 @@ cmd_check_unvalidated() {
   [ "$found" = "true" ] && return 1 || return 0
 }
 
-# Main dispatch
+# Main dispatch (only when run directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 check_yq
 
 case "${1:-help}" in
@@ -270,3 +304,4 @@ case "${1:-help}" in
   help|--help|-h)   usage ;;
   *)                die "Unknown command: $1. Run 'task-manager.sh help' for usage." ;;
 esac
+fi

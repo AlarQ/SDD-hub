@@ -187,6 +187,79 @@ test_logged_event_includes_task_file_path() {
   [[ "$line" == *'"task_file":"specs/test-feature/tasks/001-test.md"'* ]]
 }
 
+# Walk a task through the full state machine to "done".
+walk_to_done() {
+  local file="$1"
+  "$TEST_TMPDIR/scripts/task-manager.sh" set-status "$file" in-progress > /dev/null
+  "$TEST_TMPDIR/scripts/task-manager.sh" set-status "$file" implemented > /dev/null
+  "$TEST_TMPDIR/scripts/task-manager.sh" set-status "$file" done > /dev/null
+}
+
+test_spec_last_task_done_emitted_on_final_done() {
+  # Given 2 tasks, one already done, one about to transition to done
+  create_task_file "specs/test-feature/tasks/001-a.md" "001" "done"
+  create_task_file "specs/test-feature/tasks/002-b.md" "002" "todo"
+  set_monitor_context "test-feature" "002"
+
+  # When the final task walks to done
+  walk_to_done "specs/test-feature/tasks/002-b.md"
+
+  # Then spec_last_task_done is emitted
+  grep -q '"category":"spec_last_task_done"' "specs/test-feature/.monitor.jsonl"
+}
+
+test_spec_last_task_done_not_emitted_when_others_pending() {
+  # Given 2 tasks, both todo
+  create_task_file "specs/test-feature/tasks/001-a.md" "001" "todo"
+  create_task_file "specs/test-feature/tasks/002-b.md" "002" "todo"
+  set_monitor_context "test-feature" "001"
+
+  # When only one walks to done
+  walk_to_done "specs/test-feature/tasks/001-a.md"
+
+  # Then spec_last_task_done is NOT emitted
+  ! grep -q '"category":"spec_last_task_done"' "specs/test-feature/.monitor.jsonl"
+}
+
+test_spec_last_task_done_idempotent_with_prior_audit() {
+  # Given a feature with all tasks done and a prior spec_audit_done event
+  create_task_file "specs/test-feature/tasks/001-a.md" "001" "done"
+  create_task_file "specs/test-feature/tasks/002-b.md" "002" "todo"
+  set_monitor_context "test-feature" "002"
+  mkdir -p specs/test-feature
+  printf '{"ts":"2026-01-01T00:00:00.000Z","category":"spec_audit_done","feature":"test-feature","data":{}}\n' \
+    > specs/test-feature/.monitor.jsonl
+
+  # When final task walks to done
+  walk_to_done "specs/test-feature/tasks/002-b.md"
+
+  # Then no spec_last_task_done is emitted (audit guard)
+  ! grep -q '"category":"spec_last_task_done"' "specs/test-feature/.monitor.jsonl"
+}
+
+test_spec_last_task_done_not_double_emitted() {
+  # Given a single task that walks to done — emits once
+  create_task_file "specs/test-feature/tasks/001-a.md" "001" "implemented"
+  set_monitor_context "test-feature" "001"
+  "$TEST_TMPDIR/scripts/task-manager.sh" set-status "specs/test-feature/tasks/001-a.md" done > /dev/null
+
+  # When maybe_emit_spec_last_task_done is invoked again directly (simulates re-trigger)
+  (
+    cd "$TEST_TMPDIR"
+    WF_SPEC_STORAGE=specs/ bash -c '
+      set +e
+      cd "'"$TEST_TMPDIR"'"
+      source scripts/task-manager.sh
+      maybe_emit_spec_last_task_done "specs/test-feature/tasks/001-a.md" "done"
+    ' >/dev/null 2>&1 || true
+  )
+
+  # Then exactly one spec_last_task_done event exists (sentinel guard)
+  local count
+  count=$(grep -c '"category":"spec_last_task_done"' specs/test-feature/.monitor.jsonl)
+  [[ "$count" == "1" ]]
+}
+
 # === Runner ===
 
 echo "Running task-manager.sh monitoring instrumentation tests..."
@@ -198,6 +271,10 @@ run_test "unblock logs task_transition event for each unblocked task" test_unblo
 run_test "no logging occurs when .monitor-context does not exist" test_no_logging_without_monitor_context
 run_test "logged event includes from_status and to_status" test_logged_event_includes_from_and_to_status
 run_test "logged event includes task_file path" test_logged_event_includes_task_file_path
+run_test "spec_last_task_done emitted when final task transitions to done" test_spec_last_task_done_emitted_on_final_done
+run_test "spec_last_task_done not emitted while other tasks pending" test_spec_last_task_done_not_emitted_when_others_pending
+run_test "spec_last_task_done suppressed when prior spec_audit_done exists" test_spec_last_task_done_idempotent_with_prior_audit
+run_test "spec_last_task_done not double-emitted on re-invocation" test_spec_last_task_done_not_double_emitted
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"
