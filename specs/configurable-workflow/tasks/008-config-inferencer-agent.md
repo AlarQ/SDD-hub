@@ -1,7 +1,8 @@
 ---
 id: "008"
 name: "Config inferencer agent definition"
-status: implemented
+status: done
+pr_url: "https://github.com/AlarQ/SDD-hub/pull/35"
 blocked_by: ["001"]
 max_files: 2
 estimated_files:
