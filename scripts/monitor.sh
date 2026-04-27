@@ -42,16 +42,6 @@ escape_json_string() {
   printf '%s' "$val"
 }
 
-# _find_project_root — legacy walk-up for repos without .workflow.yml
-_find_project_root() {
-  local dir="${PWD}"
-  while [[ "$dir" != "/" ]]; do
-    [[ -d "$dir/specs" ]] && { printf '%s' "$dir"; return 0; }
-    dir="$(dirname "$dir")"
-  done
-  return 1
-}
-
 # _find_workflow_root — delegates to wf_resolve_root (config-paths.sh) when loaded
 _find_workflow_root() {
   if [[ "$_WF_MON_PATHS_LOADED" == "1" ]]; then
@@ -59,7 +49,7 @@ _find_workflow_root() {
     return 0
   fi
   [[ -n "${WF_REPO_ROOT:-}" ]] && { printf '%s' "$WF_REPO_ROOT"; return 0; }
-  _find_project_root || return 1
+  return 1
 }
 
 get_spec_storage() {
@@ -71,7 +61,7 @@ get_spec_storage() {
   root="$(_find_workflow_root)" || return 1
   if command -v yq >/dev/null 2>&1 && [[ -f "$root/.workflow.yml" ]]; then
     local raw
-    raw="$(yq e '.spec_storage // "specs/"' "$root/.workflow.yml" 2>/dev/null)" || raw="specs/"
+    raw="$(yq e '.spec_storage // "specs/"' "$root/.workflow.yml" 2>/dev/null)" || { echo "ERROR: Failed to read .workflow.yml" >&2; return 2; }
     case "$raw" in
       /*) printf '%s' "$raw" ;;
       "~"|"~/"*) printf '%s' "${HOME}${raw:1}" ;;
@@ -79,7 +69,8 @@ get_spec_storage() {
     esac
     return 0
   fi
-  printf '%s' "$root/specs"
+  echo "ERROR: No .workflow.yml found. Run /bootstrap to initialise workflow config." >&2
+  return 2
 }
 
 get_monitor_file() {

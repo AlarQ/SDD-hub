@@ -30,21 +30,15 @@ if [[ -f "$SCRIPT_DIR/config-paths.sh" ]]; then
 fi
 
 # Detect repo root for absolute path resolution when invoked from a subdir.
-# Priority: WF_REPO_ROOT env → .workflow.yml walk-up → git root → specs/ scan → CWD
+# Priority: WF_REPO_ROOT env → .workflow.yml walk-up → git root → CWD
 _wf_tm_detect_repo_root() {
+  [[ -n "${WF_REPO_ROOT:-}" ]] && { printf '%s' "$WF_REPO_ROOT"; return 0; }
   if [[ "$_WF_TM_PATHS_LOADED" == "1" ]]; then
     local root
     if root="$(wf_resolve_root "$PWD" 2>/dev/null)"; then printf '%s' "$root"; return 0; fi
-  elif [[ -n "${WF_REPO_ROOT:-}" ]]; then
-    printf '%s' "$WF_REPO_ROOT"; return 0
   fi
   local git_root
   if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then printf '%s' "$git_root"; return 0; fi
-  local dir="$PWD"
-  while [[ "$dir" != "/" ]]; do
-    [[ -d "$dir/specs" ]] && { printf '%s' "$dir"; return 0; }
-    dir="$(dirname "$dir")"
-  done
   printf '%s' "$PWD"
 }
 

@@ -1,4 +1,5 @@
 ---
+# display-only: canonical gate definitions live in knowledge-base/gates.yml
 validation_tools:
   - bash -n scripts/*.sh
   - shellcheck scripts/*.sh

@@ -31,11 +31,22 @@ if [ ! -x "$TASK_MANAGER" ]; then
   exit 0
 fi
 
-# Find changed task files (specs/*/tasks/*.md) relative to repo root
+# Derive spec storage prefix for task file path matching.
+# WF_SPEC_STORAGE is set by config-loader when .workflow.yml is present.
+# Without .workflow.yml workflow is unconfigured — skip task validation.
+if [[ -z "${WF_SPEC_STORAGE:-}" ]]; then
+  exit 0
+fi
+_spec_prefix="${WF_SPEC_STORAGE#"$REPO_ROOT/"}"
+# Escape ERE metacharacters so a path like "my.specs" matches literally
+_spec_prefix_esc="$(printf '%s' "$_spec_prefix" | sed 's/[.[\*^$()+?{|]/\\&/g')"
+
+# Find changed task files under spec storage relative to repo root
 mapfile -t changed_tasks < <(
   git diff --cached --name-only -z --diff-filter=ACM \
-  | tr '\0' '\n' | grep -E '^specs/.*/tasks/.*\.md$' || true
+  | tr '\0' '\n' | grep -E "^${_spec_prefix_esc}/.*/tasks/.*\\.md\$" || true
 )
+unset _spec_prefix _spec_prefix_esc
 [[ ${#changed_tasks[@]} -eq 0 ]] && exit 0
 
 errors=0
