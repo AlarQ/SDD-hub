@@ -13,7 +13,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `commands/*.md` — Slash command definitions (bootstrap, explore, propose, validate-spec, implement, validate, review-findings, learn-from-reports, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research, promote-rules)
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Lives in this repo; not installed globally.
 - `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Lives in this repo; not installed globally. Referenced by all workflow commands instead of duplicating KB instructions inline.
-- `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
+- `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, create-followup, check-unvalidated, status). Requires `yq`. `create-followup <feature> <fr-id> <description>` auto-generates a `status: todo` task from a `/validate-impl` spec-audit accepted finding; FR id is validated against `spec.md` (fail-closed on unknown ids) and ground_rules are inherited from the spec's `## Applicable Ground Rules` section.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `scripts/monitor.sh` — Event logger for spec implementation monitoring; appends JSONL events to `specs/<feature>/.monitor.jsonl`
 - `hooks/` — Claude Code hook scripts for enforcement and monitoring (block-git-hook-bypass, block-dismissive-language, monitor-tool-calls). Installed to `~/.claude/hooks/` by `setup.sh`.

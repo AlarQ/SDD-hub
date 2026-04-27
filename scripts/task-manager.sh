@@ -97,7 +97,12 @@ maybe_emit_spec_last_task_done() {
   [[ "$non_done" -eq 0 ]] || return 0
 
   if [[ -f "$monitor_file" ]]; then
-    grep -q '"category":"spec_audit_done"' "$monitor_file" 2>/dev/null && return 0
+    # Guard semantics (T017 update): if newest of {spec_audit_done, spec_reaudit_requested}
+    # is spec_audit_done, suppress emission. spec_reaudit_requested newer than any prior
+    # spec_audit_done (or no spec_audit_done at all) → guard clear, allow emission.
+    local newest
+    newest=$(grep -oE '"category":"(spec_audit_done|spec_reaudit_requested)"' "$monitor_file" 2>/dev/null | tail -1 || true)
+    [[ "$newest" == *spec_audit_done* ]] && return 0
     grep -q '"category":"spec_last_task_done"' "$monitor_file" 2>/dev/null && return 0
   fi
 
@@ -128,6 +133,8 @@ Commands:
   set-status <task-file> <status> Update task status (validates transition)
   unblock <tasks-directory>      Check blocked tasks, unblock if dependencies are done
   next <tasks-directory>         Get next eligible task (status: todo)
+  create-followup <feature> <fr-id> <description>
+                                  Auto-create a follow-up task from a spec-audit finding
   check-unvalidated <tasks-dir>  Check for tasks with status: implemented or review
   status <tasks-directory>       Show status dashboard with dependencies and health diagnostics
   help                           Show this help message
@@ -271,6 +278,86 @@ cmd_set_status() {
   maybe_emit_spec_last_task_done "$file" "$new_status"
 }
 
+# Create a follow-up task auto-generated from a spec-audit accepted finding (T017).
+# Validates FR id against spec.md FR allowlist (security boundary — Karen may hallucinate).
+# Inherits ground_rules from spec.md "## Applicable Ground Rules" section.
+cmd_create_followup() {
+  local feature="${1:-}" fr_id="${2:-}" description="${3:-}"
+  [ -z "$feature" ] || [ -z "$fr_id" ] || [ -z "$description" ] && \
+    die "Usage: task-manager.sh create-followup <feature> <fr-id> <description>"
+  [[ "$fr_id" =~ ^FR-[0-9]+$ ]] || die "Invalid fr-id format: '$fr_id' (expected FR-N)"
+  [[ "$feature" =~ ^[a-zA-Z0-9_-]+$ ]] || die "Invalid feature name: '$feature'"
+
+  local storage spec_dir spec_md tasks_dir
+  if command -v get_spec_storage >/dev/null 2>&1; then
+    storage="$(get_spec_storage 2>/dev/null)" || storage="$_WF_TM_REPO_ROOT/specs"
+  else
+    storage="$_WF_TM_REPO_ROOT/specs"
+  fi
+  spec_dir="$storage/$feature"
+  spec_md="$spec_dir/spec.md"
+  tasks_dir="$spec_dir/tasks"
+  [ -f "$spec_md" ] || die "spec.md not found: $spec_md"
+  [ -d "$tasks_dir" ] || die "tasks dir not found: $tasks_dir"
+
+  local allowlist
+  allowlist=$(grep -oE '^### FR-[0-9]+:' "$spec_md" | sed 's/^### //;s/://' | sort -u)
+  [ -n "$allowlist" ] || die "No FR-N headings found in $spec_md"
+  if ! printf '%s\n' "$allowlist" | grep -qx "$fr_id"; then
+    {
+      echo "ERROR: Unknown FR id '$fr_id' for feature '$feature' (consulted $spec_md)"
+      echo "Known FR ids:"
+      printf '%s\n' "$allowlist"
+    } >&2
+    return 1
+  fi
+
+  local last_id next_id
+  last_id=$(ls "$tasks_dir"/*.md 2>/dev/null | sed -n 's|.*/\([0-9]\{3\}\)-.*|\1|p' | sort -n | tail -1)
+  if [ -z "$last_id" ]; then next_id="001"
+  else next_id=$(printf "%03d" $((10#$last_id + 1))); fi
+
+  local rules
+  rules=$(awk '/^## Applicable Ground Rules/{flag=1; next} /^## /{flag=0} flag' "$spec_md" \
+    | grep -oE '`(general|project):[^`]+`' \
+    | tr -d '`' \
+    | awk '!seen[$0]++')
+  [ -n "$rules" ] || die "No ground_rules parsed from '## Applicable Ground Rules' in $spec_md"
+
+  local slug task_name task_file
+  slug=$(printf '%s' "$description" | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-50)
+  [ -n "$slug" ] || slug="followup"
+  local fr_id_lower
+  fr_id_lower=$(printf '%s' "$fr_id" | tr '[:upper:]' '[:lower:]')
+  task_name="${fr_id_lower}-${slug}"
+  task_file="$tasks_dir/${next_id}-${task_name}.md"
+  [ -e "$task_file" ] && die "Refusing to overwrite existing task file: $task_file"
+
+  {
+    echo "---"
+    echo "id: \"$next_id\""
+    printf 'name: "Follow-up for %s: %s"\n' "$fr_id" "${description//\"/\\\"}"
+    echo "status: todo"
+    echo "blocked_by: []"
+    echo "max_files: 5"
+    echo "estimated_files: []"
+    echo "test_cases: []"
+    echo "ground_rules:"
+    while IFS= read -r r; do [ -n "$r" ] && echo "  - $r"; done <<< "$rules"
+    echo "---"
+    echo
+    echo "## Description"
+    echo
+    echo "Auto-created follow-up for **$fr_id** from spec audit (verdict=reopen)."
+    echo
+    echo "Original FR finding: $description"
+  } > "$task_file"
+
+  cmd_validate "$task_file" >/dev/null || { rm -f "$task_file"; die "Generated follow-up task failed validation"; }
+  echo "$task_file"
+}
+
 # Check for unvalidated work
 cmd_check_unvalidated() {
   local dir="${1:-}"
@@ -299,6 +386,7 @@ case "${1:-help}" in
   set-status)       shift; cmd_set_status "$@" ;;
   unblock)          shift; cmd_unblock "$@" ;;
   next)             shift; cmd_next "$@" ;;
+  create-followup)  shift; cmd_create_followup "$@" ;;
   check-unvalidated) shift; cmd_check_unvalidated "$@" ;;
   status)           shift; cmd_status "$@" ;;
   help|--help|-h)   usage ;;

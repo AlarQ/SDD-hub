@@ -6,7 +6,14 @@ Feature name: $ARGUMENTS
 
 1. Read and follow `~/.claude/knowledge-base-rules.md`.
 2. Verify every task under `specs/$ARGUMENTS/tasks/` has `status: done`. If not, refuse with a list of non-done tasks.
-3. Refuse with `--reaudit` guidance if a `spec_audit_done` event already exists in `specs/$ARGUMENTS/.monitor.jsonl` and the user did not pass `--reaudit`.
+3. Refuse with `--reaudit` guidance if the most-recent of `{spec_audit_done, spec_reaudit_requested}` events in `specs/$ARGUMENTS/.monitor.jsonl` is `spec_audit_done` and the user did not pass `--reaudit`.
+4. If the user passed `--reaudit`: append a `spec_reaudit_requested` event (append-only — never truncate or rewrite prior `spec_audit_done` events; the audit trail must remain intact) before proceeding:
+
+   ```bash
+   source ~/.claude/scripts/monitor.sh
+   log_event "$ARGUMENTS" spec_reaudit_requested "" \
+     "$(printf '{"requested_ts":"%s","reason":"%s"}' "$(get_timestamp)" "user --reaudit")"
+   ```
 
 ## Step 0 — Load Spec Config
 
@@ -86,7 +93,7 @@ wf_vi_emit_done "$ARGUMENTS" "$verdict" "$report_path"
 ## Step 6 — Verdict Routing
 
 - `verdict: complete` → `wf_vi_set_spec_shipped "$spec_dir"` then `wf_vi_emit_complete "$ARGUMENTS"`.
-- `verdict: reopen` → `wf_vi_emit_reopen "$ARGUMENTS"`. Hand the report path to `/review-findings $ARGUMENTS` for accept/reject of partial/missing FRs (T017 owns the auto-task creation).
+- `verdict: reopen` → `wf_vi_emit_reopen "$ARGUMENTS"`. Hand the report path to `/review-findings $ARGUMENTS`. Each `missing` / `partial` FR row in the report becomes one review unit; **Accept** invokes `task-manager.sh create-followup "$ARGUMENTS" <FR-id> "<description>"`, which fail-closes on unknown FR ids and inherits ground_rules from `spec.md`. After the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` (because the most-recent guard event is `spec_reaudit_requested`, not `spec_audit_done`) and `/validate-impl` runs again — cycle converges when verdict = `complete`.
 
 ## Notes
 

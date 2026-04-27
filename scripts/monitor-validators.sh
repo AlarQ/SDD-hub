@@ -8,6 +8,7 @@ _WF_VALID_CATEGORIES=(
   validation_result finding_found finding_accepted finding_rejected task_update
   config_inferred config_approved agent_spawn gate_skip
   spec_audit_start spec_audit_done spec_complete spec_reopened spec_last_task_done
+  spec_reaudit_requested
 )
 
 redact_home() {

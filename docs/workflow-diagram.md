@@ -15,7 +15,7 @@ The core auto-chain (`/implement` → `/validate` → `/review-findings` → `/l
 
 Before `/implement` starts, `/propose` auto-chains into `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
 
-When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings` and spawns follow-up tasks.
+When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
@@ -68,6 +68,7 @@ graph LR
     KAREN --> VIMPL
     VIMPL -->|verdict=complete| Core
     VIMPL -.->|verdict=reopen| REV
+    REV -.->|accept missing/partial FR<br/>create-followup| IMPL
 
     CONT -.-> IMPL
     CONT -.-> VAL

@@ -28,3 +28,4 @@
 {"ts":"2026-04-27T17:30:39.000Z","category":"task_transition","task":"015","feature":"configurable-workflow","data":{"test":"x"}}
 {"ts":"2026-04-27T17:38:16.000Z","category":"task_transition","task":"016","feature":"configurable-workflow","data":{"from_status":"todo","to_status":"in-progress","task_file":"specs/configurable-workflow/tasks/016-per-spec-gate-skip-and-union-execution.md"}}
 {"ts":"2026-04-27T17:41:45.000Z","category":"task_transition","task":"016","feature":"configurable-workflow","data":{"from_status":"in-progress","to_status":"implemented","task_file":"specs/configurable-workflow/tasks/016-per-spec-gate-skip-and-union-execution.md"}}
+{"ts":"2026-04-27T17:45:00.000Z","category":"task_transition","task":"017","feature":"configurable-workflow","data":{"from_status":"todo","to_status":"in-progress","task_file":"specs/configurable-workflow/tasks/017-spec-audit-report-review-findings-integration.md"}}
