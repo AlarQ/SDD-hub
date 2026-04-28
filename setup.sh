@@ -25,6 +25,7 @@ SCRIPTS_DIR="$CLAUDE_DIR/scripts"
 AGENTS_DIR="$CLAUDE_DIR/agents"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 TEMPLATES_DIR="$CLAUDE_DIR/templates"
+SKILLS_DIR="$CLAUDE_DIR/skills"
 FORCE=false
 
 if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
@@ -48,6 +49,7 @@ mkdir -p "$SCRIPTS_DIR"
 mkdir -p "$AGENTS_DIR"
 mkdir -p "$HOOKS_DIR"
 mkdir -p "$TEMPLATES_DIR"
+mkdir -p "$SKILLS_DIR"
 
 # Helper: copy file with overwrite protection
 safe_copy() {
@@ -160,7 +162,20 @@ for tpl_file in "$SCRIPT_DIR/templates/"*; do
   fi
 done
 
-# 8. Verify
+# 8. Copy skills
+echo ""
+echo -e "${CYAN}Installing skills to $SKILLS_DIR/${RESET}"
+for skill_dir in "$SCRIPT_DIR/skills/"*/; do
+  [ -d "$skill_dir" ] || continue
+  skill_name=$(basename "$skill_dir")
+  mkdir -p "$SKILLS_DIR/$skill_name"
+  if ! safe_copy "$skill_dir/SKILL.md" "$SKILLS_DIR/$skill_name/SKILL.md"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$skill_name/SKILL.md")
+  fi
+done
+
+# 9. Verify
 echo ""
 echo -e "${BOLD}${BLUE}=== Verification ===${RESET}"
 
@@ -227,6 +242,18 @@ for hook_file in "$SCRIPT_DIR/hooks/"*.sh; do
     echo -e "${GREEN}[ok]${RESET} $name hook"
   else
     echo -e "${RED}[FAIL]${RESET} $name hook missing or not executable"
+    errors=$((errors + 1))
+  fi
+done
+
+# Check skills
+for skill_dir in "$SCRIPT_DIR/skills/"*/; do
+  [ -d "$skill_dir" ] || continue
+  skill_name=$(basename "$skill_dir")
+  if [ -f "$SKILLS_DIR/$skill_name/SKILL.md" ]; then
+    echo -e "${GREEN}[ok]${RESET} $skill_name skill"
+  else
+    echo -e "${RED}[FAIL]${RESET} $skill_name skill missing"
     errors=$((errors + 1))
   fi
 done
