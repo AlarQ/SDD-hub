@@ -1,0 +1,11 @@
+tags: [shell, markdown, rust]
+gates:
+  - rust-clippy
+  - rust-test
+  - rust-fmt
+  - shell-syntax
+  - shellcheck
+agents:
+  implement: []
+  validate: []
+validate_scope: per-task

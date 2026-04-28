@@ -1,7 +1,7 @@
 ---
 id: "017"
 name: "Spec audit report + /review-findings integration + reopen flow"
-status: implemented
+status: done
 blocked_by: []
 max_files: 7
 estimated_files:

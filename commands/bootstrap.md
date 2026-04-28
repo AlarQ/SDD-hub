@@ -41,3 +41,9 @@ The general knowledge base (security, architecture, testing, style rules) is ins
 - `conventions/` — project-specific conventions discovered over time (via `/review-findings` feedback loop)
 
 Target: ~5-10 rules per file. Rules should be specific and actionable — each rule should be something a validation gate can check against.
+
+## Step C — Write gate registry
+
+1. Check if `knowledge-base/gates.yml` already exists — if yes, skip (idempotent).
+2. Write `knowledge-base/gates.yml` from `~/.claude/templates/gates.yml.template`.
+3. Report: "Wrote knowledge-base/gates.yml — add project gates before running /explore."

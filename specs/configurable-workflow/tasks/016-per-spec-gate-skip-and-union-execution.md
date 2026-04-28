@@ -1,7 +1,7 @@
 ---
 id: "016"
 name: "Per-spec gate skip + union execution at /validate-impl"
-status: implemented
+status: done
 blocked_by: []
 max_files: 4
 estimated_files:

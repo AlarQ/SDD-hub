@@ -30,7 +30,7 @@ Record `WF_SPEC_AGENTS_IMPLEMENT` (space-separated agent IDs for the post-implem
 
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`
-2. Set monitor context: run `$HOME/.claude/scripts/monitor.sh set_context "$ARGUMENTS" "<task-id>"` (replace `<task-id>` with the numeric ID from the prerequisite step, e.g. `001`)
+2. Set monitor context: run `~/.claude/scripts/monitor.sh set_context $ARGUMENTS <task-id>` (replace `<task-id>` with the numeric ID from the prerequisite step, e.g. `001`)
 3. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task and push to remote: `git push -u origin feat/$ARGUMENTS`)
 4. Pull latest feature branch: `git checkout feat/$ARGUMENTS && git pull`
 5. Check if task branch already exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`

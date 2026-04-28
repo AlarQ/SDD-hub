@@ -69,6 +69,10 @@ get_spec_storage() {
     esac
     return 0
   fi
+  if [[ "${WF_LEGACY_SPECS_FALLBACK:-0}" == "1" ]]; then
+    printf '%s' "$root/specs"
+    return 0
+  fi
   echo "ERROR: No .workflow.yml found. Run /bootstrap to initialise workflow config." >&2
   return 2
 }
