@@ -21,6 +21,7 @@ setup() {
   mkdir -p "$TEST_TMPDIR/fake-home/.claude/scripts"
   cp "$MONITOR_SCRIPT" "$TEST_TMPDIR/fake-home/.claude/scripts/monitor.sh"
   cp "$(dirname "$MONITOR_SCRIPT")/config-paths.sh" "$TEST_TMPDIR/fake-home/.claude/scripts/config-paths.sh" 2>/dev/null || true
+  cp "$(dirname "$MONITOR_SCRIPT")/monitor-validators.sh" "$TEST_TMPDIR/fake-home/.claude/scripts/monitor-validators.sh" 2>/dev/null || true
   chmod +x "$TEST_TMPDIR/fake-home/.claude/scripts/"*.sh
 }
 
