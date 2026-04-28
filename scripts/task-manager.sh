@@ -150,11 +150,18 @@ check_yq() {
   command -v yq >/dev/null 2>&1 || die "yq is not installed. Run: brew install yq"
 }
 
+# Portable yq with 5-second timeout (timeout/gtimeout/none depending on OS).
+_wf_yq() {
+  if command -v timeout >/dev/null 2>&1; then timeout 5 yq "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout 5 yq "$@"
+  else yq "$@"; fi
+}
+
 # Extract YAML frontmatter from a markdown file and pass it to yq.
 read_frontmatter() {
   local file="$1"
   local expression="${2:-.}"
-  sed -n '/^---$/,/^---$/p' "$file" | sed '1d;$d' | yq eval "$expression" -
+  sed -n '/^---$/,/^---$/p' "$file" | sed '1d;$d' | _wf_yq eval "$expression" -
 }
 
 # Resolve a prefixed ground_rules path to a real file path (absolute).
@@ -180,7 +187,7 @@ update_frontmatter() {
   local body
   body=$(tail -n +"$((second_delim + 1))" "$file")
   local updated_frontmatter
-  updated_frontmatter=$(echo "$frontmatter" | yq eval "$expression" -)
+  updated_frontmatter=$(echo "$frontmatter" | _wf_yq eval "$expression" -)
   {
     echo "---"
     echo "$updated_frontmatter"

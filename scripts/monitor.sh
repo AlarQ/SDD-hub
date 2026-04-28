@@ -61,12 +61,22 @@ get_spec_storage() {
   root="$(_find_workflow_root)" || return 1
   if command -v yq >/dev/null 2>&1 && [[ -f "$root/.workflow.yml" ]]; then
     local raw
-    raw="$(yq e '.spec_storage // "specs/"' "$root/.workflow.yml" 2>/dev/null)" || { echo "ERROR: Failed to read .workflow.yml" >&2; return 2; }
+    local _yq_timeout_cmd
+    if command -v timeout >/dev/null 2>&1; then _yq_timeout_cmd="timeout 5"
+    elif command -v gtimeout >/dev/null 2>&1; then _yq_timeout_cmd="gtimeout 5"
+    else _yq_timeout_cmd=""; fi
+    raw="$($_yq_timeout_cmd yq e '.spec_storage // "specs/"' "$root/.workflow.yml" 2>/dev/null)" || { echo "ERROR: Failed to read .workflow.yml" >&2; return 2; }
+    local resolved
     case "$raw" in
-      /*) printf '%s' "$raw" ;;
-      "~"|"~/"*) printf '%s' "${HOME}${raw:1}" ;;
-      *) printf '%s' "$root/$raw" ;;
+      /*) resolved="$raw" ;;
+      "~"|"~/"*) resolved="${HOME}${raw:1}" ;;
+      *) resolved="$root/$raw" ;;
     esac
+    [[ "$resolved" == *".."* ]] && { echo "ERROR: spec_storage path must not contain .." >&2; return 1; }
+    if [[ "$_WF_MON_PATHS_LOADED" == "1" ]] && [[ -e "$resolved" ]]; then
+      realpath_safe "$resolved" >/dev/null || return 1
+    fi
+    printf '%s' "$resolved"
     return 0
   fi
   if [[ "${WF_LEGACY_SPECS_FALLBACK:-0}" == "1" ]]; then

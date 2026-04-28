@@ -104,7 +104,7 @@ Edit the config to remove or replace these IDs, then re-run `/config <feature>`.
 
 After any successful write:
 ```bash
-$HOME/.claude/scripts/monitor.sh log_event "config_approved" \
-  "{\"feature\":\"<feature>\",\"config_path\":\"$WF_SPEC_STORAGE/<feature>/config.yml\",\"mode\":\"<edit|regenerate>\"}"
+$HOME/.claude/scripts/monitor.sh log_event "<feature>" "config_approved" "" \
+  "$(printf '{"config_path":"%s","mode":"%s"}' "$WF_SPEC_STORAGE/<feature>/config.yml" "<edit|regenerate>")"
 ```
 If monitor.sh is not found or exits non-zero, log a warning and continue — event emission is best-effort and must not block.

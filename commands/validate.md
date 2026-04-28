@@ -43,7 +43,11 @@ After computing the effective set above and before step 4 below, branch on `WF_V
   Then write a single zero-findings report `specs/$ARGUMENTS/reports/<task-id>-scope-skip.yaml` with `status: pass`, skip Phase 2 entirely, and proceed to the zero-findings status update path. The spec-level union runs later via `/validate-impl` (Step 2).
 
   Empty-intersection fail-closed (ADR-003) still applies: if the effective set is empty AND `empty_intersection_ok` is not `true`, treat as the existing `error` finding before this short-circuit takes effect.
-4. For each language-applicable gate whose ID is **not** in `WF_SPEC_GATES`: emit a `gate_skip` monitor event — `$HOME/.claude/scripts/monitor.sh log_event gate_skip "$ARGUMENTS" "{gate: <id>, reason: not in spec ceiling}"`.
+4. For each language-applicable gate whose ID is **not** in `WF_SPEC_GATES`: emit a `gate_skip` monitor event:
+   ```bash
+   $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" "gate_skip" "" \
+     "$(printf '{"gate":"%s","reason":"not in spec ceiling"}' "<id>")"
+   ```
 5. If the effective set is empty:
    - Read task frontmatter `empty_intersection_ok` field (default `false`).
    - If `empty_intersection_ok: true`: emit `gate_skip` event with `reason: empty_intersection_ok`, record 0 gates executed, treat as pass — skip to Phase 2.

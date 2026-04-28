@@ -31,7 +31,8 @@ Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract def
 
 **On success:** emit `config_inferred` monitor event now (before showing the approval summary):
 ```bash
-$HOME/.claude/scripts/monitor.sh log_event "config_inferred" '{"feature":"<feature>","source":"inferencer","reasoning":"<REASONING block>"}'
+$HOME/.claude/scripts/monitor.sh log_event "<feature>" "config_inferred" "" \
+  "$(printf '{"source":"inferencer","reasoning":"%s"}' "<REASONING block>")"
 ```
 If monitor.sh is not found or exits non-zero, log a warning and continue.
 
@@ -73,7 +74,8 @@ If `$ARGUMENTS` is empty (no feature name given yet), skip step 0 entirely and p
 After writing `config.yml` (A, E, or M paths):
 
 ```bash
-$HOME/.claude/scripts/monitor.sh log_event "config_approved" '{"feature":"<feature>","config_path":"<WF_SPEC_STORAGE>/<feature>/config.yml"}'
+$HOME/.claude/scripts/monitor.sh log_event "<feature>" "config_approved" "" \
+  "$(printf '{"config_path":"%s"}' "$WF_SPEC_STORAGE/<feature>/config.yml")"
 ```
 
 If monitor.sh is not found or exits non-zero, log a warning and continue — event emission is best-effort and must not block the explore flow.
