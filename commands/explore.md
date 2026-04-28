@@ -3,6 +3,87 @@ Explore and clarify requirements for a new feature or change.
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
+## Step 0 — Config Inference (runs before explore conversation)
+
+Run this step before asking the user any questions. It is non-blocking: failure routes to manual entry, never aborts explore.
+
+### 0a. Resolve spec storage
+
+Source the config loader to get `WF_SPEC_STORAGE`:
+
+```bash
+source ~/.claude/scripts/config-loader.sh
+# WF_SPEC_STORAGE is now set (default: specs/)
+```
+
+If sourcing fails (loader not found, exit non-zero), set `WF_SPEC_STORAGE=specs/` and continue.
+
+### 0b. Spawn config-inferencer
+
+If `$ARGUMENTS` is non-empty (feature name provided), spawn the `Config Inferencer` agent (`engineering-config-inferencer`) using the Agent tool. Pass:
+- The feature name (`$ARGUMENTS`)
+- Any PRD or description already available at `$WF_SPEC_STORAGE/$ARGUMENTS/prd.md` (read if it exists; omit if not)
+- The full contents of `knowledge-base/gates.yml` (if it exists)
+- A listing of all agent files under the configured `agent_pool` directory
+- The project's `CLAUDE.md`
+
+Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block."
+
+**On success:** emit `config_inferred` monitor event now (before showing the approval summary):
+```bash
+$HOME/.claude/scripts/monitor.sh log_event "<feature>" "config_inferred" "" \
+  "$(printf '{"source":"inferencer","reasoning":"%s"}' "<REASONING block>")"
+```
+If monitor.sh is not found or exits non-zero, log a warning and continue.
+
+**On timeout or agent error:** skip to step 0d (manual-entry prompt). Show: *"Config Inferencer unavailable — falling back to manual entry."* Do not emit `config_inferred`.
+
+### 0c. Render approval summary
+
+Present the agent's output to the user in this format:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Config Inference — <feature-name>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  <REASONING block from agent — trimmed to ≤ 10 lines>
+
+  Draft config.yml:
+  <YAML block from agent>
+
+  [A] Approve and save   [E] Edit before saving   [M] Manual entry   [S] Skip
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Wait for the user to respond with one of: A / E / M / S (case-insensitive).
+
+### 0d. Handle user response
+
+**A — Approve:** write the YAML block exactly as returned by the agent to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml` (create parent dirs if needed). Emit `config_approved` event (see 0e). Proceed to step 1.
+
+**E — Edit:** print the draft YAML in a fenced code block and tell the user: "Paste your edited version below." Wait for the user to provide the full edited YAML, then write it to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml`. Emit `config_approved` event (with edited YAML as payload). Proceed to step 1.
+
+**M — Manual entry / inferencer unavailable:** tell the user: "Enter your `config.yml` content below, or press Enter to write the default template." If the user provides content, write it. If the user presses Enter (empty input), copy `templates/spec-config.yml.template` to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml`. Emit `config_approved` event. Proceed to step 1.
+
+**S — Skip:** do not write `config.yml`. Note: *"config.yml skipped — run `/config $ARGUMENTS` later to configure gates and agents."* Do NOT emit any monitor events. Proceed to step 1.
+
+If `$ARGUMENTS` is empty (no feature name given yet), skip step 0 entirely and proceed to step 1. Config inference requires a feature name.
+
+### 0e. Emit config_approved event
+
+After writing `config.yml` (A, E, or M paths):
+
+```bash
+$HOME/.claude/scripts/monitor.sh log_event "<feature>" "config_approved" "" \
+  "$(printf '{"config_path":"%s"}' "$WF_SPEC_STORAGE/<feature>/config.yml")"
+```
+
+If monitor.sh is not found or exits non-zero, log a warning and continue — event emission is best-effort and must not block the explore flow.
+
+Event summary:
+- `config_inferred` — fires in step 0b immediately after the agent returns output (before user sees approval summary)
+- `config_approved` — fires in step 0e after config.yml is written (A, E, or M paths only; S path emits nothing)
+
 ## Steps
 1. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) to understand available ground rules
 2. Ask the user to describe the feature or change

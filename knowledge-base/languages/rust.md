@@ -1,4 +1,5 @@
 ---
+# display-only: canonical gate definitions live in knowledge-base/gates.yml
 validation_tools:
   - cd workflow-tui && cargo clippy -- -D warnings
   - cd workflow-tui && cargo test

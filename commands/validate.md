@@ -9,45 +9,70 @@ Feature name: $ARGUMENTS
    - If more than one task has `status: implemented`, report an error: "Multiple tasks are at `implemented` status — only one task should be in flight at a time. Check task state integrity."
    - Validate exactly one task
 
-## Phase 1: Deterministic Tools (hard gates)
+## Step 0 — Load Spec Config
+
+Before running any gate or spawning any agent, run (substituting the actual feature name for `$ARGUMENTS`):
+
+<!-- Step 0 exports: WF_SPEC_GATES (ceiling gate IDs, newline-separated), WF_SPEC_AGENTS_VALIDATE (space-separated advisory agent IDs, empty = none), WF_GATE_POOL (absolute path to gates.yml pool) -->
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_GATES=%s\nWF_SPEC_AGENTS_VALIDATE=%s\nWF_GATE_POOL=%s\n" "$WF_SPEC_GATES" "${WF_SPEC_AGENTS_VALIDATE:-}" "${WF_GATE_POOL:-}"'
+```
+
+On non-zero exit:
+- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`. No gate or agent will execute."
+- Any other non-zero: stop — print the loader error and halt.
+
+Record from the output: `WF_SPEC_GATES` (newline-separated gate IDs = spec ceiling), `WF_SPEC_AGENTS_VALIDATE` (space-separated agent IDs, empty = no advisory agents), `WF_GATE_POOL` (absolute path to `gates.yml`).
+
+## Phase 1: Gate Ceiling Intersection (hard gates)
+
 For each task with `status: implemented`:
-1. Read the task's `ground_rules` to identify language files (project KB `languages/` only — tools are project-specific)
-2. Extract `validation_tools` from the frontmatter of each referenced language file
-3. Run **every** listed tool — skipping a tool is not allowed
-   - If a tool is missing or fails to install, report it as an error finding
-4. Collect all tool outputs and convert findings into the report schema
+1. Extract language tags from the task's `ground_rules`: for each path matching `languages/<lang>.md`, extract `<lang>` as a tag (e.g., `general:languages/shell.md` → `shell`). Collect all unique tags.
+2. Read `WF_GATE_POOL` (`gates.yml`) — for each gate entry, check if its `applies_to` list contains any of the task's language tags or the special value `any`. Collect **language-applicable gates** (those that match).
+3. Compute **effective set** = `WF_SPEC_GATES` (ceiling) ∩ language-applicable gates by ID.
+
+### Scope short-circuit (T016)
+
+After computing the effective set above and before step 4 below, branch on `WF_VALIDATE_SCOPE`:
+- `per-task` (default) or `both`: continue with the rest of Phase 1 unchanged.
+- `per-spec`: for every gate id `<g>` in the effective set, emit `gate_skip` with `reason=scope=per-spec`:
+  ```bash
+  $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
+    "$(printf '{"gate":"%s","reason":"scope=per-spec","scope":"per-spec"}' "<g>")"
+  ```
+  Then write a single zero-findings report `specs/$ARGUMENTS/reports/<task-id>-scope-skip.yaml` with `status: pass`, skip Phase 2 entirely, and proceed to the zero-findings status update path. The spec-level union runs later via `/validate-impl` (Step 2).
+
+  Empty-intersection fail-closed (ADR-003) still applies: if the effective set is empty AND `empty_intersection_ok` is not `true`, treat as the existing `error` finding before this short-circuit takes effect.
+4. For each language-applicable gate whose ID is **not** in `WF_SPEC_GATES`: emit a `gate_skip` monitor event:
+   ```bash
+   $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" "gate_skip" "" \
+     "$(printf '{"gate":"%s","reason":"not in spec ceiling"}' "<id>")"
+   ```
+5. If the effective set is empty:
+   - Read task frontmatter `empty_intersection_ok` field (default `false`).
+   - If `empty_intersection_ok: true`: emit `gate_skip` event with `reason: empty_intersection_ok`, record 0 gates executed, treat as pass — skip to Phase 2.
+   - If `false` (default): record a `critical` error finding (`"Empty effective gate set on code-bearing task — ceiling ∩ ground_rules yielded no gates. Verify spec config.yml gates and task ground_rules."`), set gate status to `error`, block transition to `done`.
+6. Run **every** gate in the effective set using its `command` from `gates.yml` — skipping is not allowed.
+   - If a gate command is missing or fails to install, record it as an error finding.
+7. Collect all gate outputs and convert findings into the report schema.
 
 ## Phase 2: Agent-Powered Analysis (advisory)
-Spawn specialized agents **in parallel** to analyze code against knowledge-base rules. Each agent receives:
+
+Spawn agents **in parallel** to analyze code against knowledge-base rules. Agent list comes from `WF_SPEC_AGENTS_VALIDATE` (space-separated IDs loaded in Step 0). If `WF_SPEC_AGENTS_VALIDATE` is empty, skip Phase 2 entirely (no advisory agents for this spec).
+
+Each spawned agent receives:
 - The task file path and changed files (from `estimated_files` or git diff)
 - All `ground_rules` files referenced in the task (per `knowledge-base-rules.md`)
 - The project's `CLAUDE.md` and relevant knowledge-base files from both general and project KBs
 
+Resolve each agent ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`:
+- `<category>/<name>` → `<agent_pool>/<category>/<category>-<name>.md`
+- bare `<name>` → `<agent_pool>/<name>.md`
+
+Unknown agent ID → stop immediately with error "Unknown agent ID '<id>' in specs/$ARGUMENTS/config.yml agents.validate — not found in agent pool."
+
 ### Independent Verification Rule
-Each agent gate operates independently. No agent should trust or defer to another agent's results. If the security agent says code is safe, the architecture agent must still independently verify security-relevant architectural decisions. If code-quality says a function is well-structured, compliance must still independently check it against CLAUDE.md rules. Redundant findings are acceptable — missed findings are not.
-
-### Agent Gates
-Spawn all four agents concurrently using the Agent tool:
-
-1. **security** → `Security Engineer` agent (`engineering-security-engineer`)
-   - Analyze code for OWASP Top 10, CWE Top 25, input validation, secrets exposure
-   - Check against security rules from both knowledge bases
-   - Each finding must include: severity, file, lines, description, fix_proposal
-
-2. **code-quality** → `code-quality-pragmatist` agent
-   - Check for over-engineering, unnecessary complexity, DRY violations, function size, modularity
-   - Check against style rules from both knowledge bases
-   - Each finding must include: severity, file, lines, description, fix_proposal
-
-3. **architecture** → `Software Architect` agent (`engineering-software-architect`) — **read-only**
-   - Verify structural compliance, DDD boundaries, hexagonal layering, module coupling
-   - Check against architecture rules from both knowledge bases
-   - Each finding must include: severity, file, lines, description, fix_proposal
-
-4. **compliance** → `claude-md-compliance-checker` agent
-   - Verify code adheres to project CLAUDE.md instructions and knowledge-base conventions
-   - Check language-specific rules from `knowledge-base/languages/` and project conventions from `knowledge-base/conventions/`
-   - Each finding must include: severity, file, lines, description, fix_proposal
+Each agent gate operates independently. No agent should trust or defer to another agent's results. Redundant findings are acceptable — missed findings are not.
 
 ### Agent Output Contract
 Each agent must return findings in the report schema (below). When constructing the prompt for each agent, instruct it to output findings as a YAML list matching the report schema. Mark all agent findings with `source: llm`.
@@ -79,9 +104,4 @@ Report schema:
 - status: pass | findings | error
 - findings: list of {id, severity (critical|high|medium|low|info), category, title, description, file, lines, code_snippet, fix_proposal, review_status: pending, source: tool|llm}
 
-Gates:
-- **security**: semgrep + language audit tools + `Security Engineer` agent for general and project security rules
-- **code-quality**: language lint tools + `code-quality-pragmatist` agent for DRY, function size, modularity
-- **architecture**: `Software Architect` agent (read-only, check against general and project architecture rules)
-- **compliance**: `claude-md-compliance-checker` agent (check against CLAUDE.md + project knowledge-base conventions and languages)
-- **testing**: language test/coverage tools (deterministic only — no agent gate)
+Gate selection: determined by ceiling intersection (Phase 1 above) using `gates.yml` and `WF_SPEC_GATES`. Advisory agents: determined by `WF_SPEC_AGENTS_VALIDATE` from `config.yml`.

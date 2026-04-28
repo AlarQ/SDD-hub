@@ -1,8 +1,8 @@
 ---
 id: "013"
 name: "validate_scope field + loader export"
-status: blocked
-blocked_by: ["002"]
+status: done
+blocked_by: []
 max_files: 5
 estimated_files:
   - scripts/config-loader.sh

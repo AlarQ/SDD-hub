@@ -1,7 +1,7 @@
 ---
 id: "010"
 name: "/config command for editing and regenerating spec config"
-status: blocked
+status: done
 blocked_by: ["008", "009"]
 max_files: 1
 empty_intersection_ok: true

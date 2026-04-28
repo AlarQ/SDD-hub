@@ -16,6 +16,8 @@ TEST_TMPDIR=""
 setup() {
   TEST_TMPDIR="$(mktemp -d)"
   mkdir -p "$TEST_TMPDIR/specs/test-feature/tasks"
+  # .workflow.yml required by new find_workflow_root path in monitor.sh
+  printf 'spec_storage: specs/\n' > "$TEST_TMPDIR/.workflow.yml"
   cd "$TEST_TMPDIR"
 }
 
@@ -138,7 +140,7 @@ test_log_event_empty_task_omits_field() {
   source "$MONITOR_SCRIPT"
 
   # When log_event is called with empty task_id
-  log_event "test-feature" "kb_rule" "" '{"rule_path":"security/general.md"}'
+  log_event "test-feature" "tool_call" "" '{"rule_path":"security/general.md"}'
 
   # Then the JSON line does not contain a "task" field
   local file="$TEST_TMPDIR/specs/test-feature/.monitor.jsonl"

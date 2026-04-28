@@ -10,6 +10,7 @@ Install these before running setup:
 |------|---------|---------|
 | `yq` | `brew install yq` | YAML parsing in task-manager.sh |
 | `gh` | `brew install gh` | GitHub CLI for PRs and `/pr-review` |
+| `perl` | ships with macOS | macOS fallback for GNU `timeout`/`gtimeout` in `scripts/config-loader.sh::wf__timeout`; not needed on Linux (GNU coreutils `timeout` is preferred there) |
 | Claude Code | [claude.ai/claude-code](https://claude.ai/claude-code) | Slash command host |
 
 Language-specific validation tools (linters, test runners, semgrep) are installed later, after `/bootstrap` creates language files for your project.
@@ -115,19 +116,57 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 
 ### Stage 0: `/bootstrap` (once per project)
 
-**What it does:** Creates the project-specific `knowledge-base/` with language files and a `conventions/` directory. General rules (security, architecture, testing, style) live in the dev-workflow repo. Asks which languages the project uses and generates language files with `validation_tools` frontmatter.
+**What it does:** Creates the project-specific `knowledge-base/` with language files and a `conventions/` directory. Also writes `.workflow.yml` at the repo root — the config layer entry point. General rules (security, architecture, testing, style) live in the dev-workflow repo. Asks which languages the project uses and generates language files.
 
-**Produces:** `knowledge-base/` directory with `_index.md`, `languages/`, and `conventions/`.
+**Produces:**
+- `knowledge-base/` directory with `_index.md`, `languages/`, and `conventions/`
+- `.workflow.yml` at repo root (`spec_storage`, `gate_pool`, `agent_pool`, `validate_scope`)
+
+**Idempotent:** On an existing repo with `.workflow.yml` already present, `/bootstrap` prints the current config and exits without modifying it.
 
 **Next:** `/explore`
 
+### Stage 0b: Config layer overview (first-time)
+
+The configurable-workflow feature adds a three-file config layer that controls which gates and agents run per spec. Understanding it once makes everything downstream clear.
+
+| File | Written by | Purpose |
+|------|-----------|---------|
+| `.workflow.yml` | `/bootstrap` | Repo-wide defaults: `spec_storage`, `gate_pool`, `agent_pool`, `validate_scope` |
+| `knowledge-base/gates.yml` | dev-workflow install | Canonical gate registry with `id`, `command`, `applies_to`, `blocking` |
+| `specs/<name>/config.yml` | `/explore` step 0 | Per-spec ceiling: which gates + which agents per phase |
+
+**Ceiling semantics:** `config.yml gates:` is the *ceiling* — the eligible gate set. Per task, `/validate` computes `ceiling ∩ gates applicable to task ground_rules` (the *effective set*). Gates outside the ceiling are skipped and emit `gate_skip` events. This means a spec about Rust auth never accidentally runs a Go linter, even if the gate registry has one.
+
+**`validate_scope`:** Controls validation cadence per spec:
+- `per-task` (default) — `/validate` runs after every task
+- `per-spec` — per-task `/validate` is skipped; one union-gate run happens inside `/validate-impl` when all tasks are done
+- `both` — runs both per-task and the final union
+
+Set at repo level in `.workflow.yml`; override per-spec in `config.yml`.
+
+See `CLAUDE.md §Configurable Workflow` and `specs/configurable-workflow/design.md` for full schema and ADR detail.
+
 ### Stage 1: `/explore` (requirements)
 
-**What it does:** Conversational requirements gathering. Reads both general and project `_index.md` files to know which rules exist, then asks clarifying questions about scope, security, integrations, testing, and performance.
+**What it does:** Two sub-steps run before any conversation:
 
-**Produces:** Shared understanding of what to build. Optionally saves a PRD to `specs/<name>/prd.md`.
+**Step 0 — Config inferencer (automatic):**
+1. Spawns `config-inferencer` agent with repo signal files (`Cargo.toml`, `package.json`, etc.), `gates.yml`, `agents/` listing, and spec description.
+2. Displays a one-screen summary: proposed gates (ceiling) + agents per phase + reasoning.
+3. You press a single key to approve, or run `/config <name>` to edit manually.
+4. Writes `specs/<name>/config.yml` and emits `config_inferred` + `config_approved` monitor events.
+5. If the inferencer times out, falls back to a manual-entry prompt; a default template is used if you skip.
 
-**Requires:** `knowledge-base/` must exist.
+**Step 1+ — Requirements gathering:**
+Reads both `_index.md` files, then asks clarifying questions about scope, security, integrations, testing, and performance.
+
+**Produces:**
+- `specs/<name>/config.yml` — per-spec ceiling and agent roster
+- Shared understanding of what to build
+- Optionally `specs/<name>/prd.md`
+
+**Requires:** `knowledge-base/` and `.workflow.yml` must exist (run `/bootstrap` first).
 
 **Next:** `/propose <name>`
 

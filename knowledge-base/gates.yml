@@ -1,0 +1,41 @@
+# Canonical gate registry (ADR-002).
+# Seeded from current validation_tools frontmatter in knowledge-base/languages/*.md.
+# Edit here; language-file frontmatter is display-only.
+#
+# Schema (validated by scripts/config-loader.sh):
+#   id:          ^[a-zA-Z0-9_-]{1,64}$  (unique within file)
+#   command:     string, <=256 chars
+#   applies_to:  list, each in {any, rust, typescript, javascript, python, go, shell, markdown}
+#   category:    one of {lint, test, security, format, build, docs}
+#   blocking:    bool (default true)
+
+gates:
+  - id: rust-clippy
+    command: "cd workflow-tui && cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+
+  - id: rust-test
+    command: "cd workflow-tui && cargo test"
+    applies_to: [rust]
+    category: test
+    blocking: true
+
+  - id: rust-fmt
+    command: "cd workflow-tui && cargo fmt -- --check"
+    applies_to: [rust]
+    category: format
+    blocking: true
+
+  - id: shell-syntax
+    command: "bash -n scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true

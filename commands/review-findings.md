@@ -5,8 +5,26 @@ Feature name: $ARGUMENTS
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 
+## Step 0 — Load Spec Config
+
+Load the spec config before processing any report (substitute actual feature name for `$ARGUMENTS`):
+
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS'
+```
+
+On non-zero exit:
+- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
+- Any other non-zero: stop — print the loader error and halt.
+
+Note: `/review-findings` does not consume the `agents` map from config.yml. The loader is run here solely to validate config existence.
+
 ## Steps
-1. Read all pending reports from `specs/$ARGUMENTS/reports/`
+1. Read all pending reports from `specs/$ARGUMENTS/reports/`. **Spec-audit reports** (filename pattern `spec-audit-*.md`, produced by `/validate-impl`) are recognized here:
+   - Report frontmatter MUST contain `feature`, `timestamp`, `scope`, `verdict ∈ {complete, reopen}`. Refuse to process the report if any field is missing or `verdict` is outside the allowed set.
+   - Body MUST contain an FR matrix section with one row per FR, each marked `implemented | partial | missing`. Each `missing` or `partial` FR row becomes one review unit (treat each as a synthetic finding with `source: llm`, severity `high` for missing, `medium` for partial).
+   - On **Accept** of a missing/partial FR review unit: invoke `~/.claude/scripts/task-manager.sh create-followup "$ARGUMENTS" "<FR-id>" "<FR description>"`. This subcommand validates the FR id against `spec.md` (fail-closed on unknown ids) and inherits `ground_rules` from the spec's `## Applicable Ground Rules` section.
+   - On **Reject**: the finding remains in the report so `/learn-from-reports` can mine it as a project-KB rule candidate (no inline rule creation needed for spec-audit findings).
 2. Partition findings: separate `severity: info` findings (informational) from all others (actionable)
 3. Group actionable findings before presenting them:
    a. Sort all actionable findings by file path, then by start line.

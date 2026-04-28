@@ -15,7 +15,7 @@ The core auto-chain (`/implement` → `/validate` → `/review-findings` → `/l
 
 Before `/implement` starts, `/propose` auto-chains into `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
 
-When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings` and spawns follow-up tasks.
+When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
@@ -68,6 +68,7 @@ graph LR
     KAREN --> VIMPL
     VIMPL -->|verdict=complete| Core
     VIMPL -.->|verdict=reopen| REV
+    REV -.->|accept missing/partial FR<br/>create-followup| IMPL
 
     CONT -.-> IMPL
     CONT -.-> VAL
@@ -103,15 +104,25 @@ stateDiagram-v2
 
 ## 3. Validation Gates
 
-`/validate` fans out five gates in parallel. Four are agent-driven (via `Agent` tool); the `testing` gate is deterministic (language tools only, no agent). All-gates rule: every gate must report `status: pass` before task eligible for `done`. Any finding → task moves to `review`.
+`/validate` fans out gates in parallel. Four are agent-driven (via `Agent` tool); the `testing` gate is deterministic (language tools only, no agent). All-gates rule: every gate must report `status: pass` before task eligible for `done`. Any finding → task moves to `review`.
+
+**Phase 1** computes the effective gate set as `WF_SPEC_GATES ∩ language-applicable gates from gates.yml` (ceiling intersection). Gates outside the intersection emit a `gate_skip` event and are not run.
+
+**Phase 2** reads the agent list from `WF_SPEC_AGENTS_VALIDATE` (set by config.yml) — not a hardcoded list. Each entry spawns one agent.
 
 ```mermaid
 graph TD
-    V["/validate"] --> G1[security gate]
-    V --> G2[code-quality gate]
-    V --> G3[architecture gate]
-    V --> G4[compliance gate]
-    V --> G5[testing gate]
+    V["/validate"] --> CFG0{Step 0: load config.yml}
+    CFG0 -->|missing → exit 4| STOP_V[stop]
+    CFG0 -->|loaded| CEIL["Phase 1: WF_SPEC_GATES ∩ gates.yml applicable gates"]
+    CEIL -->|skipped gates| SKIP[gate_skip event]
+    CEIL -->|effective gates| AGT["Phase 2: agents from WF_SPEC_AGENTS_VALIDATE"]
+
+    AGT --> G1[security gate]
+    AGT --> G2[code-quality gate]
+    AGT --> G3[architecture gate]
+    AGT --> G4[compliance gate]
+    AGT --> G5[testing gate]
 
     G1 --> A1[Security Engineer + semgrep]
     G2 --> A2[code-quality-pragmatist + linters]
@@ -172,6 +183,7 @@ graph TB
     subgraph Monitor
         CTX[.monitor-context]
         JSONL[specs/$FEATURE/.monitor.jsonl]
+        SNAP[.monitor-context-snapshot]
     end
 
     CONV --> EX["/explore"]
@@ -188,6 +200,7 @@ graph TB
     IM --> TBR
     IM --> CTX
     IM --> JSONL
+    IM -->|step 6a: after branch creation| SNAP
 
     TBR --> VA["/validate"]
     VA --> REPORTS
@@ -197,6 +210,7 @@ graph TB
     LFR -.->|mined new rules| PKB
 
     TBR --> SH["/ship"]
+    SNAP -.->|drift check| SH
     SH --> PR
     PR --> FEAT
 ```
@@ -209,24 +223,36 @@ One diagram per command. Solid arrow = always spawned. Dashed arrow = conditiona
 
 ### 5a. `/explore` — requirements clarification
 
+Step 0 runs before any perspective questions: the `config-inferencer` agent drafts `config.yml` (gates + agents-per-phase) from repo signal files. User approves (single key) or edits via `/config`. `config.yml` is written before the normal explore flow begins.
+
 ```mermaid
 graph LR
-    EX["/explore"] -.->|after perspective Qs| UXR[UX Researcher]
-    EX -.->|after security Q| SE[Security Engineer]
-    EX -.->|backend kw| BA[Backend Architect]
-    EX -.->|ui kw| UXA[UX Architect]
-    EX -.->|scope| SA[Software Architect]
-    EX -.->|feedback kw| FS[Feedback Synthesizer]
+    EX["/explore"] --> S0{Step 0: config-inferencer}
+    S0 --> CI[config-inferencer agent]
+    CI --> SUMMARY[one-screen summary\ngates + agents-per-phase]
+    SUMMARY -.->|approve| WRITE[write config.yml\nemit config_inferred + config_approved]
+    SUMMARY -.->|edit| CFG["/config override"]
+    CFG --> WRITE
+    WRITE --> PERSP[perspective questions]
+    PERSP -.->|after perspective Qs| UXR[UX Researcher]
+    PERSP -.->|after security Q| SE[Security Engineer]
+    PERSP -.->|backend kw| BA[Backend Architect]
+    PERSP -.->|ui kw| UXA[UX Architect]
+    PERSP -.->|scope| SA[Software Architect]
+    PERSP -.->|feedback kw| FS[Feedback Synthesizer]
+    S0 -.->|inferencer timeout| MANUAL[manual entry prompt]
 ```
 
 ### 5b. `/propose` — spec + design + tasks
 
 ```mermaid
 graph LR
-    PR["/propose"] --> SE[Security Engineer]
-    PR --> SA[Software Architect]
-    PR --> SPM[Senior Project Manager]
-    PR --> TSG[Test Strategist]
+    PR["/propose"] --> CFG0{Step 0: load config.yml}
+    CFG0 -->|missing → exit 4| STOP_PR[stop]
+    CFG0 -->|loaded| SE[Security Engineer]
+    CFG0 -->|loaded| SA[Software Architect]
+    CFG0 -->|loaded| SPM[Senior Project Manager]
+    CFG0 -->|loaded| TSG[Test Strategist]
     PR -.->|backend kw| BA[Backend Architect]
     PR -.->|ui kw| UXA[UX Architect]
     PR -.->|ui kw| UID[UI Designer]
@@ -237,26 +263,34 @@ graph LR
 
 ```mermaid
 graph LR
-    IM["/implement"] --> CQP[code-quality-pragmatist]
+    IM["/implement"] --> CFG0{Step 0: load config.yml}
+    CFG0 -->|missing → exit 4| STOP_IM[stop]
+    CFG0 -->|loaded| CQP[code-quality-pragmatist]
     IM -.->|if test-strategy.md exists| TSG[Test Strategist]
     IM -.->|on error / test fail| UD[Ultrathink Debugger]
+    IM -->|step 6a: after branch creation| SNAP[.monitor-context-snapshot]
 ```
 
 ### 5d. `/validate` — validation gates (parallel)
 
 ```mermaid
 graph LR
-    VA["/validate"] --> SE[Security Engineer]
-    VA --> CQP[code-quality-pragmatist]
-    VA --> SA[Software Architect]
-    VA --> CMC[claude-md-compliance-checker]
+    VA["/validate"] --> CFG0{Step 0: load config.yml}
+    CFG0 -->|missing → exit 4| STOP_VA[stop]
+    CFG0 -->|loaded| CEIL["WF_SPEC_GATES ∩ gates.yml ceiling"]
+    CEIL -->|WF_SPEC_AGENTS_VALIDATE| SE[Security Engineer]
+    CEIL -->|WF_SPEC_AGENTS_VALIDATE| CQP[code-quality-pragmatist]
+    CEIL -->|WF_SPEC_AGENTS_VALIDATE| SA[Software Architect]
+    CEIL -->|WF_SPEC_AGENTS_VALIDATE| CMC[claude-md-compliance-checker]
 ```
 
 ### 5e. `/pr-review` — PR comment handling
 
 ```mermaid
 graph LR
-    PRR["/pr-review"] --> CR[Code Reviewer]
+    PRR["/pr-review"] --> CFG0{Step 0: load config.yml}
+    CFG0 -->|missing → exit 4| STOP_PRR[stop]
+    CFG0 -->|loaded| CR[Code Reviewer]
 ```
 
 ### 5f. `/validate-spec` — pre-implementation spec coherence
@@ -271,6 +305,27 @@ graph LR
 ```mermaid
 graph LR
     VIMPL["/validate-impl"] --> KAREN[Karen]
+```
+
+### 5h. `/review-findings` — finding triage
+
+```mermaid
+graph LR
+    RF["/review-findings"] --> CFG0{Step 0: load config.yml}
+    CFG0 -->|missing → exit 4| STOP_RF[stop]
+    CFG0 -->|loaded| TRIAGE[group + triage findings]
+```
+
+### 5i. `/ship` — commit, push, PR
+
+```mermaid
+graph LR
+    SH["/ship"] --> CFG0{Step 0: load config.yml}
+    CFG0 -->|missing → exit 4| STOP_SH[stop]
+    CFG0 -->|loaded| DRIFT{snapshot drift check}
+    DRIFT -->|.monitor-context-snapshot vs current config| DRIFT_DEC{drift detected?}
+    DRIFT_DEC -->|yes → stop| STOP_DRIFT[stop]
+    DRIFT_DEC -->|no| COMMIT[commit / push / PR]
 ```
 
 ---

@@ -7,10 +7,31 @@ Feature name: $ARGUMENTS
 2. Read tasks from `specs/$ARGUMENTS/tasks/` — find all tasks with `status: done`
    - Filter to tasks that do NOT yet have a PR (no `pr_url` in frontmatter)
    - If no unshipped `done` tasks exist, report and stop
-4. Verify all validation gates passed for this task: check `specs/$ARGUMENTS/reports/` for report files matching this task's ID
+3. Verify all validation gates passed for this task: check `specs/$ARGUMENTS/reports/` for report files matching this task's ID
    - If any report has `status: findings` or `status: error`, refuse and say: "Validation gate(s) have unresolved findings or errors. Run `/review-findings $ARGUMENTS` first."
    - If no reports directory exists or all reports show `status: pass` (or reports were already cleaned up by `/validate`), proceed
-5. If multiple unshipped `done` tasks exist, ship the lowest-numbered one first
+4. If multiple unshipped `done` tasks exist, ship the lowest-numbered one first
+
+## Step 0 — Load Spec Config
+
+Before running any step, load the spec config (substituting the actual feature name for `$ARGUMENTS`):
+
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_CONFIG_FILE=%s\nWF_SPEC_GATES=%s\n" "${WF_SPEC_CONFIG_FILE:-}" "$WF_SPEC_GATES"'
+```
+
+On non-zero exit:
+- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
+- Any other non-zero: stop — print the loader error and halt.
+
+**Snapshot drift check** — if `.monitor-context-snapshot` exists in the repo root, compare the current config state against the snapshot written by `/implement`:
+
+```bash
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && wf_check_snapshot_drift .monitor-context-snapshot'
+```
+
+If output is `SNAPSHOT_DRIFT`: stop — "Config drift detected: `specs/$ARGUMENTS/config.yml` changed since `/implement` started. Re-approve the config via `/config $ARGUMENTS` or restore the original, then re-run `/ship`."
+If `SNAPSHOT_OK` or snapshot file absent: proceed.
 
 ## Steps
 1. Verify the task branch exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}` — if it doesn't exist, refuse and say: "Task branch `feat/$ARGUMENTS/{task-id}-{task-name}` not found. Was `/implement` completed for this task?"

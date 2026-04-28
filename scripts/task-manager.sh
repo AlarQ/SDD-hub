@@ -21,6 +21,30 @@ else
   GENERAL_KB_BASE="knowledge-base/_general"
 fi
 
+# Source config-paths.sh if available (gives find_workflow_root, wf_resolve_root)
+_WF_TM_PATHS_LOADED=0
+if [[ -f "$SCRIPT_DIR/config-paths.sh" ]]; then
+  # shellcheck source=scripts/config-paths.sh
+  source "$SCRIPT_DIR/config-paths.sh"
+  _WF_TM_PATHS_LOADED=1
+fi
+
+# Detect repo root for absolute path resolution when invoked from a subdir.
+# Priority: WF_REPO_ROOT env → .workflow.yml walk-up → git root → CWD
+_wf_tm_detect_repo_root() {
+  [[ -n "${WF_REPO_ROOT:-}" ]] && { printf '%s' "$WF_REPO_ROOT"; return 0; }
+  if [[ "$_WF_TM_PATHS_LOADED" == "1" ]]; then
+    local root
+    if root="$(wf_resolve_root "$PWD" 2>/dev/null)"; then printf '%s' "$root"; return 0; fi
+  fi
+  local git_root
+  if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then printf '%s' "$git_root"; return 0; fi
+  printf '%s' "$PWD"
+}
+
+# Lazy-evaluated — avoids source-time side effects (git rev-parse, dir walk)
+: "${_WF_TM_REPO_ROOT:=$(_wf_tm_detect_repo_root)}"
+
 # Source monitor.sh for event logging (guard: only if file exists)
 MONITOR_AVAILABLE=false
 if [[ -f "$SCRIPT_DIR/monitor.sh" ]]; then
@@ -28,9 +52,13 @@ if [[ -f "$SCRIPT_DIR/monitor.sh" ]]; then
   MONITOR_AVAILABLE=true
 fi
 
+# Source submodules
+# shellcheck source=scripts/task-status.sh
+source "$SCRIPT_DIR/task-status.sh"
+# shellcheck source=scripts/task-unblock.sh
+source "$SCRIPT_DIR/task-unblock.sh"
+
 # Emit a task_transition event if monitoring is active.
-# Requires .monitor-context to have been set by the calling workflow command (e.g. /implement).
-# No-ops silently if context is missing — standalone task-manager.sh usage won't emit events.
 emit_transition_event() {
   local task_id="$1" from_status="$2" to_status="$3" task_file="$4"
   [[ "$MONITOR_AVAILABLE" = "true" ]] || return 0
@@ -44,6 +72,43 @@ emit_transition_event() {
         "$(escape_json_string "$to_status")" \
         "$(escape_json_string "$task_file")")" || echo "WARN: monitor event emission failed" >&2
   fi
+}
+
+# Emit spec_last_task_done when the final task in a feature transitions to done.
+# Idempotent: skips if a prior spec_audit_done or spec_last_task_done already exists
+# on the feature's .monitor.jsonl.
+maybe_emit_spec_last_task_done() {
+  local task_file="$1" new_status="$2"
+  [[ "$new_status" == "done" ]] || return 0
+  [[ "$MONITOR_AVAILABLE" = "true" ]] || return 0
+
+  local tasks_dir feature_dir feature monitor_file
+  tasks_dir="$(dirname "$task_file")"
+  feature_dir="$(dirname "$tasks_dir")"
+  feature="$(basename "$feature_dir")"
+  monitor_file="$feature_dir/.monitor.jsonl"
+
+  local f task_status non_done=0
+  for f in "$tasks_dir"/*.md; do
+    [[ -f "$f" ]] || continue
+    task_status=$(read_frontmatter "$f" ".status" 2>/dev/null) || continue
+    [[ "$task_status" != "done" ]] && non_done=$((non_done + 1))
+  done
+  [[ "$non_done" -eq 0 ]] || return 0
+
+  if [[ -f "$monitor_file" ]]; then
+    # Guard semantics (T017 update): if newest of {spec_audit_done, spec_reaudit_requested}
+    # is spec_audit_done, suppress emission. spec_reaudit_requested newer than any prior
+    # spec_audit_done (or no spec_audit_done at all) → guard clear, allow emission.
+    local newest
+    newest=$(grep -oE '"category":"(spec_audit_done|spec_reaudit_requested)"' "$monitor_file" 2>/dev/null | tail -1 || true)
+    [[ "$newest" == *spec_audit_done* ]] && return 0
+    grep -q '"category":"spec_last_task_done"' "$monitor_file" 2>/dev/null && return 0
+  fi
+
+  log_event "$feature" "spec_last_task_done" "" \
+    "$(printf '{"tasks_dir":"%s"}' "$(escape_json_string "$tasks_dir")")" \
+    || echo "WARN: spec_last_task_done emission failed" >&2
 }
 
 # Valid transitions: from -> to
@@ -68,6 +133,8 @@ Commands:
   set-status <task-file> <status> Update task status (validates transition)
   unblock <tasks-directory>      Check blocked tasks, unblock if dependencies are done
   next <tasks-directory>         Get next eligible task (status: todo)
+  create-followup <feature> <fr-id> <description>
+                                  Auto-create a follow-up task from a spec-audit finding
   check-unvalidated <tasks-dir>  Check for tasks with status: implemented or review
   status <tasks-directory>       Show status dashboard with dependencies and health diagnostics
   help                           Show this help message
@@ -83,25 +150,28 @@ check_yq() {
   command -v yq >/dev/null 2>&1 || die "yq is not installed. Run: brew install yq"
 }
 
+# Portable yq with 5-second timeout (timeout/gtimeout/none depending on OS).
+_wf_yq() {
+  if command -v timeout >/dev/null 2>&1; then timeout 5 yq "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout 5 yq "$@"
+  else yq "$@"; fi
+}
+
 # Extract YAML frontmatter from a markdown file and pass it to yq.
-# Task files use --- delimited frontmatter at the top.
 read_frontmatter() {
   local file="$1"
   local expression="${2:-.}"
-  # Extract content between first --- and second ---
-  sed -n '/^---$/,/^---$/p' "$file" | sed '1d;$d' | yq eval "$expression" -
+  sed -n '/^---$/,/^---$/p' "$file" | sed '1d;$d' | _wf_yq eval "$expression" -
 }
 
-# Resolve a prefixed ground_rules path to a real file path.
-# general:foo.md -> $GENERAL_KB_BASE/foo.md
-# project:foo.md -> knowledge-base/foo.md
-# foo.md (unprefixed) -> knowledge-base/foo.md
+# Resolve a prefixed ground_rules path to a real file path (absolute).
 resolve_ground_rule_path() {
   local prefixed_path="$1"
+  local project_kb="${_WF_TM_REPO_ROOT}/knowledge-base"
   case "$prefixed_path" in
     general:*) echo "$GENERAL_KB_BASE/${prefixed_path#general:}" ;;
-    project:*) echo "knowledge-base/${prefixed_path#project:}" ;;
-    *)         echo "knowledge-base/$prefixed_path" ;;
+    project:*) echo "$project_kb/${prefixed_path#project:}" ;;
+    *)         echo "$project_kb/$prefixed_path" ;;
   esac
 }
 
@@ -109,25 +179,15 @@ resolve_ground_rule_path() {
 update_frontmatter() {
   local file="$1"
   local expression="$2"
-
-  # Get line number of the second --- delimiter
   local second_delim
   second_delim=$(grep -n '^---$' "$file" | sed -n '2p' | cut -d: -f1)
   [ -z "$second_delim" ] && die "Cannot find frontmatter end delimiter in $file"
-
-  # Extract frontmatter (between line 2 and second_delim - 1)
   local frontmatter
   frontmatter=$(sed -n "2,$((second_delim - 1))p" "$file")
-
-  # Extract body (everything after second ---)
   local body
   body=$(tail -n +"$((second_delim + 1))" "$file")
-
-  # Update frontmatter via yq
   local updated_frontmatter
-  updated_frontmatter=$(echo "$frontmatter" | yq eval "$expression" -)
-
-  # Write back
+  updated_frontmatter=$(echo "$frontmatter" | _wf_yq eval "$expression" -)
   {
     echo "---"
     echo "$updated_frontmatter"
@@ -136,18 +196,9 @@ update_frontmatter() {
   } > "$file"
 }
 
-# Validate a task file has correct structure
-cmd_validate() {
-  local file="${1:-}"
-  [ -z "$file" ] && die "Usage: task-manager.sh validate <task-file>"
-  [ -f "$file" ] || die "Task file not found: $file"
-
-  # Check frontmatter delimiters exist
-  local delim_count
-  delim_count=$(grep -c '^---$' "$file" || true)
-  [ "$delim_count" -lt 2 ] && die "Task file missing YAML frontmatter delimiters: $file"
-
-  # Check required scalar fields (must be non-empty)
+# Validate required scalar and array fields, status, and max_files.
+validate_required_fields() {
+  local file="$1"
   for field in "${REQUIRED_SCALAR_FIELDS[@]}"; do
     local value
     value=$(read_frontmatter "$file" ".$field")
@@ -155,8 +206,6 @@ cmd_validate() {
       die "Missing required field '$field' in $file"
     fi
   done
-
-  # Check required array fields (must exist, but empty [] is valid)
   for field in "${REQUIRED_ARRAY_FIELDS[@]}"; do
     local value
     value=$(read_frontmatter "$file" ".$field | type")
@@ -164,17 +213,20 @@ cmd_validate() {
       die "Missing or non-array field '$field' in $file (must be a YAML array)"
     fi
   done
-
-  # Validate status value
   local status
   status=$(read_frontmatter "$file" ".status")
   local valid=false
-  for s in "${VALID_STATUSES[@]}"; do
-    [ "$status" = "$s" ] && valid=true
-  done
+  for s in "${VALID_STATUSES[@]}"; do [ "$status" = "$s" ] && valid=true; done
   [ "$valid" = "true" ] || die "Invalid status '$status' in $file. Valid: ${VALID_STATUSES[*]}"
+  local max_files
+  max_files=$(read_frontmatter "$file" '.max_files')
+  [[ "$max_files" =~ ^[0-9]+$ ]] || die "max_files must be a number in $file"
+  [ "$max_files" -le 20 ] || die "max_files exceeds 20 in $file"
+}
 
-  # Validate ground_rules paths point to real files (resolving prefix convention)
+# Warn if ground_rules paths don't resolve to real files.
+validate_ground_rules() {
+  local file="$1"
   local rules_count
   rules_count=$(read_frontmatter "$file" '.ground_rules | length')
   for ((i = 0; i < rules_count; i++)); do
@@ -183,20 +235,29 @@ cmd_validate() {
     resolved_path=$(resolve_ground_rule_path "$rule_path")
     [ -f "$resolved_path" ] || echo "WARNING: ground_rules path not found: $rule_path -> $resolved_path (in $file)"
   done
+}
 
-  # Validate blocked_by references if status is blocked
+# Validate a task file has correct structure
+cmd_validate() {
+  local file="${1:-}"
+  [ -z "$file" ] && die "Usage: task-manager.sh validate <task-file>"
+  if [ ! -f "$file" ] && [[ "$file" != /* ]]; then
+    local abs_candidate="$_WF_TM_REPO_ROOT/$file"
+    [ -f "$abs_candidate" ] && file="$abs_candidate"
+  fi
+  [ -f "$file" ] || die "Task file not found: $file"
+  local delim_count
+  delim_count=$(grep -c '^---$' "$file" || true)
+  [ "$delim_count" -lt 2 ] && die "Task file missing YAML frontmatter delimiters: $file"
+  validate_required_fields "$file"
+  validate_ground_rules "$file"
+  local status
+  status=$(read_frontmatter "$file" ".status")
   if [ "$status" = "blocked" ]; then
     local blocked_count
     blocked_count=$(read_frontmatter "$file" '.blocked_by | length')
     [ "$blocked_count" -gt 0 ] || die "Task has status 'blocked' but empty blocked_by: $file"
   fi
-
-  # Validate max_files is a number
-  local max_files
-  max_files=$(read_frontmatter "$file" '.max_files')
-  [[ "$max_files" =~ ^[0-9]+$ ]] || die "max_files must be a number in $file"
-  [ "$max_files" -le 20 ] || die "max_files exceeds 20 in $file"
-
   echo "OK: $file"
 }
 
@@ -206,128 +267,102 @@ cmd_set_status() {
   local new_status="${2:-}"
   [ -z "$file" ] || [ -z "$new_status" ] && die "Usage: task-manager.sh set-status <task-file> <new-status>"
   [ -f "$file" ] || die "Task file not found: $file"
-
-  # Validate task file structure before allowing any transition
   cmd_validate "$file" > /dev/null
-
-  # Validate new status is valid
   local valid=false
-  for s in "${VALID_STATUSES[@]}"; do
-    [ "$new_status" = "$s" ] && valid=true
-  done
+  for s in "${VALID_STATUSES[@]}"; do [ "$new_status" = "$s" ] && valid=true; done
   [ "$valid" = "true" ] || die "Invalid status '$new_status'. Valid: ${VALID_STATUSES[*]}"
-
-  # Get current status and task id
   local current_status task_id
   current_status=$(read_frontmatter "$file" ".status")
   task_id=$(read_frontmatter "$file" ".id")
-
-  # Check transition is allowed
   local allowed
   allowed=$(get_allowed_transitions "$current_status")
   local transition_valid=false
-  for target in $allowed; do
-    [ "$target" = "$new_status" ] && transition_valid=true
-  done
-
+  for target in $allowed; do [ "$target" = "$new_status" ] && transition_valid=true; done
   [ "$transition_valid" = "true" ] || die "Invalid transition: '$current_status' -> '$new_status' in $file. Allowed from '$current_status': $allowed"
-
-  # Update the status
   update_frontmatter "$file" ".status = \"$new_status\""
   echo "Status updated: $current_status -> $new_status ($file)"
-
-  # Emit task_transition event if monitoring is active
   emit_transition_event "$task_id" "$current_status" "$new_status" "$file"
+  maybe_emit_spec_last_task_done "$file" "$new_status"
 }
 
-# Check blocked tasks and unblock if all dependencies are done
-cmd_unblock() {
-  local dir="${1:-}"
-  [ -z "$dir" ] && die "Usage: task-manager.sh unblock <tasks-directory>"
-  [ -d "$dir" ] || die "Tasks directory not found: $dir"
+# Create a follow-up task auto-generated from a spec-audit accepted finding (T017).
+# Validates FR id against spec.md FR allowlist (security boundary — Karen may hallucinate).
+# Inherits ground_rules from spec.md "## Applicable Ground Rules" section.
+cmd_create_followup() {
+  local feature="${1:-}" fr_id="${2:-}" description="${3:-}"
+  [ -z "$feature" ] || [ -z "$fr_id" ] || [ -z "$description" ] && \
+    die "Usage: task-manager.sh create-followup <feature> <fr-id> <description>"
+  [[ "$fr_id" =~ ^FR-[0-9]+$ ]] || die "Invalid fr-id format: '$fr_id' (expected FR-N)"
+  [[ "$feature" =~ ^[a-zA-Z0-9_-]+$ ]] || die "Invalid feature name: '$feature'"
 
-  local unblocked=0
+  local storage spec_dir spec_md tasks_dir
+  if command -v get_spec_storage >/dev/null 2>&1; then
+    storage="$(get_spec_storage 2>/dev/null)" || storage="$_WF_TM_REPO_ROOT/specs"
+  else
+    storage="$_WF_TM_REPO_ROOT/specs"
+  fi
+  spec_dir="$storage/$feature"
+  spec_md="$spec_dir/spec.md"
+  tasks_dir="$spec_dir/tasks"
+  [ -f "$spec_md" ] || die "spec.md not found: $spec_md"
+  [ -d "$tasks_dir" ] || die "tasks dir not found: $tasks_dir"
 
-  for task_file in "$dir"/*.md; do
-    [ -f "$task_file" ] || continue
+  local allowlist
+  allowlist=$(grep -oE '^### FR-[0-9]+:' "$spec_md" | sed 's/^### //;s/://' | sort -u)
+  [ -n "$allowlist" ] || die "No FR-N headings found in $spec_md"
+  if ! printf '%s\n' "$allowlist" | grep -qx "$fr_id"; then
+    {
+      echo "ERROR: Unknown FR id '$fr_id' for feature '$feature' (consulted $spec_md)"
+      echo "Known FR ids:"
+      printf '%s\n' "$allowlist"
+    } >&2
+    return 1
+  fi
 
-    local status
-    status=$(read_frontmatter "$task_file" ".status")
-    [ "$status" = "blocked" ] || continue
+  local last_id next_id
+  last_id=$(ls "$tasks_dir"/*.md 2>/dev/null | sed -n 's|.*/\([0-9]\{3\}\)-.*|\1|p' | sort -n | tail -1)
+  if [ -z "$last_id" ]; then next_id="001"
+  else next_id=$(printf "%03d" $((10#$last_id + 1))); fi
 
-    local blocked_count
-    blocked_count=$(read_frontmatter "$task_file" '.blocked_by | length')
-    local all_done=true
+  local rules
+  rules=$(awk '/^## Applicable Ground Rules/{flag=1; next} /^## /{flag=0} flag' "$spec_md" \
+    | grep -oE '`(general|project):[^`]+`' \
+    | tr -d '`' \
+    | awk '!seen[$0]++')
+  [ -n "$rules" ] || die "No ground_rules parsed from '## Applicable Ground Rules' in $spec_md"
 
-    for ((i = 0; i < blocked_count; i++)); do
-      local dep_id
-      dep_id=$(read_frontmatter "$task_file" ".blocked_by[$i]")
+  local slug task_name task_file
+  slug=$(printf '%s' "$description" | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-50)
+  [ -n "$slug" ] || slug="followup"
+  local fr_id_lower
+  fr_id_lower=$(printf '%s' "$fr_id" | tr '[:upper:]' '[:lower:]')
+  task_name="${fr_id_lower}-${slug}"
+  task_file="$tasks_dir/${next_id}-${task_name}.md"
+  [ -e "$task_file" ] && die "Refusing to overwrite existing task file: $task_file"
 
-      # Find the task file with this ID
-      local dep_done=false
-      for other_file in "$dir"/*.md; do
-        [ -f "$other_file" ] || continue
-        local other_id
-        other_id=$(read_frontmatter "$other_file" ".id")
-        if [ "$other_id" = "$dep_id" ]; then
-          local other_status
-          other_status=$(read_frontmatter "$other_file" ".status")
-          [ "$other_status" = "done" ] && dep_done=true
-          break
-        fi
-      done
+  {
+    echo "---"
+    echo "id: \"$next_id\""
+    printf 'name: "Follow-up for %s: %s"\n' "$fr_id" "${description//\"/\\\"}"
+    echo "status: todo"
+    echo "blocked_by: []"
+    echo "max_files: 5"
+    echo "estimated_files: []"
+    echo "test_cases: []"
+    echo "ground_rules:"
+    while IFS= read -r r; do [ -n "$r" ] && echo "  - $r"; done <<< "$rules"
+    echo "---"
+    echo
+    echo "## Description"
+    echo
+    echo "Auto-created follow-up for **$fr_id** from spec audit (verdict=reopen)."
+    echo
+    echo "Original FR finding: $description"
+  } > "$task_file"
 
-      [ "$dep_done" = "true" ] || { all_done=false; break; }
-    done
-
-    if [ "$all_done" = "true" ]; then
-      update_frontmatter "$task_file" '.status = "todo"'
-      local task_id
-      task_id=$(read_frontmatter "$task_file" ".id")
-      echo "Unblocked: task $task_id ($task_file)"
-      unblocked=$((unblocked + 1))
-
-      # Emit task_transition event if monitoring is active
-      emit_transition_event "$task_id" "blocked" "todo" "$task_file"
-    fi
-  done
-
-  echo "Unblocked $unblocked task(s)"
-}
-
-# Get next eligible task (status: todo, ordered by filename)
-cmd_next() {
-  local dir="${1:-}"
-  [ -z "$dir" ] && die "Usage: task-manager.sh next <tasks-directory>"
-  [ -d "$dir" ] || die "Tasks directory not found: $dir"
-
-  for task_file in "$dir"/*.md; do
-    [ -f "$task_file" ] || continue
-
-    local status
-    status=$(read_frontmatter "$task_file" ".status")
-    if [ "$status" = "todo" ]; then
-      echo "$task_file"
-      return 0
-    fi
-  done
-
-  # No eligible task — report blocked tasks
-  echo "No eligible tasks (status: todo) found."
-  echo ""
-  echo "Current task statuses:"
-  for task_file in "$dir"/*.md; do
-    [ -f "$task_file" ] || continue
-    local id status blocked_by
-    id=$(read_frontmatter "$task_file" ".id")
-    status=$(read_frontmatter "$task_file" ".status")
-    echo "  Task $id: $status"
-    if [ "$status" = "blocked" ]; then
-      blocked_by=$(read_frontmatter "$task_file" '.blocked_by | join(", ")')
-      echo "    blocked by: $blocked_by"
-    fi
-  done
-  return 1
+  cmd_validate "$task_file" >/dev/null || { rm -f "$task_file"; die "Generated follow-up task failed validation"; }
+  echo "$task_file"
 }
 
 # Check for unvalidated work
@@ -335,214 +370,22 @@ cmd_check_unvalidated() {
   local dir="${1:-}"
   [ -z "$dir" ] && die "Usage: task-manager.sh check-unvalidated <tasks-directory>"
   [ -d "$dir" ] || die "Tasks directory not found: $dir"
-
   local found=false
   for task_file in "$dir"/*.md; do
     [ -f "$task_file" ] || continue
-
     local status id
     status=$(read_frontmatter "$task_file" ".status")
     id=$(read_frontmatter "$task_file" ".id")
-
     if [ "$status" = "implemented" ] || [ "$status" = "review" ]; then
       echo "Task $id ($task_file): status is '$status'"
       found=true
     fi
   done
-
-  if [ "$found" = "true" ]; then
-    return 1
-  fi
-  return 0
+  [ "$found" = "true" ] && return 1 || return 0
 }
 
-# Show comprehensive status dashboard as YAML
-cmd_status() {
-  local dir="${1:-}"
-  [ -z "$dir" ] && die "Usage: task-manager.sh status <tasks-directory>"
-  [ -d "$dir" ] || die "Tasks directory not found: $dir"
-
-  # Collect all task data
-  local task_ids=()
-  local task_names=()
-  local task_statuses=()
-  local task_blocked_bys=()
-  local task_files_list=()
-
-  for task_file in "$dir"/*.md; do
-    [ -f "$task_file" ] || continue
-    local id name status blocked_by
-    id=$(read_frontmatter "$task_file" ".id")
-    name=$(read_frontmatter "$task_file" ".name")
-    status=$(read_frontmatter "$task_file" ".status")
-    blocked_by=$(read_frontmatter "$task_file" '.blocked_by | join(",")')
-    [ "$blocked_by" = "null" ] && blocked_by=""
-
-    task_ids+=("$id")
-    task_names+=("$name")
-    task_statuses+=("$status")
-    task_blocked_bys+=("$blocked_by")
-    task_files_list+=("$task_file")
-  done
-
-  local total=${#task_ids[@]}
-  [ "$total" -eq 0 ] && die "No task files found in $dir"
-
-  # Count statuses
-  local count_done=0 count_todo=0 count_blocked=0 count_in_progress=0 count_implemented=0 count_review=0
-  for status in "${task_statuses[@]}"; do
-    case "$status" in
-      done)         count_done=$((count_done + 1)) ;;
-      todo)         count_todo=$((count_todo + 1)) ;;
-      blocked)      count_blocked=$((count_blocked + 1)) ;;
-      in-progress)  count_in_progress=$((count_in_progress + 1)) ;;
-      implemented)  count_implemented=$((count_implemented + 1)) ;;
-      review)       count_review=$((count_review + 1)) ;;
-    esac
-  done
-
-  # Build reverse dependency map: which tasks does each task unblock
-  # For each task, look at its blocked_by and record the reverse
-  declare -A unblocks_map
-  for ((i = 0; i < total; i++)); do
-    local deps="${task_blocked_bys[$i]}"
-    [ -z "$deps" ] && continue
-    IFS=',' read -ra dep_arr <<< "$deps"
-    for dep_id in "${dep_arr[@]}"; do
-      dep_id=$(echo "$dep_id" | xargs) # trim
-      if [ -n "${unblocks_map[$dep_id]+x}" ]; then
-        unblocks_map[$dep_id]="${unblocks_map[$dep_id]},${task_ids[$i]}"
-      else
-        unblocks_map[$dep_id]="${task_ids[$i]}"
-      fi
-    done
-  done
-
-  # Health diagnostics
-  local diagnostics=()
-
-  # Check: orphan dependencies (blocked_by references non-existent IDs)
-  for ((i = 0; i < total; i++)); do
-    local deps="${task_blocked_bys[$i]}"
-    [ -z "$deps" ] && continue
-    IFS=',' read -ra dep_arr <<< "$deps"
-    for dep_id in "${dep_arr[@]}"; do
-      dep_id=$(echo "$dep_id" | xargs)
-      local found=false
-      for existing_id in "${task_ids[@]}"; do
-        [ "$existing_id" = "$dep_id" ] && { found=true; break; }
-      done
-      if [ "$found" = "false" ]; then
-        diagnostics+=("orphan_dependency: Task ${task_ids[$i]} references non-existent dependency ID '$dep_id'. Fix the blocked_by field.")
-      fi
-    done
-  done
-
-  # Check: stuck in-progress
-  for ((i = 0; i < total; i++)); do
-    if [ "${task_statuses[$i]}" = "in-progress" ]; then
-      diagnostics+=("stuck_in_progress: Task ${task_ids[$i]} (${task_names[$i]}) is in-progress. If abandoned, reset status to 'todo' in YAML frontmatter and clean up the branch.")
-    fi
-  done
-
-  # Check: unvalidated work
-  for ((i = 0; i < total; i++)); do
-    if [ "${task_statuses[$i]}" = "implemented" ]; then
-      diagnostics+=("unvalidated: Task ${task_ids[$i]} (${task_names[$i]}) is implemented but not validated. Run /validate.")
-    fi
-    if [ "${task_statuses[$i]}" = "review" ]; then
-      diagnostics+=("pending_review: Task ${task_ids[$i]} (${task_names[$i]}) has findings awaiting review. Run /review-findings.")
-    fi
-  done
-
-  # Check: deadlock (all remaining non-done tasks are blocked, none todo/in-progress)
-  local non_done=$((total - count_done))
-  if [ "$non_done" -gt 0 ] && [ "$count_todo" -eq 0 ] && [ "$count_in_progress" -eq 0 ] && [ "$count_implemented" -eq 0 ] && [ "$count_review" -eq 0 ]; then
-    diagnostics+=("deadlock: All $count_blocked remaining tasks are blocked with nothing in progress. Check dependency IDs for errors.")
-  fi
-
-  # Check: circular dependencies (simple detection via DFS)
-  # Build adjacency: task -> tasks it depends on
-  local has_cycle=false
-  for ((i = 0; i < total; i++)); do
-    [ "${task_statuses[$i]}" = "done" ] && continue
-    local deps="${task_blocked_bys[$i]}"
-    [ -z "$deps" ] && continue
-
-    # Walk the chain from this task to see if it loops back
-    local visited="${task_ids[$i]}"
-    local queue="$deps"
-
-    while [ -n "$queue" ]; do
-      local next_queue=""
-      IFS=',' read -ra q_arr <<< "$queue"
-      for q_id in "${q_arr[@]}"; do
-        q_id=$(echo "$q_id" | xargs)
-        # Check if we've visited this
-        if echo ",$visited," | grep -q ",$q_id,"; then
-          if [ "$q_id" = "${task_ids[$i]}" ]; then
-            diagnostics+=("circular_dependency: Task ${task_ids[$i]} is part of a dependency cycle. Break the cycle by removing one dependency.")
-            has_cycle=true
-          fi
-          continue
-        fi
-        visited="$visited,$q_id"
-        # Find this task's deps
-        for ((j = 0; j < total; j++)); do
-          if [ "${task_ids[$j]}" = "$q_id" ]; then
-            local j_deps="${task_blocked_bys[$j]}"
-            [ -n "$j_deps" ] && next_queue="$next_queue,$j_deps"
-            break
-          fi
-        done
-      done
-      queue="${next_queue#,}"
-    done
-  done
-
-  # Output as YAML
-  echo "---"
-  echo "summary:"
-  echo "  total: $total"
-  echo "  done: $count_done"
-  echo "  todo: $count_todo"
-  echo "  in_progress: $count_in_progress"
-  echo "  implemented: $count_implemented"
-  echo "  review: $count_review"
-  echo "  blocked: $count_blocked"
-  echo "  percent_complete: $((count_done * 100 / total))"
-  echo ""
-  echo "tasks:"
-  for ((i = 0; i < total; i++)); do
-    echo "  - id: \"${task_ids[$i]}\""
-    echo "    name: \"${task_names[$i]}\""
-    echo "    status: \"${task_statuses[$i]}\""
-    local deps="${task_blocked_bys[$i]}"
-    if [ -n "$deps" ]; then
-      echo "    blocked_by: [$(echo "$deps" | sed 's/,/, /g')]"
-    else
-      echo "    blocked_by: []"
-    fi
-    local ub="${unblocks_map[${task_ids[$i]}]:-}"
-    if [ -n "$ub" ]; then
-      echo "    unblocks: [$(echo "$ub" | sed 's/,/, /g')]"
-    else
-      echo "    unblocks: []"
-    fi
-  done
-  echo ""
-  echo "diagnostics:"
-  if [ ${#diagnostics[@]} -eq 0 ]; then
-    echo "  - none"
-  else
-    for diag in "${diagnostics[@]}"; do
-      echo "  - \"$diag\""
-    done
-  fi
-  echo "---"
-}
-
-# Main dispatch
+# Main dispatch (only when run directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 check_yq
 
 case "${1:-help}" in
@@ -550,8 +393,10 @@ case "${1:-help}" in
   set-status)       shift; cmd_set_status "$@" ;;
   unblock)          shift; cmd_unblock "$@" ;;
   next)             shift; cmd_next "$@" ;;
+  create-followup)  shift; cmd_create_followup "$@" ;;
   check-unvalidated) shift; cmd_check_unvalidated "$@" ;;
   status)           shift; cmd_status "$@" ;;
   help|--help|-h)   usage ;;
   *)                die "Unknown command: $1. Run 'task-manager.sh help' for usage." ;;
 esac
+fi

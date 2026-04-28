@@ -1,8 +1,8 @@
 ---
 id: "015"
 name: "Last-task-done trigger + /implement auto-chain"
-status: blocked
-blocked_by: ["014"]
+status: done
+blocked_by: []
 max_files: 5
 estimated_files:
   - scripts/task-manager.sh
@@ -44,3 +44,13 @@ Wire the trigger that fires `/validate-impl` automatically when the final task i
 - Serial execution rule (CLAUDE.md) already forbids concurrent task completion; a simple tail-grep check is sufficient. No file locks needed.
 - Fixture under `tests/fixtures/last-task-done/` — 3 task files, feature dir, empty `.monitor.jsonl`. Tests walk all tasks through the state machine and assert event emission on the final transition only.
 - Do not modify the task state machine. `done` remains terminal. Reopen flow (T017) inserts new `todo` tasks; it does not revert existing `done` tasks.
+
+### Decisions taken during implementation
+
+- `spec_last_task_done` added to `_WF_VALID_CATEGORIES` allowlist in `scripts/monitor-validators.sh`.
+- Helper `maybe_emit_spec_last_task_done` in `scripts/task-manager.sh`, invoked in `cmd_set_status` after `emit_transition_event`. No-ops unless `new_status == done`.
+- Feature dir derived from task file path (`<storage>/<feature>/tasks/<file>.md`); non-done count walks `*.md` files via `read_frontmatter`.
+- Sentinel guard: skips emission if monitor file already contains `spec_audit_done` OR `spec_last_task_done` — covers both audit-already-ran and concurrent set-status calls without needing a file lock.
+- `task-manager.sh` main dispatch wrapped in `BASH_SOURCE == 0` guard so tests can source it and invoke helpers directly.
+- `commands/implement.md` gained a "Final Chain Step — Spec-Done Trigger" section: tail-greps `.monitor.jsonl` for the event after the validate→ship chain, and invokes `/validate-impl` if found. CLI `set-status done` still emits but does not auto-invoke (parity with `task_transition`).
+- Skipped the `tests/fixtures/last-task-done/` dir in favor of inline temp dirs in `tests/test-task-manager-monitor.sh` (4 new cases, all green).

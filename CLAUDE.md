@@ -13,7 +13,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `commands/*.md` — Slash command definitions (bootstrap, explore, propose, validate-spec, implement, validate, review-findings, learn-from-reports, ship, quick-ship, pr-review, spec-status, workflow-summary, continue-task, research, promote-rules)
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Lives in this repo; not installed globally.
 - `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Lives in this repo; not installed globally. Referenced by all workflow commands instead of duplicating KB instructions inline.
-- `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, check-unvalidated, status). Requires `yq`.
+- `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, create-followup, check-unvalidated, status). Requires `yq`. `create-followup <feature> <fr-id> <description>` auto-generates a `status: todo` task from a `/validate-impl` spec-audit accepted finding; FR id is validated against `spec.md` (fail-closed on unknown ids) and ground_rules are inherited from the spec's `## Applicable Ground Rules` section.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `scripts/monitor.sh` — Event logger for spec implementation monitoring; appends JSONL events to `specs/<feature>/.monitor.jsonl`
 - `hooks/` — Claude Code hook scripts for enforcement and monitoring (block-git-hook-bypass, block-dismissive-language, monitor-tool-calls). Installed to `~/.claude/hooks/` by `setup.sh`.
@@ -76,6 +76,32 @@ Two-layer knowledge base architecture:
 All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB.
 
 Task `ground_rules` use prefix convention: `general:security/general.md`, `project:languages/rust.md`. Unprefixed defaults to `project:`.
+
+## Configurable Workflow
+
+The configurable-workflow feature externalizes gate and agent selection into YAML config. Three files form the config layer:
+
+- **`.workflow.yml`** (repo root) — `spec_storage`, `gate_pool`, `agent_pool`, `validate_scope`. Required for any active invocation. Missing → loader exit 2; run `/bootstrap`.
+- **`knowledge-base/gates.yml`** (gate registry) — canonical list of deterministic gates with `id`, `command`, `applies_to`, `category`, `blocking`. Replaces `validation_tools` frontmatter in language files (display-only after this feature ships).
+- **`specs/<feature>/config.yml`** (per-spec config) — `tags`, `gates` (the **ceiling**), and `agents` per phase. Written by `/explore` step 0 after inferencer approval. Required on all active processing paths; missing → exit 4.
+
+**Key terms:**
+- **Ceiling** — the eligible gate set for a spec: union of gate IDs in `config.yml gates:`. Upper bound; no gate outside this set runs.
+- **Effective set** — per-task intersection: `ceiling ∩ gates applicable to task ground_rules` (language + category match). Computed fresh each task.
+- **`validate_scope`** — cadence control: `per-task` (default), `per-spec` (skip per-task validate; union runs at `/validate-impl`), or `both`.
+
+**Config loader (`scripts/config-loader.sh`):**
+- Walks up from CWD to find `.workflow.yml`; single `timeout 5 yq` parse
+- Exports `WF_SPEC_STORAGE`, `WF_GATE_POOL`, `WF_AGENT_POOL`, `WF_SPEC_GATES`, `WF_SPEC_AGENTS_<PHASE>`, `WF_VALIDATE_SCOPE`
+- Leaf module — sources nothing from workflow scripts (no circular dep)
+
+**`/explore` step 0:** Before normal explore flow, spawns `config-inferencer` agent, shows one-screen summary, accepts single-key approval or `/config` override, writes `config.yml`, emits `config_inferred` + `config_approved` monitor events.
+
+**`/validate` ceiling semantics:** Executes intersection of spec-eligible gates ∩ gates applicable to task `ground_rules`. Skipped gates emit `gate_skip` events.
+
+**`/validate-impl`:** Runs once when all spec tasks reach `done`. Spawns Karen with spec FR list, prd.md scope, task list, and git diff range. Verdict `complete` → spec shipped; verdict `reopen` → `/review-findings` spawns follow-up tasks.
+
+See `specs/configurable-workflow/design.md` for full ADR detail and schema definitions.
 
 ## Key Design Decisions
 

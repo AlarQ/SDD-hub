@@ -1,8 +1,8 @@
 ---
 id: "011"
 name: "Bootstrap, setup, and cleanup of legacy fallback"
-status: blocked
-blocked_by: ["004", "010"]
+status: done
+blocked_by: []
 max_files: 10
 estimated_files:
   - commands/bootstrap.md
@@ -62,3 +62,11 @@ Before this task can ship, an E2E test must pass: fresh repo → `/bootstrap` �
 
 - Fallback removal must be atomic with the bootstrap update: never leave a half-removed fallback that breaks fresh installs.
 - Post-removal grep guard: `! grep -rn 'specs/$' scripts/monitor.sh scripts/task-manager.sh scripts/pre-commit-hook.sh`.
+
+## Applied Changes
+
+- `scripts/monitor.sh` — removed `_find_project_root()` legacy function; `_find_workflow_root()` now fails closed (returns 1) when config-paths not loaded and WF_REPO_ROOT unset; `get_spec_storage()` emits exit 2 + /bootstrap hint when no `.workflow.yml` found instead of silently defaulting to `$root/specs`.
+- `scripts/task-manager.sh` — removed `specs/` directory walk-up from `_wf_tm_detect_repo_root()`; updated comment.
+- `scripts/pre-commit-hook.sh` — replaced hardcoded `'^specs/.*/tasks/.*\.md$'` grep with dynamic `WF_SPEC_STORAGE`-derived prefix; exits 0 (skip) when `WF_SPEC_STORAGE` unset (no `.workflow.yml`).
+- `commands/bootstrap.md` — added Step A: write `.workflow.yml` from template with idempotent / `--force` / `--repair` semantics; symlink guard; Step B is the existing knowledge-base creation flow.
+- `knowledge-base/languages/shell.md`, `knowledge-base/languages/rust.md` — annotated `validation_tools` frontmatter as display-only pointing at `gates.yml`.

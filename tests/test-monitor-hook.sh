@@ -16,10 +16,13 @@ TEST_TMPDIR=""
 setup() {
   TEST_TMPDIR="$(mktemp -d)"
   mkdir -p "$TEST_TMPDIR/specs/test-feature/tasks"
+  printf 'spec_storage: specs/\n' > "$TEST_TMPDIR/.workflow.yml"
   # Create a fake ~/.claude/scripts/monitor.sh for the hook to source.
   mkdir -p "$TEST_TMPDIR/fake-home/.claude/scripts"
   cp "$MONITOR_SCRIPT" "$TEST_TMPDIR/fake-home/.claude/scripts/monitor.sh"
-  chmod +x "$TEST_TMPDIR/fake-home/.claude/scripts/monitor.sh"
+  cp "$(dirname "$MONITOR_SCRIPT")/config-paths.sh" "$TEST_TMPDIR/fake-home/.claude/scripts/config-paths.sh" 2>/dev/null || true
+  cp "$(dirname "$MONITOR_SCRIPT")/monitor-validators.sh" "$TEST_TMPDIR/fake-home/.claude/scripts/monitor-validators.sh" 2>/dev/null || true
+  chmod +x "$TEST_TMPDIR/fake-home/.claude/scripts/"*.sh
 }
 
 teardown() {
