@@ -16,8 +16,8 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 Loader contract (env vars + exit codes): `~/.claude/scripts/config-loader.contract.md`. Runs solely to validate config existence — `/review-findings` does not consume the `agents` map. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
 
 ## Steps
-1. Read all pending reports from `specs/$ARGUMENTS/reports/`. Report and finding schema: `~/.claude/docs/report-schema.md` (canonical) — `review_status` enum, severity enum, source enum, and the spec-audit markdown contract live there. **Spec-audit reports** (filename pattern `spec-audit-*.md`, produced by `/validate-impl`) are recognized here:
-   - Frontmatter and FR-matrix contract per `~/.claude/docs/report-schema.md §Spec-audit reports`. Refuse to process if frontmatter is missing required fields or `verdict` is outside the allowed set.
+1. Read all pending reports from `specs/$ARGUMENTS/reports/`. Report and finding schema: `~/.claude/scripts/report-schema.md` (canonical) — `review_status` enum, severity enum, source enum, and the spec-audit markdown contract live there. **Spec-audit reports** (filename pattern `spec-audit-*.md`, produced by `/validate-impl`) are recognized here:
+   - Frontmatter and FR-matrix contract per `~/.claude/scripts/report-schema.md §Spec-audit reports`. Refuse to process if frontmatter is missing required fields or `verdict` is outside the allowed set.
    - Each `missing` or `partial` FR row becomes one review unit (synthetic finding: `source: llm`, severity `high` for missing, `medium` for partial).
    - On **Accept** of a missing/partial FR review unit: invoke `~/.claude/scripts/task-manager.sh create-followup "$ARGUMENTS" "<FR-id>" "<FR description>"`. This subcommand validates the FR id against `spec.md` (fail-closed on unknown ids) and inherits `ground_rules` from the spec's `## Applicable Ground Rules` section.
    - On **Reject**: the finding remains in the report so `/learn-from-reports` can mine it as a project-KB rule candidate (no inline rule creation needed for spec-audit findings).
