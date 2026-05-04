@@ -12,6 +12,8 @@ WF_VALIDATE_IMPL_LOADED=1
 _wf_vi_dir() { cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd; }
 # shellcheck source=scripts/monitor.sh
 source "$(_wf_vi_dir)/monitor.sh"
+# shellcheck source=scripts/gate-ceiling.sh
+source "$(_wf_vi_dir)/gate-ceiling.sh"
 
 wf_vi__err() { echo "ERROR: $*" >&2; }
 
@@ -101,59 +103,11 @@ wf_vi_set_spec_shipped() {
   yq --front-matter=process e -i '.status = "shipped"' "$spec_md"
 }
 
-# wf_vi_task_languages <task_md> -> stdout: language tags (one per line, sorted unique)
-# Extracts language tags from a task file's `ground_rules` field.
-wf_vi_task_languages() {
-  local task_md="$1"
-  [[ -f "$task_md" ]] || return 0
-  awk '
-    /^ground_rules:/ { in_gr=1; next }
-    in_gr && /^[a-zA-Z_]+:/ { in_gr=0 }
-    in_gr && /languages\// {
-      sub(/.*languages\//, ""); sub(/\.md.*/, "");
-      print
-    }
-  ' "$task_md" | sort -u
-}
-
-# wf_vi_union_languages <tasks_dir> -> stdout: union of language tags across all tasks (sorted unique)
-wf_vi_union_languages() {
-  local tasks_dir="$1"
-  [[ -d "$tasks_dir" ]] || return 0
-  local f
-  while IFS= read -r f; do
-    wf_vi_task_languages "$f"
-  done < <(find "$tasks_dir" -maxdepth 1 -name '*.md' -print 2>/dev/null | sort) | sort -u
-}
-
-# wf_vi_gate_field <gate_pool> <gate_id> <field> -> stdout
-wf_vi_gate_field() {
-  local pool="$1" id="$2" field="$3"
-  command -v yq >/dev/null 2>&1 || return 90
-  yq e -r ".gates[] | select(.id == \"$id\") | .$field" "$pool" 2>/dev/null
-}
-
-# wf_vi_compute_union <gate_pool> <ceiling_newline_separated> <langs_newline_separated>
-# -> stdout: gate ids in union, one per line, sorted
-# Union = ceiling ∩ {g | g.applies_to ∩ langs ≠ ∅ ∨ "any" ∈ g.applies_to}
-wf_vi_compute_union() {
-  local pool="$1" ceiling="$2" langs="$3"
-  command -v yq >/dev/null 2>&1 || { wf_vi__err "yq required"; return 90; }
-  local lang_set=" any "
-  while IFS= read -r l; do [[ -n "$l" ]] && lang_set="$lang_set$l "; done <<< "$langs"
-  local id applies_json
-  while IFS= read -r id; do
-    [[ -z "$id" ]] && continue
-    applies_json="$(yq e -r ".gates[] | select(.id == \"$id\") | .applies_to[]" "$pool" 2>/dev/null)" || continue
-    [[ -z "$applies_json" ]] && continue
-    while IFS= read -r tag; do
-      [[ -z "$tag" ]] && continue
-      if [[ "$lang_set" == *" $tag "* ]]; then
-        printf '%s\n' "$id"; break
-      fi
-    done <<< "$applies_json"
-  done <<< "$ceiling" | sort -u
-}
+# Back-compat wrappers — canonical impls live in gate-ceiling.sh.
+wf_vi_task_languages()  { wf_gc_task_languages "$@"; }
+wf_vi_union_languages() { wf_gc_union_languages "$@"; }
+wf_vi_gate_field()      { wf_gc_gate_field "$@"; }
+wf_vi_compute_union()   { wf_gc__intersect "$@"; }
 
 # wf_vi_run_union_gates <feature> <spec_dir> <log_file>
 # Computes the union of spec-eligible gates ∩ language-applicable gates across
