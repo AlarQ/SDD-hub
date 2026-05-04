@@ -207,7 +207,7 @@ test_set_context_path_traversal_rejected() {
   err="$("$MONITOR_SCRIPT" set_context "../../etc" "001" 2>&1)" && return 1
 
   # Then exit code is non-zero and an error is printed to stderr
-  [[ "$err" == *"Invalid feature"* ]] || return 1
+  [[ "$err" == *"invalid feature id"* ]] || return 1
   [[ ! -f "$TEST_TMPDIR/.monitor-context" ]] || return 1
 }
 

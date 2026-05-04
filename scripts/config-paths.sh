@@ -103,15 +103,38 @@ wf_resolve_root() {
   return 1
 }
 
-# validate_id <string>
+# wf_with_timeout SECS CMD...
+#   Canonical timeout helper. Prefers `timeout`, then `gtimeout`, then a
+#   perl-based fallback. Returns 124 on timeout (matching coreutils contract).
+#   Exposed so config-loader.sh, task-manager.sh, and monitor.sh can share one impl.
+wf_with_timeout() {
+  if command -v timeout >/dev/null 2>&1; then command timeout "$@"; return $?; fi
+  if command -v gtimeout >/dev/null 2>&1; then command gtimeout "$@"; return $?; fi
+  perl -e '
+    my $t = shift @ARGV;
+    my $pid = fork();
+    if (!$pid) { exec(@ARGV) or exit 127 }
+    local $SIG{ALRM} = sub { kill 9, $pid; waitpid $pid, 0; exit 124 };
+    alarm $t; waitpid $pid, 0; exit ($? >> 8);
+  ' -- "$@"
+}
+
+# validate_id <value> [label]
 #   Canonical gate/agent/feature id regex: ^[a-zA-Z0-9_-]{1,64}$
 #   Returns 0 on match, 1 otherwise. Silent on success; stderr message on reject.
+#   When [label] is provided, the stderr message reads `invalid <label> id '<value>'`
+#   for human-readable validator failures (used by monitor.sh, monitor-validators.sh).
 validate_id() {
   local value="${1:-}"
+  local label="${2:-}"
   if [[ "$value" =~ ^[a-zA-Z0-9_-]{1,64}$ ]]; then
     return 0
   fi
-  echo "ERROR: validate_id: rejected id: ${value:-<empty>}" >&2
+  if [[ -n "$label" ]]; then
+    echo "ERROR: invalid $label id '${value:-<empty>}'" >&2
+  else
+    echo "ERROR: validate_id: rejected id: ${value:-<empty>}" >&2
+  fi
   return 1
 }
 

@@ -291,6 +291,21 @@ test_loader_no_script_has_inline_source_of_config_loader() {
     | grep -v "config-loader.sh"
 }
 
+test_loader_spec_gates_shape_well_formed() {
+  # I6 — WF_SPEC_GATES is newline-separated; no leading/trailing newline;
+  # every line matches ^[a-z][a-z0-9-]*$ (gate id regex subset).
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  cp "$FIXTURES/spec-config-valid.yml" "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ -n "$WF_SPEC_GATES" ]] \
+      && [[ "${WF_SPEC_GATES:0:1}" != $'\n' ]] \
+      && [[ "${WF_SPEC_GATES: -1}" != $'\n' ]] \
+      && while IFS= read -r line; do
+           [[ "$line" =~ ^[a-z][a-z0-9-]*$ ]] || { echo "    bad id: [$line]" >&2; exit 1; }
+         done <<<"$WF_SPEC_GATES" )
+}
+
 echo "=== test-config-loader.sh ==="
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
@@ -315,6 +330,7 @@ run_test "validate_scope spec config.yml override wins over repo default" test_l
 run_test "validate_scope=disabled exits 2 and names enum in error" test_loader_validate_scope_invalid_exits_2_names_enum
 run_test "validate_scope documented in both templates" test_loader_validate_scope_templates_documented
 run_test "grep guard: no script has inline source of config-loader.sh" test_loader_no_script_has_inline_source_of_config_loader
+run_test "WF_SPEC_GATES shape: newline-sep, regex-valid, no leading/trailing NL" test_loader_spec_gates_shape_well_formed
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

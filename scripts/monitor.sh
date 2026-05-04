@@ -23,13 +23,7 @@ fi
 [[ -f "$_wf_mon_self_dir/monitor-validators.sh" ]] && source "$_wf_mon_self_dir/monitor-validators.sh"
 unset _wf_mon_self_dir
 
-# Private: validate_id with label arg for readable error messages.
-# Keeps config-paths.sh's canonical one-argument validate_id untouched.
-_wf_mon_validate_labeled_id() {
-  local value="${1:-}" label="${2:-id}"
-  if [[ "$value" =~ ^[a-zA-Z0-9_-]{1,64}$ ]]; then return 0; fi
-  echo "ERROR: Invalid $label: must be non-empty alphanumeric, hyphens, or underscores" >&2; return 1
-}
+# Labeled id validation now lives in config-paths.sh as `validate_id <value> [label]`.
 
 # === Helpers (public when sourced) ===
 
@@ -61,11 +55,11 @@ get_spec_storage() {
   root="$(_find_workflow_root)" || return 1
   if command -v yq >/dev/null 2>&1 && [[ -f "$root/.workflow.yml" ]]; then
     local raw
-    local _yq_timeout_cmd
-    if command -v timeout >/dev/null 2>&1; then _yq_timeout_cmd="timeout 5"
-    elif command -v gtimeout >/dev/null 2>&1; then _yq_timeout_cmd="gtimeout 5"
-    else _yq_timeout_cmd=""; fi
-    raw="$($_yq_timeout_cmd yq e '.spec_storage // "specs/"' "$root/.workflow.yml" 2>/dev/null)" || { echo "ERROR: Failed to read .workflow.yml" >&2; return 2; }
+    if command -v wf_with_timeout >/dev/null 2>&1; then
+      raw="$(wf_with_timeout 5 yq e '.spec_storage // "specs/"' "$root/.workflow.yml" 2>/dev/null)" || { echo "ERROR: Failed to read .workflow.yml" >&2; return 2; }
+    else
+      raw="$(yq e '.spec_storage // "specs/"' "$root/.workflow.yml" 2>/dev/null)" || { echo "ERROR: Failed to read .workflow.yml" >&2; return 2; }
+    fi
     local resolved
     case "$raw" in
       /*) resolved="$raw" ;;
@@ -89,7 +83,7 @@ get_spec_storage() {
 
 get_monitor_file() {
   local feature="$1"
-  _wf_mon_validate_labeled_id "$feature" "feature" || return 1
+  validate_id "$feature" "feature" || return 1
   local storage
   storage="$(get_spec_storage)" || return 1
   printf '%s' "$storage/$feature/.monitor.jsonl"
@@ -125,7 +119,7 @@ log_event() {
   monitor_file="$(get_monitor_file "$feature")" || return 1
   local task_field=""
   if [[ -n "$task_id" ]]; then
-    _wf_mon_validate_labeled_id "$task_id" "task_id" || return 1
+    validate_id "$task_id" "task_id" || return 1
     task_field="$(printf '"task":"%s",' "$(escape_json_string "$task_id")")"
   fi
   local line
@@ -139,8 +133,8 @@ start_phase() {
   local feature="${1:?Usage: start_phase <feature> <task_id> <phase_name>}"
   local task_id="${2:?Usage: start_phase <feature> <task_id> <phase_name>}"
   local phase_name="${3:?Usage: start_phase <feature> <task_id> <phase_name>}"
-  _wf_mon_validate_labeled_id "$task_id" "task_id" || return 1
-  _wf_mon_validate_labeled_id "$phase_name" "phase_name" || return 1
+  validate_id "$task_id" "task_id" || return 1
+  validate_id "$phase_name" "phase_name" || return 1
   local epoch ts monitor_file correlation_id
   epoch="$(get_epoch)"; ts="$(get_timestamp)"
   correlation_id="${phase_name}-${task_id}-${epoch}"
@@ -157,7 +151,7 @@ end_phase() {
   local feature="${1:?Usage: end_phase <feature> <correlation_id> <phase_name>}"
   local correlation_id="${2:?Usage: end_phase <feature> <correlation_id> <phase_name>}"
   local phase_name="${3:?Usage: end_phase <feature> <correlation_id> <phase_name>}"
-  _wf_mon_validate_labeled_id "$correlation_id" "correlation_id" || return 1
+  validate_id "$correlation_id" "correlation_id" || return 1
   local ts monitor_file
   ts="$(get_timestamp)"
   monitor_file="$(get_monitor_file "$feature")" || return 1
@@ -171,8 +165,8 @@ end_phase() {
 set_context() {
   local feature="${1:?Usage: set_context <feature> <task_id>}"
   local task_id="${2:?Usage: set_context <feature> <task_id>}"
-  _wf_mon_validate_labeled_id "$feature" "feature" || return 1
-  _wf_mon_validate_labeled_id "$task_id" "task_id" || return 1
+  validate_id "$feature" "feature" || return 1
+  validate_id "$task_id" "task_id" || return 1
   local root
   root="$(require_project_root)" || return 1
   local tmp_file
@@ -191,8 +185,8 @@ read_context() {
     case "$key" in feature) feature="$value" ;; task) task="$value" ;; esac
   done < "$context_file"
   [[ -n "$feature" ]] || return 1
-  _wf_mon_validate_labeled_id "$feature" "feature" || return 1
-  if [[ -n "$task" ]]; then _wf_mon_validate_labeled_id "$task" "task_id" || return 1; fi
+  validate_id "$feature" "feature" || return 1
+  if [[ -n "$task" ]]; then validate_id "$task" "task_id" || return 1; fi
   printf '%s\n%s\n' "$feature" "$task"
 }
 

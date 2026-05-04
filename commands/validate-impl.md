@@ -43,7 +43,9 @@ Otherwise execute the **spec-union** (union of every task's effective-set; see C
 ```bash
 spec_dir="$WF_SPEC_STORAGE/$ARGUMENTS"
 gate_log="/tmp/spec-audit-gates-$$.log"
-forced_verdict="$(wf_vi_run_union_gates "$ARGUMENTS" "$spec_dir" "$gate_log")"
+gate_json="$(wf_vi_run_union_gates "$ARGUMENTS" "$spec_dir" "$gate_log")"
+# JSON shape: {"verdict":"reopen|"","gate_failures":[...],"log_path":"…"}
+forced_verdict="$(printf '%s' "$gate_json" | jq -r '.verdict')"
 extra_evidence=""
 [[ -n "$forced_verdict" || -s "$gate_log" ]] && extra_evidence="$gate_log"
 ```

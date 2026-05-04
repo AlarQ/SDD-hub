@@ -43,6 +43,18 @@ extract_json_string() {
 TOOL_NAME="$(extract_json_string "$INPUT" "tool_name")" || exit 0
 [[ -n "$TOOL_NAME" ]] || exit 0
 
+# T1 — opt-in debug log. Wrapped so it can never break the hook's exit-0 contract.
+if [[ "${WF_MONITOR_DEBUG:-0}" == "1" ]]; then
+  {
+    _dbg_log="${HOME}/.claude/monitor-debug.log"
+    {
+      printf '=== %s feature=%s task=%s tool=%s ===\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FEATURE" "$TASK" "$TOOL_NAME"
+      printf 'INPUT: %s\n' "$INPUT"
+    } >> "$_dbg_log"
+  } 2>/dev/null || true
+fi
+
 # Map tool to event category and build data payload.
 case "$TOOL_NAME" in
   Read)

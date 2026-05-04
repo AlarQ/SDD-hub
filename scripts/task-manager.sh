@@ -150,18 +150,21 @@ check_yq() {
   command -v yq >/dev/null 2>&1 || die "yq is not installed. Run: brew install yq"
 }
 
-# Portable yq with 5-second timeout (timeout/gtimeout/none depending on OS).
+# Portable yq with 5-second timeout — delegates to canonical wf_with_timeout
+# (config-paths.sh). Falls back to bare `yq` if config-paths.sh wasn't sourced
+# (defensive — every caller already sources it via the bootstrap above).
 _wf_yq() {
-  if command -v timeout >/dev/null 2>&1; then timeout 5 yq "$@"
-  elif command -v gtimeout >/dev/null 2>&1; then gtimeout 5 yq "$@"
+  if command -v wf_with_timeout >/dev/null 2>&1; then wf_with_timeout 5 yq "$@"
   else yq "$@"; fi
 }
 
 # Extract YAML frontmatter from a markdown file and pass it to yq.
+# Uses `yq --front-matter=process` so a markdown HR (`---`) inside the task
+# body never confuses frontmatter extraction (sed-between-`---` does).
 read_frontmatter() {
   local file="$1"
   local expression="${2:-.}"
-  sed -n '/^---$/,/^---$/p' "$file" | sed '1d;$d' | _wf_yq eval "$expression" -
+  _wf_yq --front-matter=extract eval "$expression" "$file"
 }
 
 # Resolve a prefixed ground_rules path to a real file path (absolute).

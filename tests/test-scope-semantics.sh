@@ -91,19 +91,19 @@ assert_contains() { [[ "$1" == *"$2"* ]] || { echo "    missing:[$2] in:[$1]"; r
 # === Helpers ===
 
 test_task_languages_extracts_shell() {
-  local out; out="$(wf_vi_task_languages "$TMPDIR_T/specs/demo/tasks/001-a.md")"
+  local out; out="$(wf_gc_task_languages "$TMPDIR_T/specs/demo/tasks/001-a.md")"
   assert_eq "shell" "$out"
 }
 
 test_union_languages_merges_across_tasks() {
-  local out; out="$(wf_vi_union_languages "$TMPDIR_T/specs/demo/tasks")"
+  local out; out="$(wf_gc_union_languages "$TMPDIR_T/specs/demo/tasks")"
   assert_eq "shell" "$out"
 }
 
 test_compute_union_intersects_ceiling_with_languages() {
   local ceiling; ceiling=$'shellcheck\nshell-syntax\nrust-clippy\ndocs-only'
   local langs; langs=$'shell'
-  local out; out="$(wf_vi_compute_union "$WF_GATE_POOL" "$ceiling" "$langs")"
+  local out; out="$(wf_gc__intersect "$WF_GATE_POOL" "$ceiling" "$langs")"
   # rust-clippy excluded (lang mismatch), docs-only included via `any`
   assert_eq $'docs-only\nshell-syntax\nshellcheck' "$out"
 }
@@ -112,17 +112,24 @@ test_compute_union_dedupes_each_gate_once() {
   # Even though shell appears in two tasks, gate-id appears only once in union.
   local ceiling; ceiling=$'shellcheck\nshellcheck'
   local langs; langs=$'shell\nshell'
-  local out; out="$(wf_vi_compute_union "$WF_GATE_POOL" "$ceiling" "$langs")"
+  local out; out="$(wf_gc__intersect "$WF_GATE_POOL" "$ceiling" "$langs")"
   assert_eq "shellcheck" "$out"
 }
 
 # === Union execution ===
 
+# Helper: parse the "verdict" field from the JSON line emitted on stdout.
+_extract_verdict() {
+  # crude JSON extract — sufficient for fixed-shape stdout from wf_vi_run_union_gates
+  local s="$1"
+  [[ "$s" =~ \"verdict\":\"([^\"]*)\" ]] && printf '%s' "${BASH_REMATCH[1]}"
+}
+
 test_run_union_passes_when_all_gates_succeed() {
   export WF_SPEC_GATES=$'shellcheck\nshell-syntax'
   local log; log="$(mktemp)"
-  local forced; forced="$(wf_vi_run_union_gates demo "$TMPDIR_T/specs/demo" "$log")"
-  assert_eq "" "$forced" || return 1
+  local out; out="$(wf_vi_run_union_gates demo "$TMPDIR_T/specs/demo" "$log")"
+  assert_eq "" "$(_extract_verdict "$out")" || return 1
   grep -q 'gate: shellcheck' "$log" || return 1
   grep -q 'gate: shell-syntax' "$log" || return 1
 }
@@ -130,16 +137,18 @@ test_run_union_passes_when_all_gates_succeed() {
 test_run_union_blocking_failure_forces_reopen() {
   export WF_SPEC_GATES=$'shellcheck\nfailing-blocker'
   local log; log="$(mktemp)"
-  local forced; forced="$(wf_vi_run_union_gates demo "$TMPDIR_T/specs/demo" "$log")"
-  assert_eq "reopen" "$forced" || return 1
+  local out; out="$(wf_vi_run_union_gates demo "$TMPDIR_T/specs/demo" "$log")"
+  assert_eq "reopen" "$(_extract_verdict "$out")" || return 1
+  assert_contains "$out" '"id":"failing-blocker"' || return 1
   assert_contains "$(cat "$log")" "failing-blocker" || return 1
 }
 
 test_run_union_nonblocking_failure_does_not_force_reopen() {
   export WF_SPEC_GATES=$'shellcheck\nfailing-nonblocker'
   local log; log="$(mktemp)"
-  local forced; forced="$(wf_vi_run_union_gates demo "$TMPDIR_T/specs/demo" "$log")"
-  assert_eq "" "$forced" || return 1
+  local out; out="$(wf_vi_run_union_gates demo "$TMPDIR_T/specs/demo" "$log")"
+  assert_eq "" "$(_extract_verdict "$out")" || return 1
+  assert_contains "$out" '"id":"failing-nonblocker"' || return 1
   assert_contains "$(cat "$log")" "failing-nonblocker" || return 1
 }
 
