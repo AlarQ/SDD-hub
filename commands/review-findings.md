@@ -13,11 +13,7 @@ Load the spec config before processing any report (substitute actual feature nam
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS'
 ```
 
-On non-zero exit:
-- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
-- Any other non-zero: stop — print the loader error and halt.
-
-Note: `/review-findings` does not consume the `agents` map from config.yml. The loader is run here solely to validate config existence.
+Loader contract (env vars + exit codes): `scripts/config-loader.contract.md`. Runs solely to validate config existence — `/review-findings` does not consume the `agents` map. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
 
 ## Steps
 1. Read all pending reports from `specs/$ARGUMENTS/reports/`. **Spec-audit reports** (filename pattern `spec-audit-*.md`, produced by `/validate-impl`) are recognized here:

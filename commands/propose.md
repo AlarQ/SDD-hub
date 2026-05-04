@@ -13,11 +13,9 @@ Before generating any artifact, load the spec config (substituting the actual fe
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PROPOSE=%s\n" "${WF_SPEC_AGENTS_PROPOSE:-}"'
 ```
 
-On non-zero exit:
-- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
-- Any other non-zero: stop — print the loader error and halt.
+Loader contract (env vars + exit codes): `scripts/config-loader.contract.md`. This step uses `WF_SPEC_AGENTS_PROPOSE`. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
 
-Record `WF_SPEC_AGENTS_PROPOSE`. If non-empty, it lists the agent IDs to spawn during spec/design generation (overrides the default keyword-based conditional list below). Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
+If `WF_SPEC_AGENTS_PROPOSE` is non-empty, it lists the agent IDs to spawn during spec/design generation (overrides the default keyword-based conditional list below). Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
 
 ## Steps
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context

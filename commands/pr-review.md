@@ -19,11 +19,9 @@ Load the spec config before spawning any agent (substitute actual feature name f
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PR_REVIEW=%s\n" "${WF_SPEC_AGENTS_PR_REVIEW:-}"'
 ```
 
-On non-zero exit:
-- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`."
-- Any other non-zero: stop — print the loader error and halt.
+Loader contract (env vars + exit codes): `scripts/config-loader.contract.md`. This step uses `WF_SPEC_AGENTS_PR_REVIEW`. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
 
-Record `WF_SPEC_AGENTS_PR_REVIEW`. If non-empty, spawn those agent IDs instead of the default `engineering-code-reviewer`. Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
+If `WF_SPEC_AGENTS_PR_REVIEW` is non-empty, spawn those agent IDs instead of the default `engineering-code-reviewer`. Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
 
 ## Phase 1: Agent-Powered Code Review
 
