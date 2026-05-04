@@ -9,7 +9,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOADER="$REPO_ROOT/scripts/config-loader.sh"
+CEILING_HELPERS="$REPO_ROOT/scripts/gate-ceiling.sh"
 FIXTURES="$REPO_ROOT/tests/fixtures/config"
+
+# shellcheck source=../scripts/gate-ceiling.sh
+source "$CEILING_HELPERS"
 
 # Preflight: verify required fixture files exist
 for _f in gates-valid.yml task-doc-only-empty-ok.md task-rust-ground-rules.md; do
@@ -93,31 +97,17 @@ run_test "Missing config.yml → loader exits 4" t_missing_spec_config_exit4
 
 # --- Test: ceiling intersection yields effective set ---
 
-# Mirror of commands/validate.md Phase 1 ceiling intersection logic.
-# If the spec changes, update this helper to match.
+# Thin shim over the canonical ceiling intersection helper in
+# scripts/gate-ceiling.sh. Tests exercise the production code path rather
+# than a parallel re-implementation.
 _compute_effective_set() {
   local gates_file="$1"   # path to gates.yml
   local spec_gates="$2"   # newline-separated ceiling gate IDs
   local lang_tags="$3"    # space-separated language tags (e.g. "rust shell")
 
-  # Language-applicable gates: applies_to intersects lang_tags or is "any"
-  local gate_id applies_to_str tag effective=""
-  while IFS= read -r gate_id; do
-    [[ -z "$gate_id" ]] && continue
-    applies_to_str="$(yq e ".gates[] | select(.id == \"$gate_id\") | .applies_to | join(\" \")" "$gates_file" 2>/dev/null || true)"
-    local matched=0
-    if echo "$applies_to_str" | grep -qw "any"; then
-      matched=1
-    else
-      for tag in $lang_tags; do
-        if echo "$applies_to_str" | grep -qw "$tag"; then matched=1; break; fi
-      done
-    fi
-    if [[ $matched -eq 1 ]] && echo "$spec_gates" | grep -Fxq "$gate_id"; then
-      effective="${effective:+$effective\n}$gate_id"
-    fi
-  done < <(yq e '.gates[].id' "$gates_file" 2>/dev/null)
-  printf '%b' "$effective"
+  local langs_nl="" tag
+  for tag in $lang_tags; do langs_nl+="$tag"$'\n'; done
+  WF_GATE_POOL="$gates_file" wf_gc__intersect "$gates_file" "$spec_gates" "$langs_nl"
 }
 
 t_ceiling_intersection_rust_task() {

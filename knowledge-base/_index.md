@@ -8,4 +8,3 @@ Project-specific rules for the dev-workflow repo. General rules live in `~/.clau
 |------|----------|-------------|
 | `languages/rust.md` | Language | workflow-tui Elm-like architecture, anyhow error handling, approved deps, validation scope |
 | `languages/shell.md` | Language | task-manager.sh usage, approved deps (yq/gh), script conventions |
-| `shell/module-api-contracts.md` | Architecture | Never redefine leaf module public symbols; use private prefixes; document WF_* env-var contracts at hook boundaries |
