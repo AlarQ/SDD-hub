@@ -25,12 +25,23 @@ wf_vi_parse_frs() {
 }
 
 # wf_vi_diff_range <feature> -> stdout: <merge-base>..HEAD
+# Fails loudly (rc 5) when neither `merge-base main feat/<feature>` nor
+# `feat/<feature>^` can be resolved. No silent HEAD~1 fallback — auditing the
+# wrong diff range would silently corrupt the spec-completion report.
 wf_vi_diff_range() {
   local feature="$1"
   local base="feat/$feature"
   local mb
-  mb="$(git merge-base main "$base" 2>/dev/null || git rev-parse "${base}^" 2>/dev/null || echo HEAD~1)"
-  printf '%s..HEAD' "$mb"
+  if mb="$(git merge-base main "$base" 2>/dev/null)" && [[ -n "$mb" ]]; then
+    printf '%s..HEAD' "$mb"
+    return 0
+  fi
+  if mb="$(git rev-parse "${base}^" 2>/dev/null)" && [[ -n "$mb" ]]; then
+    printf '%s..HEAD' "$mb"
+    return 0
+  fi
+  echo "ERROR: Cannot determine diff range for $feature; refusing to audit" >&2
+  return 5
 }
 
 # wf_vi_build_prompt <feature> <spec_dir> [extra_evidence_file]
@@ -43,7 +54,7 @@ wf_vi_build_prompt() {
   fr_list="$(wf_vi_parse_frs "$spec_md")" || return 1
   task_list="$(find "$tasks_dir" -maxdepth 1 -name '*.md' -print 2>/dev/null | sort)"
   report_paths="$(find "$reports_dir" -maxdepth 2 -name '*.md' -o -name '*.yaml' 2>/dev/null | sort || true)"
-  diff_range="$(wf_vi_diff_range "$feature")"
+  diff_range="$(wf_vi_diff_range "$feature")" || return $?
 
   printf '# Spec Completion Audit — %s\n\n' "$feature"
   printf 'You are auditing spec `%s` for claimed-vs-actual completion. Output Markdown.\n\n' "$feature"
@@ -103,16 +114,15 @@ wf_vi_set_spec_shipped() {
   yq --front-matter=process e -i '.status = "shipped"' "$spec_md"
 }
 
-# Back-compat wrappers — canonical impls live in gate-ceiling.sh.
-wf_vi_task_languages()  { wf_gc_task_languages "$@"; }
-wf_vi_union_languages() { wf_gc_union_languages "$@"; }
-wf_vi_gate_field()      { wf_gc_gate_field "$@"; }
-wf_vi_compute_union()   { wf_gc__intersect "$@"; }
+# Canonical impls live in gate-ceiling.sh (wf_gc_*).
 
 # wf_vi_run_union_gates <feature> <spec_dir> <log_file>
 # Computes the union of spec-eligible gates ∩ language-applicable gates across
 # all tasks in the spec, then executes each gate's `command` once.
-# Stdout: forced verdict ("reopen" if any blocking gate fails, "" otherwise)
+# Stdout: a single JSON line `{"verdict":"reopen|"","gate_failures":[...],"log_path":"…"}`.
+#   verdict        — "reopen" if any blocking gate failed, "" otherwise.
+#   gate_failures  — array of {id,blocking,exit_code} for every non-zero gate exit.
+#   log_path       — same value passed in as <log_file>.
 # Side effects: appends each gate's stdout/stderr to <log_file>.
 # Returns: 0 on normal completion (even if gates failed), 3 on empty-union
 # fail-closed (ADR-003), 90 on missing yq.
@@ -123,8 +133,8 @@ wf_vi_run_union_gates() {
   local ceiling="${WF_SPEC_GATES:-}"
   local tasks_dir="$spec_dir/tasks"
   local langs union code_bearing
-  langs="$(wf_vi_union_languages "$tasks_dir")"
-  union="$(wf_vi_compute_union "$pool" "$ceiling" "$langs")"
+  langs="$(wf_gc_union_languages "$tasks_dir")"
+  union="$(wf_gc__intersect "$pool" "$ceiling" "$langs")"
   code_bearing=0
   [[ -n "$langs" ]] && code_bearing=1
 
@@ -135,15 +145,16 @@ wf_vi_run_union_gates() {
         "$feature" "$(echo "$langs" | tr '\n' ' ')" "$(echo "$ceiling" | tr '\n' ' ')" >> "$log_file"
       return 3
     fi
-    printf '' # doc-only, empty intersection ok
+    printf '{"verdict":"","gate_failures":[],"log_path":"%s"}' \
+      "$(escape_json_string "$log_file")"
     return 0
   fi
 
-  local forced="" id cmd blocking rc
+  local forced="" id cmd blocking rc failures=""
   while IFS= read -r id; do
     [[ -z "$id" ]] && continue
-    cmd="$(wf_vi_gate_field "$pool" "$id" command)"
-    blocking="$(wf_vi_gate_field "$pool" "$id" blocking)"
+    cmd="$(wf_gc_gate_field "$pool" "$id" command)"
+    blocking="$(wf_gc_gate_field "$pool" "$id" blocking)"
     [[ "$blocking" == "null" || -z "$blocking" ]] && blocking="true"
     {
       printf -- '----- gate: %s (blocking=%s) -----\n' "$id" "$blocking"
@@ -151,17 +162,22 @@ wf_vi_run_union_gates() {
     } >> "$log_file"
     if [[ -z "$cmd" || "$cmd" == "null" ]]; then
       printf 'ERROR: gate %s has no command in pool\n' "$id" >> "$log_file"
+      failures+="${failures:+,}$(printf '{"id":"%s","blocking":%s,"exit_code":-1}' \
+        "$(escape_json_string "$id")" "$blocking")"
       [[ "$blocking" == "true" ]] && forced="reopen"
       continue
     fi
     bash -c "$cmd" >> "$log_file" 2>&1; rc=$?
     printf 'EXIT: %d\n' "$rc" >> "$log_file"
-    if [[ "$rc" -ne 0 && "$blocking" == "true" ]]; then
-      forced="reopen"
+    if [[ "$rc" -ne 0 ]]; then
+      failures+="${failures:+,}$(printf '{"id":"%s","blocking":%s,"exit_code":%d}' \
+        "$(escape_json_string "$id")" "$blocking" "$rc")"
+      [[ "$blocking" == "true" ]] && forced="reopen"
     fi
   done <<< "$union"
 
-  printf '%s' "$forced"
+  printf '{"verdict":"%s","gate_failures":[%s],"log_path":"%s"}' \
+    "$forced" "$failures" "$(escape_json_string "$log_file")"
 }
 
 # wf_vi_emit_start <feature>

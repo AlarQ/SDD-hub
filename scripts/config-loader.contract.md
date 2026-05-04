@@ -51,3 +51,7 @@ Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `gates.yml` modi
 
 - `wf_write_snapshot <outfile>` — JSON snapshot of `WF_SPEC_GATES` + all `WF_SPEC_AGENTS_*`. Used by `/implement` Step 0.
 - `wf_check_snapshot_drift <snapfile>` — compares current env to snapshot; `SNAPSHOT_OK` (rc 0) or `SNAPSHOT_DRIFT` (rc 1). Silent rc 0 if snapfile absent.
+
+## Environment knobs
+
+- `WF_LEGACY_SPECS_FALLBACK=1` — when `.workflow.yml` is missing or `yq` is unavailable, `monitor.sh::get_spec_storage` falls back to `<repo_root>/specs`. Off (`0`) by default — fail-closed per ADR-005. Intended only for transitional repos that have not been bootstrapped yet.

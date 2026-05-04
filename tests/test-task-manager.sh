@@ -148,6 +148,74 @@ test_set_status_works_from_nested_subdir() {
 
 # === Runner ===
 
+test_validate_frontmatter_with_markdown_hr_in_body() {
+  # Given: a task whose body contains a markdown horizontal rule (`---`).
+  # When: validate parses frontmatter.
+  # Then: it must NOT confuse the body HR with the closing frontmatter delim.
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-hr-task.md"
+  cat > "$task_file" <<'EOF'
+---
+id: "001"
+name: "task with HR in body"
+status: todo
+blocked_by: []
+max_files: 3
+estimated_files:
+  - src/main.sh
+ground_rules: []
+test_cases:
+  - "it works"
+---
+
+## Description
+
+Some intro text.
+
+---
+
+## Section after horizontal rule
+
+The body contains an HR above; frontmatter parser must not stop there.
+EOF
+  WF_REPO_ROOT="$TEST_TMPDIR" "$TASK_MANAGER" validate "$task_file"
+}
+
+# C2 — diamond cycle detection via topological sort.
+# T1 → [T2,T3], T2 → [T4], T3 → [T4], T4 → [T1] (T4 closes the cycle).
+# Asserts circular_dependency diagnostic appears in `status` output.
+test_status_detects_diamond_cycle() {
+  # cmd_status uses bash 4+ associative arrays (declare -A) — skip on bash 3.x.
+  if (( BASH_VERSINFO[0] < 4 )); then
+    echo "    SKIP: bash 3.x lacks associative arrays" >&2
+    return 0
+  fi
+  local td="$TEST_TMPDIR/specs/cycle-feat/tasks"
+  mkdir -p "$td"
+  _wt() {
+    cat > "$td/$1.md" <<EOF
+---
+id: "$1"
+name: "task $1"
+status: blocked
+blocked_by: [$2]
+max_files: 1
+estimated_files: []
+ground_rules: []
+test_cases: []
+---
+body
+EOF
+  }
+  # blocked_by = predecessors → cycle: T1 needs T4, T4 needs T2 or T3, T2/T3 need T1.
+  _wt T1 '"T4"'
+  _wt T2 '"T1"'
+  _wt T3 '"T1"'
+  _wt T4 '"T2", "T3"'
+  local out
+  out="$(WF_REPO_ROOT="$TEST_TMPDIR" "$TASK_MANAGER" status "$td" 2>&1)" || true
+  [[ "$out" == *"circular_dependency"* ]]
+}
+
 echo "Running test-task-manager.sh tests..."
 echo ""
 run_test "validate accepts task file via absolute path from any dir" test_validate_absolute_path_works_from_any_dir
@@ -156,6 +224,8 @@ run_test "validate works when invoked from a nested subdir (WF_REPO_ROOT set)" t
 run_test "next returns correct task from explicit tasks directory" test_next_with_explicit_tasks_dir
 run_test "vault: tasks under WF_SPEC_STORAGE are accessible to next command" test_vault_spec_storage_task_accessible
 run_test "set-status works from a nested subdir with absolute task path" test_set_status_works_from_nested_subdir
+run_test "validate parses frontmatter with markdown HR in body" test_validate_frontmatter_with_markdown_hr_in_body
+run_test "status detects diamond-shaped dependency cycle (C2)" test_status_detects_diamond_cycle
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"

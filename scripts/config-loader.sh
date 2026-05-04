@@ -11,18 +11,8 @@ fi
 _wf_loader_dir() { cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd; }
 source "$(_wf_loader_dir)/config-paths.sh"
 
-wf__timeout() {
-  # wf__timeout SECS CMD... -> stdout of CMD; rc 124 on timeout.
-  if command -v timeout >/dev/null 2>&1;  then command timeout "$@"; return $?; fi
-  if command -v gtimeout >/dev/null 2>&1; then command gtimeout "$@"; return $?; fi
-  perl -e '
-    my $t = shift @ARGV;
-    my $pid = fork();
-    if (!$pid) { exec(@ARGV) or exit 127 }
-    local $SIG{ALRM} = sub { kill 9, $pid; waitpid $pid, 0; exit 124 };
-    alarm $t; waitpid $pid, 0; exit ($? >> 8);
-  ' -- "$@"
-}
+# Back-compat shim — canonical impl lives in config-paths.sh as wf_with_timeout.
+wf__timeout() { wf_with_timeout "$@"; }
 
 wf__err()  { echo "ERROR: $*" >&2; }
 wf__warn() { echo "WARN: $*"  >&2; }
@@ -201,6 +191,22 @@ wf_load_config() {
   if command -v git >/dev/null 2>&1 && git -C "$root" rev-parse >/dev/null 2>&1; then
     if ! git -C "$root" diff --quiet -- "$WF_GATE_POOL" 2>/dev/null; then
       wf__warn "$WF_GATE_POOL has uncommitted modifications"
+      # T3 — best-effort gate_pool_dirty event when an active monitor context
+      # exists. Loader must never fail on monitor unavailability; wrap so any
+      # error is swallowed. Skipped silently when no .monitor-context (e.g.
+      # outside a tracked /implement session).
+      {
+        local _gp_sha _ctx_file _ctx_feature=""
+        _gp_sha="$(git -C "$root" hash-object -- "$WF_GATE_POOL" 2>/dev/null || echo "unknown")"
+        _ctx_file="$root/.monitor-context"
+        if [[ -f "$_ctx_file" ]]; then
+          _ctx_feature="$(awk -F= '$1=="feature"{print $2; exit}' "$_ctx_file" 2>/dev/null)"
+        fi
+        if [[ -n "$_ctx_feature" && -f "$HOME/.claude/scripts/monitor.sh" ]]; then
+          bash "$HOME/.claude/scripts/monitor.sh" log_event "$_ctx_feature" gate_pool_dirty "" \
+            "$(printf '{"file":"%s","sha":"%s"}' "$WF_GATE_POOL" "$_gp_sha")" >/dev/null 2>&1 || true
+        fi
+      } 2>/dev/null || true
     fi
   fi
 
@@ -280,11 +286,11 @@ wf_load_config() {
   return 0
 }
 
-# wf_write_snapshot <outfile>
-# Reads $WF_SPEC_GATES and all WF_SPEC_AGENTS_* env vars; writes normalized JSON
-# {"agents": {...}, "gates": [...]} to <outfile>. Requires python3.
-wf_write_snapshot() {
-  local outfile="$1"
+# _wf_snapshot_json
+# Emits canonical JSON snapshot of current config state (gates + per-phase agents)
+# from environment. Single source of truth for both wf_write_snapshot and
+# wf_check_snapshot_drift. Requires python3.
+_wf_snapshot_json() {
   python3 -c "
 import os, json
 gates = sorted(l for l in os.environ.get('WF_SPEC_GATES', '').splitlines() if l)
@@ -292,7 +298,15 @@ agents = {k[len('WF_SPEC_AGENTS_'):].lower(): sorted(v.split())
           for k, v in os.environ.items()
           if k.startswith('WF_SPEC_AGENTS_') and v}
 print(json.dumps({'agents': agents, 'gates': gates}, sort_keys=True))
-" > "$outfile"
+"
+}
+
+# wf_write_snapshot <outfile>
+# Reads $WF_SPEC_GATES and all WF_SPEC_AGENTS_* env vars; writes normalized JSON
+# {"agents": {...}, "gates": [...]} to <outfile>. Requires python3.
+wf_write_snapshot() {
+  local outfile="$1"
+  _wf_snapshot_json > "$outfile"
 }
 
 # wf_check_snapshot_drift <snapfile>
@@ -303,14 +317,7 @@ wf_check_snapshot_drift() {
   local snapfile="$1"
   [[ -f "$snapfile" ]] || return 0
   local current snapshot
-  current="$(python3 -c "
-import os, json
-gates = sorted(l for l in os.environ.get('WF_SPEC_GATES', '').splitlines() if l)
-agents = {k[len('WF_SPEC_AGENTS_'):].lower(): sorted(v.split())
-          for k, v in os.environ.items()
-          if k.startswith('WF_SPEC_AGENTS_') and v}
-print(json.dumps({'agents': agents, 'gates': gates}, sort_keys=True))
-")"
+  current="$(_wf_snapshot_json)"
   snapshot="$(cat "$snapfile")"
   if [[ "$current" == "$snapshot" ]]; then
     echo "SNAPSHOT_OK"

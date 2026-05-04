@@ -19,6 +19,12 @@ setup() {
   cp -R "$FIXTURE" "$TMPDIR_T/specs/sample-spec"
   printf 'spec_storage: specs/\ngate_pool: knowledge-base/gates.yml\nagent_pool: agents/\nvalidate_scope: per-task\n' > "$TMPDIR_T/.workflow.yml"
   cd "$TMPDIR_T"
+  # Init a minimal git repo with main + feat/sample-spec so wf_vi_diff_range
+  # can resolve a real merge-base (T6 — no silent HEAD~1 fallback).
+  git init -q -b main . 2>/dev/null || git init -q .
+  git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+  git checkout -q -b feat/sample-spec 2>/dev/null || true
+  git -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
   # source helpers fresh
   unset WF_VALIDATE_IMPL_LOADED
   # shellcheck disable=SC1091
@@ -108,6 +114,19 @@ test_emit_complete_and_reopen_in_allowlist() {
   grep -q '"category":"spec_reopened"' "$jsonl" || return 1
 }
 
+test_diff_range_fails_loud_when_no_branch() {
+  # When neither `merge-base main feat/<feature>` nor feat/<feature>^ resolves,
+  # wf_vi_diff_range must return rc 5 instead of silently using HEAD~1.
+  local outside; outside="$(mktemp -d)"
+  ( cd "$outside" \
+    && git init -q -b main . 2>/dev/null \
+    && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base ) || { rm -rf "$outside"; return 1; }
+  local rc=0
+  ( cd "$outside" && wf_vi_diff_range nonexistent-feature ) >/dev/null 2>&1 || rc=$?
+  rm -rf "$outside"
+  [[ "$rc" == "5" ]]
+}
+
 echo "=== test-validate-impl.sh ==="
 run_test "parse_frs extracts FR-1..FR-3"                  test_parse_frs_extracts_three_ids
 run_test "build_prompt contains FRs / scope / tasks / FR matrix instructions" test_build_prompt_contains_all_inputs
@@ -117,6 +136,7 @@ run_test "write_report rejects invalid verdict"           test_write_report_reje
 run_test "emit_start then emit_done appended in order"    test_emit_start_and_done_in_order
 run_test "set_spec_shipped flips frontmatter status"      test_set_spec_shipped_flips_status
 run_test "emit_complete + emit_reopen pass allowlist"     test_emit_complete_and_reopen_in_allowlist
+run_test "diff_range fails loud (rc 5) on missing feat branch" test_diff_range_fails_loud_when_no_branch
 
 echo "=== $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

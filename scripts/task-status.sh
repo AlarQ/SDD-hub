@@ -91,35 +91,66 @@ cmd_status() {
     diagnostics+=("deadlock: All $count_blocked remaining tasks are blocked with nothing in progress. Check dependency IDs for errors.")
   fi
 
+  # Cycle detection via Kahn's topological sort (awk).
+  # Build edge list `dep -> task` (since `blocked_by` lists predecessors).
+  # Any node not removable in topological order is part of a cycle (or
+  # downstream of one). Diagnostic format preserved for back-compat.
+  local _edges=""
   for ((i = 0; i < total; i++)); do
-    [ "${task_statuses[$i]}" = "done" ] && continue
     local deps="${task_blocked_bys[$i]}"
     [ -z "$deps" ] && continue
-    local visited="${task_ids[$i]}"
-    local queue="$deps"
-    while [ -n "$queue" ]; do
-      local next_queue=""
-      IFS=',' read -ra q_arr <<< "$queue"
-      for q_id in "${q_arr[@]}"; do
-        q_id=$(echo "$q_id" | xargs)
-        if echo ",$visited," | grep -q ",$q_id,"; then
-          if [ "$q_id" = "${task_ids[$i]}" ]; then
-            diagnostics+=("circular_dependency: Task ${task_ids[$i]} is part of a dependency cycle. Break the cycle by removing one dependency.")
-          fi
-          continue
-        fi
-        visited="$visited,$q_id"
-        for ((j = 0; j < total; j++)); do
-          if [ "${task_ids[$j]}" = "$q_id" ]; then
-            local j_deps="${task_blocked_bys[$j]}"
-            [ -n "$j_deps" ] && next_queue="$next_queue,$j_deps"
-            break
-          fi
-        done
-      done
-      queue="${next_queue#,}"
+    IFS=',' read -ra dep_arr <<< "$deps"
+    for dep_id in "${dep_arr[@]}"; do
+      dep_id=$(echo "$dep_id" | xargs)
+      [ -z "$dep_id" ] && continue
+      _edges+="$dep_id $(echo "${task_ids[$i]}" | xargs)"$'\n'
     done
   done
+  local _nodes=""
+  for ((i = 0; i < total; i++)); do
+    _nodes+="${task_ids[$i]}"$'\n'
+  done
+  local cycle_nodes
+  cycle_nodes="$(awk -v nodes="$_nodes" -v edges="$_edges" '
+    BEGIN {
+      n = split(nodes, narr, "\n")
+      for (i = 1; i <= n; i++) if (narr[i] != "") { node[narr[i]] = 1; indeg[narr[i]] = 0 }
+      m = split(edges, earr, "\n")
+      for (i = 1; i <= m; i++) {
+        if (earr[i] == "") continue
+        split(earr[i], pair, " ")
+        from = pair[1]; to = pair[2]
+        # Only count edges between known nodes (orphan deps handled separately).
+        if (!(from in node) || !(to in node)) continue
+        succ[from] = (from in succ ? succ[from] " " to : to)
+        indeg[to]++
+      }
+      # Kahn: queue nodes with indeg 0; peel them, decrementing successors.
+      q = ""
+      for (k in node) if (indeg[k] == 0) q = q " " k
+      while (q != "") {
+        sub(/^ /, "", q)
+        cur = q; sub(/ .*/, "", cur)
+        if (q ~ / /) sub(/^[^ ]+ /, "", q); else q = ""
+        removed[cur] = 1
+        if (cur in succ) {
+          c = split(succ[cur], cs, " ")
+          for (i = 1; i <= c; i++) {
+            indeg[cs[i]]--
+            if (indeg[cs[i]] == 0) q = q " " cs[i]
+          }
+        }
+      }
+      # Anything not removed is in or downstream of a cycle.
+      for (k in node) if (!(k in removed)) print k
+    }
+  ' | sort -u)"
+  if [ -n "$cycle_nodes" ]; then
+    while IFS= read -r cn; do
+      [ -z "$cn" ] && continue
+      diagnostics+=("circular_dependency: Task $cn is part of a dependency cycle. Break the cycle by removing one dependency.")
+    done <<< "$cycle_nodes"
+  fi
 
   echo "---"
   echo "summary:"

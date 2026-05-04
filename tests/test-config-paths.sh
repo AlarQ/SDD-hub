@@ -100,6 +100,20 @@ test_validate_id_rejects_65_char_id() {
   assert_fails validate_id "$long_id"
 }
 
+# I1 — labeled validation: stderr formats as "invalid <label> id"
+test_validate_id_labeled_error_message_format() {
+  local err
+  err="$(validate_id "" "feature" 2>&1 1>/dev/null || true)"
+  [[ "$err" == *"invalid feature id"* ]]
+}
+
+# D3 — wf_with_timeout returns 124 on timeout
+test_wf_with_timeout_returns_124_on_timeout() {
+  local rc=0
+  wf_with_timeout 1 sleep 5 >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "124" ]]
+}
+
 # --- gates.yml schema ---
 
 test_gates_yml_parses_and_has_required_fields() {
@@ -139,6 +153,8 @@ run_test "realpath_safe rejects symlink ancestor outside allowed roots" test_rea
 run_test "validate_id accepts rust-clippy" test_validate_id_accepts_rust_clippy
 run_test "validate_id rejects ; rm -rf ~" test_validate_id_rejects_shell_injection
 run_test "validate_id rejects 65-char id" test_validate_id_rejects_65_char_id
+run_test "validate_id labeled error message format (I1)" test_validate_id_labeled_error_message_format
+run_test "wf_with_timeout returns 124 on timeout (D3)" test_wf_with_timeout_returns_124_on_timeout
 run_test "gates.yml parses with yq; all entries have required fields" test_gates_yml_parses_and_has_required_fields
 run_test "gates.yml ids are unique" test_gates_yml_ids_unique
 run_test "config-paths.sh sources no workflow script" test_config_paths_sources_no_workflow_script
