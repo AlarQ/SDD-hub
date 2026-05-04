@@ -27,7 +27,7 @@ Both commands `source` it. Prose in commands shrinks to: "call `wf_compute_effec
 
 ---
 
-### H2. Config-loader contract scattered; exit codes undocumented in one place
+### H2. Config-loader contract scattered; exit codes undocumented in one place ✅ DONE (2026-05-04)
 
 **Summary.** Every command sources `config-loader.sh` and calls `wf_load_config`, but the contract (which env vars get exported, which exit codes mean what) lives in code comments inside the loader. Each command re-explains a subset in inline comments, with drift.
 

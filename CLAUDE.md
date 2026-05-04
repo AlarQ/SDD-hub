@@ -92,8 +92,8 @@ The configurable-workflow feature externalizes gate and agent selection into YAM
 
 **Config loader (`scripts/config-loader.sh`):**
 - Walks up from CWD to find `.workflow.yml`; single `timeout 5 yq` parse
-- Exports `WF_SPEC_STORAGE`, `WF_GATE_POOL`, `WF_AGENT_POOL`, `WF_SPEC_GATES`, `WF_SPEC_AGENTS_<PHASE>`, `WF_VALIDATE_SCOPE`
 - Leaf module — sources nothing from workflow scripts (no circular dep)
+- **Canonical contract (exported env vars + exit codes): `scripts/config-loader.contract.md`.** All commands link there instead of inlining partial lists.
 
 **`/explore` step 0:** Before normal explore flow, spawns `config-inferencer` agent, shows one-screen summary, accepts single-key approval or `/config` override, writes `config.yml`, emits `config_inferred` + `config_approved` monitor events.
 

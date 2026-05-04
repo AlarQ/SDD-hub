@@ -13,16 +13,13 @@ Feature name: $ARGUMENTS
 
 Before running any gate or spawning any agent, run (substituting the actual feature name for `$ARGUMENTS`):
 
-<!-- Step 0 exports: WF_SPEC_GATES (ceiling gate IDs, newline-separated), WF_SPEC_AGENTS_VALIDATE (space-separated advisory agent IDs, empty = none), WF_GATE_POOL (absolute path to gates.yml pool) -->
+Loader contract (env vars + exit codes): `scripts/config-loader.contract.md`. This phase uses `WF_SPEC_GATES`, `WF_SPEC_AGENTS_VALIDATE`, `WF_GATE_POOL`.
+
 ```bash
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_GATES=%s\nWF_SPEC_AGENTS_VALIDATE=%s\nWF_GATE_POOL=%s\n" "$WF_SPEC_GATES" "${WF_SPEC_AGENTS_VALIDATE:-}" "${WF_GATE_POOL:-}"'
 ```
 
-On non-zero exit:
-- Exit code 4: stop — "Missing spec config for '$ARGUMENTS'. Expected: `specs/$ARGUMENTS/config.yml` — create it via `/explore $ARGUMENTS`. No gate or agent will execute."
-- Any other non-zero: stop — print the loader error and halt.
-
-Record from the output: `WF_SPEC_GATES` (newline-separated gate IDs = spec ceiling), `WF_SPEC_AGENTS_VALIDATE` (space-separated agent IDs, empty = no advisory agents), `WF_GATE_POOL` (absolute path to `gates.yml`).
+On non-zero exit, halt and print the loader error. Exit-code 4 specifically means missing/invalid `specs/$ARGUMENTS/config.yml` — recover via `/explore $ARGUMENTS` or `/config $ARGUMENTS`. See contract for full table.
 
 ## Phase 1: Gate Ceiling Intersection (hard gates)
 
