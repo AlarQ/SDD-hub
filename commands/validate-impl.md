@@ -29,7 +29,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$A
   "$WF_SPEC_GATES" "$WF_VALIDATE_SCOPE" "${WF_GATE_POOL:-}"'
 ```
 
-Loader contract (env vars + exit codes): `scripts/config-loader.contract.md`. This step uses `WF_SPEC_GATES`, `WF_VALIDATE_SCOPE`, `WF_GATE_POOL`. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
+Loader contract (env vars + exit codes): `~/.claude/scripts/config-loader.contract.md`. This step uses `WF_SPEC_GATES`, `WF_VALIDATE_SCOPE`, `WF_GATE_POOL`. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
 
 ## Step 1 — Emit `spec_audit_start`
 

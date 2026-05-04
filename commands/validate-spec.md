@@ -33,7 +33,7 @@ Instruct the agent with this directive:
 
 ## Phase 2: Emit Report
 
-Write one YAML report to `specs/$ARGUMENTS/reports/spec-review.yaml`. Schema: `docs/report-schema.md` (canonical). This gate constrains:
+Write one YAML report to `specs/$ARGUMENTS/reports/spec-review.yaml`. Schema: `~/.claude/docs/report-schema.md` (canonical). This gate constrains:
 
 - `gate: spec-review`
 - `category` ∈ `contract | logic-gap | missing-piece | repo-misalignment | kb-compliance | task-graph | ambiguity | testability | traceability`

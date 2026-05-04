@@ -26,6 +26,7 @@ AGENTS_DIR="$CLAUDE_DIR/agents"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 TEMPLATES_DIR="$CLAUDE_DIR/templates"
 SKILLS_DIR="$CLAUDE_DIR/skills"
+DOCS_DIR="$CLAUDE_DIR/docs"
 FORCE=false
 
 if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
@@ -50,6 +51,7 @@ mkdir -p "$AGENTS_DIR"
 mkdir -p "$HOOKS_DIR"
 mkdir -p "$TEMPLATES_DIR"
 mkdir -p "$SKILLS_DIR"
+mkdir -p "$DOCS_DIR"
 
 # Helper: copy file with overwrite protection
 safe_copy() {
@@ -93,7 +95,7 @@ for cmd_file in "$SCRIPT_DIR/commands/"*.md; do
   fi
 done
 
-# 4. Copy scripts
+# 4. Copy scripts (executables + companion contract docs)
 echo ""
 echo -e "${CYAN}Installing scripts to $SCRIPTS_DIR/${RESET}"
 for script_file in "$SCRIPT_DIR/scripts/"*.sh; do
@@ -104,6 +106,26 @@ for script_file in "$SCRIPT_DIR/scripts/"*.sh; do
     conflict_files+=("$name")
   fi
   [ -f "$SCRIPTS_DIR/$name" ] && chmod +x "$SCRIPTS_DIR/$name"
+done
+for script_doc in "$SCRIPT_DIR/scripts/"*.md; do
+  [ -f "$script_doc" ] || continue
+  name=$(basename "$script_doc")
+  if ! safe_copy "$script_doc" "$SCRIPTS_DIR/$name"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$name")
+  fi
+done
+
+# 4b. Copy shared docs referenced by commands
+echo ""
+echo -e "${CYAN}Installing docs to $DOCS_DIR/${RESET}"
+for doc_file in "$SCRIPT_DIR/docs/"*.md; do
+  [ -f "$doc_file" ] || continue
+  name=$(basename "$doc_file")
+  if ! safe_copy "$doc_file" "$DOCS_DIR/$name"; then
+    conflicts=$((conflicts + 1))
+    conflict_files+=("$name")
+  fi
 done
 
 # 5. Copy agent definitions
