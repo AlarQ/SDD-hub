@@ -47,7 +47,7 @@ Each command links to it instead of inlining a partial list. Optionally introduc
 
 ---
 
-### H3. Report-deletion ownership ambiguous; risk of mining input loss
+### H3. Report-deletion ownership ambiguous; risk of mining input loss ✅ DONE (2026-05-04)
 
 **Summary.** `CLAUDE.md` and `learn-from-reports.md:43` declare deletion is centralized in `/learn-from-reports`. But `review-findings.md:62` still contains `rm -rf specs/$ARGUMENTS/reports/` for the "user wants re-validation" branch. If that branch fires, mining never sees the data.
 
