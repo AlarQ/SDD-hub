@@ -20,7 +20,7 @@ Before running any step, load the spec config (substituting the actual feature n
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_CONFIG_FILE=%s\nWF_SPEC_GATES=%s\n" "${WF_SPEC_CONFIG_FILE:-}" "$WF_SPEC_GATES"'
 ```
 
-Loader contract (env vars + exit codes): `~/.claude/scripts/config-loader.contract.md`. This step uses `WF_SPEC_CONFIG_FILE` and `WF_SPEC_GATES`. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_CONFIG_FILE`, `WF_SPEC_GATES`.
 
 **Snapshot drift check** — if `.monitor-context-snapshot` exists in the repo root, compare the current config state against the snapshot written by `/implement`:
 
