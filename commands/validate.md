@@ -27,9 +27,16 @@ Record from the output: `WF_SPEC_GATES` (newline-separated gate IDs = spec ceili
 ## Phase 1: Gate Ceiling Intersection (hard gates)
 
 For each task with `status: implemented`:
-1. Extract language tags from the task's `ground_rules`: for each path matching `languages/<lang>.md`, extract `<lang>` as a tag (e.g., `general:languages/shell.md` → `shell`). Collect all unique tags.
-2. Read `WF_GATE_POOL` (`gates.yml`) — for each gate entry, check if its `applies_to` list contains any of the task's language tags or the special value `any`. Collect **language-applicable gates** (those that match).
-3. Compute **effective set** = `WF_SPEC_GATES` (ceiling) ∩ language-applicable gates by ID.
+1. Source the canonical helper and compute the per-task effective set (same source of truth as `/validate-impl`):
+
+   ```bash
+   source ~/.claude/scripts/gate-ceiling.sh
+   effective="$(wf_compute_effective_set "<task-file>")"; rc=$?
+   ```
+
+   Semantics: extracts language tags from the task's `ground_rules` (paths matching `languages/<lang>.md`), reads `WF_GATE_POOL` (`gates.yml`), and returns `WF_SPEC_GATES` (ceiling) ∩ {gates whose `applies_to` matches a task tag or contains `any`} — sorted, unique.
+2. On rc 3 (empty effective set on code-bearing task without `empty_intersection_ok: true`) record the critical finding from step 5 below before continuing. On rc 90 abort with "yq required".
+3. **Effective set** is the value printed by the helper.
 
 ### Scope short-circuit (T016)
 
