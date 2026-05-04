@@ -45,7 +45,7 @@ blocked → todo → in-progress → implemented → review → done
 ### Key Rules
 - **Both knowledge bases are mandatory** — commands refuse without either
 - **`ground_rules` on each task** = single source of truth for which rules apply
-- **`validation_tools` in language files** = mandatory tools (every tool must run)
+- **Gates in `knowledge-base/gates.yml`** with `blocking: true` = mandatory for matching `ground_rules` (every gate must run)
 - **Tool findings** (`source: tool`) are high-confidence; **LLM findings** (`source: llm`) are advisory
 - **Human is final authority** on all findings via `/review-findings`
 - **Rejected findings can become new rules** in project knowledge-base (feedback loop)

@@ -1,10 +1,3 @@
----
-# display-only: canonical gate definitions live in knowledge-base/gates.yml
-validation_tools:
-  - bash -n scripts/*.sh
-  - shellcheck scripts/*.sh
----
-
 # Shell — Project-Specific Rules (scripts/)
 
 General Shell rules live in `general:languages/shell.md`. These rules are specific to scripts in this repo.
