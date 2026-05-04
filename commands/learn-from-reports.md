@@ -42,6 +42,8 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
 
 6. **Delete reports.** `rm -rf specs/$ARGUMENTS/reports/` — deletion is centralized here so that both the `/review-findings` path and the `/validate` zero-findings path converge through mining first.
 
+   **Guard.** If the reports dir was already missing or empty on entry to step 1 (i.e., this command had nothing to mine), warn before deleting: `WARNING: reports/ was empty on entry — possible rogue deletion upstream (only /learn-from-reports may delete reports). Check git/archived dirs before continuing.` Still proceed with the (no-op) cleanup, but surface the anomaly so the user can investigate.
+
 7. **Report summary.** "Mined N findings: C candidates proposed, A accepted, R rejected, E edited. Reports deleted."
 
 ## Chain
