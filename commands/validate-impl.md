@@ -2,11 +2,7 @@ Run the spec-completion audit (FR-15, ADR-008). Reuses the existing **Karen** ag
 
 Feature name: $ARGUMENTS
 
-> Terminology (canonical — only these names appear in this command):
-> - **ceiling** — gate IDs in spec `config.yml gates:` (`WF_SPEC_GATES`). Upper bound.
-> - **effective-set** — per-task `ceiling ∩ gates applicable to task ground_rules` (used by `/validate`).
-> - **spec-union** — union of effective-sets over every task in the spec. Computed by `wf_compute_union_set`. Reserved for Step 2.
-> Do not use bare "union" for ceiling/effective-set.
+> Terminology: see `~/.claude/scripts/workflow-glossary.md` for canonical definitions of **ceiling**, **effective-set**, **spec-union** (reserved for Step 2 here). Do not use bare "union" for ceiling/effective-set.
 
 ## Prerequisites
 
