@@ -22,7 +22,7 @@ Before running any step, load the spec config (substituting the actual feature n
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_IMPLEMENT=%s\nWF_SPEC_CONFIG_FILE=%s\n" "${WF_SPEC_AGENTS_IMPLEMENT:-}" "${WF_SPEC_CONFIG_FILE:-}"'
 ```
 
-Loader contract (env vars + exit codes): `~/.claude/scripts/config-loader.contract.md`. This step uses `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents) and `WF_SPEC_CONFIG_FILE` (snapshot source). On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents), `WF_SPEC_CONFIG_FILE` (snapshot source).
 
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`

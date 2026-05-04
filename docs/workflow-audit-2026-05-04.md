@@ -1,277 +1,357 @@
 # Workflow Audit — 2026-05-04
 
-Scope: `commands/`, `scripts/`, `agents/`, `hooks/`, `templates/`, `CLAUDE.md`,
-`knowledge-base-rules.md`. Focus: duplications, inconsistencies, complexity,
-transparency gaps.
+Audit of `dev-workflow` repo: spec-driven Claude Code workflow (commands, scripts, agents, hooks, templates, KB, Rust TUI). Focus areas: duplication, inconsistency, complexity, transparency gaps, general improvements.
 
-Findings grouped by severity. Each entry has **Summary**, **Example**, **Solution**.
+Findings grouped by category, prioritized **High / Medium / Low** by impact. Each finding: location, problem, example, fix.
 
 ---
 
-## Critical
+## Duplications
 
-### C1 — Monitor hook unwired in default install ✅ DONE
+### D1 [HIGH] — Step 0 config-loader boilerplate copy-pasted across commands ✅ DONE
 
-**Summary.** `hooks/monitor-tool-calls.sh` exists and is functional, but
-`templates/settings.json` only registers `block-git-hook-bypass` (PreToolUse) and
-`block-dismissive-language` + the findings-persistence prompt (Stop). No
-`PostToolUse` hook → tool-call events never logged. Spec audit trails
-(`specs/<feature>/.monitor.jsonl`) stay empty unless user wires manually.
+**Where:** `commands/implement.md`, `validate.md`, `review-findings.md`, `propose.md`, `validate-impl.md`, `ship.md` (and others).
 
-**Example.** `templates/settings.json` registers two hooks; `monitor-tool-calls.sh`
-referenced nowhere in the template. New projects bootstrapped via `setup.sh` get
-no event logging. `/validate-impl` references monitor events for context but they
-will be empty.
+**Problem:** Each command repeats the same `bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf …'` block, plus a hand-curated env-var list and the same "Loader contract … exit-code 4 → run `/explore` or `/config`" prose.
 
-**Solution.** Add `PostToolUse` block to `templates/settings.json` invoking
-`monitor-tool-calls.sh`. Or document explicitly in `CLAUDE.md` that monitor is
-opt-in and provide the snippet. Recommended: wire by default — observability
-should not require manual setup.
+**Example drift:** `validate.md:21` enumerates `WF_GATE_POOL` in its printf; `propose.md:13` omits it. Adding a new exported var (e.g. `WF_AGENT_POOL_SHA`) requires editing every command, and silent omissions are how drift starts.
+
+**Fix:** Extract a single `scripts/step0-load-config.md` snippet (mirror of `knowledge-base-rules.md` / `report-schema.md` pattern) with the canonical invocation + env list. Each command links it: `> See scripts/step0-load-config.md for Step 0`. One source of truth.
 
 ---
 
-## High
+### D2 [MED] — Snapshot serializer duplicated in config-loader.sh
 
-### H1 — Report schema fragmented across commands ✅ DONE
+**Where:** `scripts/config-loader.sh:288-295` (`wf_write_snapshot`) and `:306-313` (`wf_check_snapshot_drift`).
 
-**Summary.** Report YAML shape (frontmatter, finding fields, enums) is restated
-in three commands with subtly different field lists. No canonical schema doc.
-Drift risk: a change in one command silently desyncs the others; agents writing
-reports may emit incompatible shapes.
+**Problem:** Both inline the same `python3 -c` block to serialize loader state to JSON. Any schema change (new field, ordering) must be made in both places.
 
-**Example.**
-- `commands/validate.md:115` lists fields inline: `{id, severity, category, title,
-  description, file, lines, code_snippet, fix_proposal, review_status, source}`
-- `commands/validate-spec.md:43-51` shows a different inline shape with
-  `severity: critical|high|medium|low|info` enum.
-- `commands/review-findings.md:20` enforces frontmatter `verdict ∈ {complete,
-  reopen}` — only documented here.
-- `review_status` enum (`pending|accepted|rejected|noted`) never listed in one
-  place; reader must scan all 3 files to learn the values.
-
-**Solution.** Extract `docs/report-schema.md` with one canonical YAML example +
-explicit enum lists for `severity`, `review_status`, `verdict`, `source`,
-`status`. All commands link there with a one-line reference; delete inline
-restatements.
+**Fix:** Extract `_wf_snapshot_json()` helper that prints the JSON; both callers consume its stdout.
 
 ---
 
-### H2 — Glossary triplicated despite M1 lock ✅ DONE
+### D3 [MED] — Three reimplementations of "timeout with fallback"
 
-**Summary.** Audit M1 (commit `13ebbaf`) locked the canonical definitions of
-`ceiling`, `effective-set`, `spec-union`. But the definitions live in three
-files and have already drifted in wording.
+**Where:**
+- `scripts/config-loader.sh:14-25` — `wf__timeout` (perl fallback)
+- `scripts/task-manager.sh:154-158` — `_wf_yq` (plain yq fallback)
+- `scripts/monitor.sh:65-67` — inline (empty-string fallback)
 
-**Example.**
-- `CLAUDE.md:89-91` — definitions, plus the "do not use bare 'union'" rule.
-- `commands/validate.md:6-9` — restated with slightly different phrasing.
-- `commands/validate-impl.md:6-9` — restated again, plus an extra "Reserved for
-  Step 2" qualifier on spec-union.
+**Problem:** Different fallback semantics for the same problem. A yq hang on a malformed file behaves differently in each call site.
 
-Three sources of truth = drift on next edit.
-
-**Solution.** Move canonical definitions to `docs/glossary.md` (or keep in
-CLAUDE.md as the single source). Replace inline blocks in `validate.md` and
-`validate-impl.md` with `> See docs/glossary.md (or CLAUDE.md §Configurable
-Workflow) for ceiling / effective-set / spec-union.`
+**Fix:** Add `wf_with_timeout SECS CMD…` to `scripts/config-paths.sh` (already loaded everywhere) with one canonical fallback policy. Replace the three implementations.
 
 ---
 
-### H3 — Security Engineer agent: two contracts under one ID
+### D4 [MED] — Agent-dispatch keyword lists duplicated
 
-**Summary.** `commands/explore.md` and `commands/propose.md` both invoke the
-same agent (`engineering-security-engineer`) with materially different prompts
-and expected output shapes. The agent file cannot satisfy both contracts cleanly
-— output ambiguity is structural.
+**Where:** `commands/propose.md:70-76` and `commands/explore.md:105-106`.
 
-**Example.**
-- `explore.md:104-111` — lightweight threat-surface checklist during
-  requirements clarification.
-- `propose.md:29-42` — full STRIDE threat model with mitigations during design.
+**Problem:** Same backend (`database|API|REST|…`) and UI (`UI|component|CSS|…`) keyword sets in both. Adding `tRPC` or `Tailwind` requires two edits; one will be forgotten.
 
-Same `subagent_type`, different deliverables. If the agent definition leans one
-way, the other phase gets a mismatched report.
-
-**Solution.** Either:
-1. Split into two agent IDs (`security-threat-surface`, `security-stride`), each
-   with a phase-specific prompt; or
-2. Keep one ID but document phase-conditional behavior explicitly in the agent
-   markdown and have callers pass a `phase: explore|propose` argument.
-
-Option 1 is clearer; option 2 is fewer files.
+**Fix:** Extract to `scripts/agent-keyword-rules.md`, link from both commands.
 
 ---
 
-### H4 — Agent model selection inconsistent
+### D5 [LOW] — Dead alias layer in validate-impl.sh
 
-**Summary.** Only `review-findings.md:39` explicitly pins `model: "sonnet"` for
-fix sub-agents. Every other spawn (Karen, Software Architect, Code Reviewer,
-Ultrathink Debugger, Spec Reviewer, Code Quality Pragmatist) inherits the
-session default. Silent model drift = silent quality drift; no ADR records why
-sonnet is mandated for fixes but unspecified elsewhere.
+**Where:** `scripts/validate-impl.sh:107-110` — `wf_vi_task_languages`, `wf_vi_union_languages`, `wf_vi_compute_union`.
 
-**Example.** Search `commands/*.md` for `model:` — only review-findings sets it.
-Karen invocations in `validate-impl.md` and Software Architect in `propose.md`
-omit the field entirely.
+**Problem:** Pure aliases for `wf_gc_*` functions. Callers already use `wf_gc_*` directly elsewhere. Dead back-compat layer.
 
-**Solution.** Add `agents/_models.md` (or a section in `CLAUDE.md`) mapping
-phase → model with rationale. Update every `Agent` invocation site to set the
-field explicitly. Pre-commit guard: grep for `Agent\(` blocks lacking `model:`.
+**Fix:** Delete the aliases, grep-confirm no remaining callers.
 
 ---
 
-## Medium
+## Inconsistencies
 
-### M1 — KB prerequisite check duplicated, never validated
+### I1 [HIGH] — `validate_id` arity mismatch
 
-**Summary.** "Read and follow `~/.claude/knowledge-base-rules.md`" appears as
-step 1 in 11+ commands. No script verifies that the general or project KB
-actually exists. Partial `setup.sh` failure or missing `/bootstrap` produces
-late, confusing errors mid-workflow.
+**Where:** `scripts/monitor-validators.sh:25` calls `validate_id "$category" "category"` (2 args). Canonical `validate_id` in `scripts/config-paths.sh:109-116` takes **1 arg**; the second is silently dropped.
 
-**Example.** `commands/{explore,propose,implement,validate,validate-impl,ship,
-spec-status,learn-from-reports,validate-spec,...}.md` all open with the same
-line. None checks `[ -f ~/.claude/knowledge-base-rules.md ]` or that
-`knowledge-base/_index.md` exists in the project.
+**Problem:** The intended labeled error message (`"category"`) is lost. Worse, `monitor.sh:142,143,160,174,175,194,195` use a parallel 2-arg variant `_wf_mon_validate_labeled_id` reusing the same regex — two validators for one rule.
 
-**Solution.** Add `scripts/validate-kbs.sh` that asserts both KBs and emits a
-clear error pointing to `/bootstrap`. Source it from `config-loader.sh`
-(already invoked by every config-dependent command). Cache result via env var
-so it runs once per command.
+**Example:** Pass an invalid category "agent spawn" (with space). Error reads "invalid id" instead of "invalid category id 'agent spawn'", making the offending field invisible to the user.
+
+**Fix:** Promote 2-arg signature into the canonical `validate_id` (`label` optional). Migrate all callers, delete the parallel `_wf_mon_validate_labeled_id`.
 
 ---
 
-### M2 — Review-findings grouping algorithm too complex for LLM execution
+### I2 [HIGH] — `/ship` writes frontmatter directly, violates CLAUDE.md rule
 
-**Summary.** `commands/review-findings.md:25-31` specifies (a) sort by file +
-line, (b) Pass-1 line-proximity merge with **transitive closure** at ≤5 lines,
-(c) Pass-2 same-file same-category merge, (d) per-file mutex for parallel fix
-sub-agents. This is a deterministic algorithm executed by an LLM via prose. No
-test, no script, no reproducibility. User cannot verify it ran correctly.
+**Where:** `commands/ship.md` step 9 hand-edits task frontmatter to add `pr_url`.
 
-**Example.** `review-findings.md:27-29` — three nested merge rules with
-transitive closure described in English. Compare with `scripts/task-manager.sh`
-which encodes simpler logic in actual shell with explicit state.
+**Problem:** `CLAUDE.md:64` says "All task status changes go through `task-manager.sh` — never edit YAML frontmatter directly." No state-machine entry for `pr_url`, so the rule is being broken silently.
 
-**Solution.** Extract `scripts/group-findings.sh` that reads all reports, emits
-groups as JSON. Command consumes the script output. Or: simplify spec to
-"one group per file, sequential fix application" and drop transitive closure +
-parallel mutex. The complexity buys little — most tasks have <10 findings.
+**Example:** A future refactor that splits frontmatter format (e.g. nests metadata) will break `/ship` because it bypasses the parser.
+
+**Fix:** Add `task-manager.sh set-pr-url <task> <url>` that writes via `yq` and validates URL shape. Or weaken the rule text to "status fields" and document `pr_url` as an exception with rationale.
 
 ---
 
-### M3 — Snapshot drift check only in `/ship`
+### I3 [HIGH] — Snapshot drift invisible inside one shell
 
-**Summary.** `commands/ship.md` step 0 runs `wf_check_snapshot_drift` against
-`.monitor-context-snapshot` written by `/implement`. `/validate` and
-`/validate-impl` do not. Config can change between implement and validate,
-silently invalidating gate selection.
+**Where:** `commands/implement.md:39` writes snapshot via `wf_write_snapshot`. `commands/ship.md:28` re-loads config and compares.
 
-**Example.** Sequence: `/implement` writes snapshot → user edits
-`specs/X/config.yml` adding a gate → `/validate` runs against new ceiling
-without warning → `/ship` finally catches drift, but only after fix work is
-done.
+**Problem:** `wf_load_config` is idempotent (`config-loader.sh:7` early-return on `WF_LOADED=1`). If `/implement` and `/ship` run in the same shell session, `/ship` sees cached env from `/implement` — drift detection always passes, even if `.workflow.yml` was edited between commands.
 
-**Solution.** Add `wf_check_snapshot_drift` to step 0 of `/validate` and
-`/validate-impl`. Same exit code semantics — abort with clear message.
+**Example:** User edits `.workflow.yml` to swap an agent pool while a task is in progress. `/ship` should detect and warn; instead, it silently ships using stale loader state.
+
+**Fix:** In `/ship`'s drift check, force `WF_RELOAD=1` (or `unset WF_LOADED`) before re-invoking `wf_load_config`.
 
 ---
 
-### M4 — Archived reports accumulate forever
+### I4 [MED] — CLAUDE.md command list out of sync with `commands/`
 
-**Summary.** `review-findings.md` archives reports via
-`mv specs/X/reports specs/X/reports.archived-$(date +%s)` to preserve mining
-input across re-validation cycles. Deletion is owned by `/learn-from-reports`.
-But `/learn-from-reports` only deletes the active `reports/` dir — it doesn't
-clean `reports.archived-*`. They pile up in every spec.
+**Where:** `CLAUDE.md:13` lists ~14 commands; `commands/` directory has 18.
 
-**Example.** A spec that goes through three re-validation rounds ends with
-three `reports.archived-<ts>/` directories shipped into git.
+**Problem:** New commands added without updating the doc list. Readers using CLAUDE.md as the entry-point miss commands.
 
-**Solution.** Extend `/learn-from-reports` to also remove `reports.archived-*`
-after mining (they were already mined in their original `reports/` location, or
-should be mined-then-deleted as part of this command). Or add a `.gitignore`
-entry and a TTL cleanup.
+**Fix:** Either keep the list exhaustive with a contributor checklist note, or replace the inline enumeration with `see commands/ for the full list` + a one-line description per command.
 
 ---
 
-## Low
+### I5 [MED] — Report-extension mismatch silently skips spec audits
 
-### L1 — `templates/CLAUDE.md` drift risk
+**Where:** `scripts/report-schema.md:9` declares per-task gate reports as `<task-id>-<gate>.yaml`, spec-audit reports as `.md`. `commands/learn-from-reports.md:15` reads only `.yaml`.
 
-**Summary.** Heavy overlap with root `CLAUDE.md`. Nothing marks the template as
-derived; next edit to root will likely miss the template, and bootstrapped
-projects ship stale instructions.
+**Problem:** Spec-audit `.md` reports never feed the mining pass. Patterns inside Karen's spec audit are invisible to `/learn-from-reports`. `/review-findings.md:19` correctly reads both, so behavior is inconsistent across commands.
 
-**Example.** Compare the "Configurable Workflow" sections — both files contain
-near-identical prose, but the template has no `<!-- synced from CLAUDE.md -->`
-marker.
-
-**Solution.** Add a header comment to `templates/CLAUDE.md` declaring it
-derived. Add a `setup.sh` step that diffs sync-marked sections and warns on
-drift. Or auto-generate the template from CLAUDE.md.
+**Fix:** Teach mining to read both extensions, OR explicitly document "spec audits are mined inline at `/validate-impl` time" with rationale.
 
 ---
 
-### L2 — `status` zsh-reserved-name hazard not enforced
+### I6 [MED] — `WF_SPEC_GATES` shape under-specified
 
-**Summary.** `commands/implement.md:15` warns that `status` is read-only in
-zsh; future scripts may forget. No automated guard.
+**Where:** `scripts/config-loader.sh:237` exports as newline-separated string. `commands/implement.md:22` formats with single `%s`. `wf_write_snapshot:290` re-splits via `splitlines()`.
 
-**Example.** Any new `scripts/*.sh` could write `status=foo` and silently break
-when sourced under zsh.
+**Problem:** Format is undocumented in `config-loader.contract.md`. If a gate id ever contains whitespace (currently blocked by `validate_id` regex but no test asserts this), behavior fractures across consumers.
 
-**Solution.** Add a check in `scripts/pre-commit-hook.sh` (or a separate lint):
-`grep -nE '^[[:space:]]*status=' scripts/*.sh && exit 1`.
+**Fix:** Add to contract: "newline-separated, no leading/trailing newline, ids match `^[a-z][a-z0-9-]*$`". Add a test that asserts the regex contract.
 
 ---
 
-### L3 — Stop-hook prompt embedded inline (~1500 chars)
+### I7 [LOW] — Loader exit code 2 overloaded
 
-**Summary.** `templates/settings.json` Stop hook contains a long inline `prompt`
-string with two checks. Hard to diff, lint, or version meaningfully.
+**Where:** `scripts/config-loader.contract.md:38` and many `return 2` paths in `config-loader.sh`.
 
-**Example.** `templates/settings.json` lines ~22-25 — single JSON string with
-escaped newlines, ~1500 chars covering findings-persistence + auto-handoff
-checks.
+**Problem:** Exit 2 covers both schema failures (`gate_pool not file`) and recoverable user errors (`spec_storage not dir`). Callers can't distinguish.
 
-**Solution.** Extract to `hooks/stop-prompt-checks.md`; settings.json points at
-the file path or a shell wrapper that reads it. Easier review, normal markdown
-diffs.
+**Fix:** Split into 2a (recoverable) / 2b (schema corruption), or use distinct codes 2 and 3.
 
 ---
 
-### L4 — Conventional commit type inferred by LLM judgment
+## Complexity
 
-**Summary.** `commands/ship.md:5` says commit type "(feat, fix, refactor, docs,
-chore, test, style)" is "determined from the task context." Pure LLM judgment,
-no explicit signal.
+### C1 [HIGH] — `/implement` does too many jobs
 
-**Example.** `ship.md` step 5 gives no rule mapping task fields to a commit
-type; two runs may produce different types for the same task.
+**Where:** `commands/implement.md` (~106 lines).
 
-**Solution.** Derive from task frontmatter — add `commit_type:` field to task
-schema, or map from existing `category:` field (e.g. `feature → feat`,
-`bugfix → fix`). Fail closed if missing.
+**Problem:** Six distinct responsibilities: (1) Step 0 config, (2) prereq checks (PR merged, in-progress lock, spec-review gate), (3) branch lifecycle (steps 3-6a), (4) Test Strategist refinement (step 10), (5) Ultrathink Debugger spawn on failure, (6) Code Quality Pragmatist post-impl, (7) spec-done detection (94-103). When something errors, the user can't tell which phase failed.
+
+**Example:** "Branch creation failed" — was it the prereq PR-merged check, or the actual `git checkout`? Different remediations.
+
+**Fix:** Extract `scripts/implement-prereqs.sh` and `scripts/implement-postcheck.sh`. Main command becomes a thin orchestrator with explicit phase markers in monitor events (`phase: prereq | branch | code | postcheck`).
 
 ---
 
-## Quick wins (≤1 h each)
+### C2 [HIGH] — Hand-rolled cycle detection in task-status.sh
 
-1. Wire monitor hook in `templates/settings.json` (C1).
-2. Extract `docs/report-schema.md`, link from 3 commands (H1).
-3. Replace duplicated glossary blocks with link to CLAUDE.md (H2).
-4. Add snapshot drift check to `/validate` step 0 (M3).
-5. Extend `/learn-from-reports` to delete `reports.archived-*` (M4).
+**Where:** `scripts/task-status.sh:94-122` (`cmd_status`).
 
-## Root cause
+**Problem:** BFS uses comma-separated string as a visited set. Cycle detection compares `q_id == task_ids[$i]` (linear scan), not back-edge tracking. Diamond cycles (A→B, A→C, B→D, C→D, D→A) likely produce false negatives.
 
-Commands evolved independently; recent audits (L4, M1, H2, H3 in commits 752fdf4
-… 283a06a) fixed isolated issues but no enforcement keeps cross-command
-contracts in sync. Two structural fixes would prevent recurrence:
+**Example:** Construct tasks T1 deps [T2,T3], T2 deps [T4], T3 deps [T4], T4 deps [T1]. Run `cmd_status` — verify whether the cycle is reported.
 
-- **Shared doc fragments** — `docs/report-schema.md`, `docs/glossary.md`,
-  `agents/_models.md` referenced from commands instead of inlined.
-- **Meta-lint** — pre-commit script checking: glossary terms only defined in
-  one place; `Agent(` calls have explicit `model:`; KB prerequisite check
-  centralized; commit-type derivable from task frontmatter.
+**Fix:** Replace with a small awk or Python topo-sort that returns SCCs. ~20 LoC, deterministic, testable.
+
+---
+
+### C3 [MED] — Review-findings grouping algorithm undocumented
+
+**Where:** `commands/review-findings.md:27-44`.
+
+**Problem:** Three-pass transitive closure groups findings by file+line proximity AND file+category. Then a file-mutex serializes parallel sub-agent writes. The interaction (group spawn vs mutex wait) is hand-coded with no test fixture and no inline invariant statement.
+
+**Fix:** Add an `## Invariants` section to the command spelling out: "no two sub-agents may hold a write lock on the same file"; "groups are computed over the static finding set before any sub-agent spawns". Future edits will preserve them.
+
+---
+
+### C4 [MED] — `/validate-impl` helper uses two output channels
+
+**Where:** `scripts/validate-impl.sh` `wf_vi_run_union_gates` returns forced-verdict via stdout while writing logs to a path arg.
+
+**Problem:** Caller in `commands/validate-impl.md` Step 4 must read stdout for verdict AND parse the log file for gate detail. Verdict-override rule ("Karen's verdict is final unless a gate failed") requires correlating both.
+
+**Fix:** Return single JSON to stdout: `{"verdict": "...", "gate_failures": [...], "log_path": "..."}`. One channel, one parse.
+
+---
+
+### C5 [LOW] — O(N×M) on every done transition
+
+**Where:** `scripts/task-manager.sh:80-112` (`maybe_emit_spec_last_task_done`).
+
+**Problem:** Re-scans all task files and tail-greps `.monitor.jsonl` on every `set-status done`. Fine at current scale; degrades on specs with many tasks + long monitor history.
+
+**Fix:** Cache last-emit cursor in `.monitor.jsonl.cursor` or skip tail-grep when caller supplies `--no-dedup`.
+
+---
+
+## Transparency Gaps
+
+### T1 [HIGH] — Monitor hook silently swallows everything
+
+**Where:** `hooks/monitor-tool-calls.sh:54` uses `||` chain on JSON extraction; missing `description` and `subagent_type` produce empty `agent_name`. All error paths `exit 0` (intentional, line 12).
+
+**Problem:** When events look wrong in `.monitor.jsonl`, there's no signal explaining what failed. Debugging requires re-running by hand.
+
+**Example:** Agent name appears blank in the event log after a `Task` tool call that succeeded — user has no way to find out why.
+
+**Fix:** Add `WF_MONITOR_DEBUG=1` env that writes to `~/.claude/monitor-debug.log` (sidecar, never blocks the hook). Log raw input + extraction outcome per event.
+
+---
+
+### T2 [HIGH] — `/ship` `clear_context` failure is invisible
+
+**Where:** `commands/ship.md:48` — "Clear monitor context (non-fatal — proceed even if this fails…)".
+
+**Problem:** If clear fails, next unrelated command's tool calls get appended to the prior feature's `.monitor.jsonl`. User notices only when audit data is corrupt weeks later.
+
+**Fix:** Surface failure in command output: `WARN: failed to clear monitor context — next /implement will overwrite, but cross-feature events between now and then will land in stale spec`. Emit a `clear_context_failed` monitor event.
+
+---
+
+### T3 [MED] — Dirty gate-pool warning has no audit trail
+
+**Where:** `scripts/config-loader.sh:202-205` emits `WARN: WF_GATE_POOL has uncommitted modifications` to stderr only.
+
+**Problem:** Spec validated against an uncommitted gate registry is non-reproducible. No monitor event records this — audits can't flag affected reports.
+
+**Fix:** Emit `gate_pool_dirty` monitor event with file SHA. `/learn-from-reports` and `/validate-impl` can refuse or warn based on its presence.
+
+---
+
+### T4 [MED] — `/explore` step 0 template path silent
+
+**Where:** `commands/explore.md:66` — on the empty-input ("M") path, writes the template silently.
+
+**Problem:** No event distinguishes "user accepted inferencer defaults" from "user wrote custom YAML". Provenance lost for KB/agent attribution.
+
+**Fix:** Add `source` field to `config_approved` payload: `agent` | `edited` | `manual` | `template`. Mining can later correlate quality with provenance.
+
+---
+
+### T5 [MED] — Report deletion has no audit trail
+
+**Where:** `commands/learn-from-reports.md:43` — `rm -rf specs/$ARGUMENTS/reports/`.
+
+**Problem:** Despite the explicit invariant "report deletion is owned solely by /learn-from-reports", no event records the deletion. Forensic comparison against `/validate` output is impossible.
+
+**Fix:** Emit `reports_deleted` event with `{count, file_list_sha}` before `rm`.
+
+---
+
+### T6 [LOW] — Validate-impl diff-range silently degrades
+
+**Where:** `scripts/validate-impl.sh:32` `wf_vi_diff_range` falls back to `HEAD~1` if both `merge-base main feat/$X` and `feat/$X^` fail.
+
+**Problem:** Karen audits a meaningless one-commit diff; verdict appears authoritative.
+
+**Fix:** Fail loud: `echo "Cannot determine diff range for $feature; refusing to audit" >&2; return 5`.
+
+---
+
+## General Improvements
+
+### G1 [HIGH] — Stop-hook prompt buried in settings.json string
+
+**Where:** `templates/settings.json` Stop hook embeds ~2KB of behavioral rules as a JSON string literal.
+
+**Problem:** Unmaintainable: no syntax highlighting, no diff readability in PRs, can't be unit-tested or grep'd cleanly. Editing risks JSON-escape mistakes.
+
+**Fix:** Move rule text to `hooks/stop-pipeline-rules.md`. Settings.json hook becomes a 1-liner that pipes the file to the prompt: `cat ~/.claude/hooks/stop-pipeline-rules.md`.
+
+---
+
+### G2 [MED] — `gates.yml` claims languages it doesn't ship
+
+**Where:** `knowledge-base/gates.yml` (39 lines) — only Rust + shell gates. Comments reference `typescript|javascript|python|go|markdown` for `applies_to`.
+
+**Problem:** A project bootstrapping with a TS tag will get an empty effective gate set with no warning, then run "validation" that does nothing.
+
+**Fix:** Either ship starter gates for the documented languages (eslint, ruff, golangci-lint, markdownlint), or add a header comment "this is a starter registry; extend per project — `applies_to` is advisory until you add gates".
+
+---
+
+### G3 [MED] — Stale TODO references implemented work
+
+**Where:** `commands/validate-impl.md:98` says "T016 owns the spec-union gate executor helper… until then, callers should expect a placeholder log."
+
+**Problem:** `wf_vi_run_union_gates` already exists. The TODO misleads readers and might block downstream work.
+
+**Fix:** Delete the paragraph; replace with a one-line link to the helper.
+
+---
+
+### G4 [MED] — Frontmatter parser breaks on body `---`
+
+**Where:** `scripts/task-manager.sh:161-165` `read_frontmatter` extracts via sed between `^---$` lines.
+
+**Problem:** Any horizontal rule (`---`) inside a task body terminates parsing early; remaining real frontmatter never read. Markdown HRs are common in task descriptions.
+
+**Example:** Task with description containing `## Notes\n\n---\n\nrationale: ...` — parser truncates frontmatter at the HR.
+
+**Fix:** Use `yq --front-matter=process` consistently (already used in `wf_vi_set_spec_shipped` — proven pattern in this repo).
+
+---
+
+### G5 [MED] — `cmd_create_followup` parses ground rules fragilely
+
+**Where:** `scripts/task-manager.sh:328-331`.
+
+**Problem:** Awk + grep on backticked tokens in `## Applicable Ground Rules` section. If the heading is renamed or rules aren't backticked, follow-ups silently get zero ground_rules → die at line 332 with "No ground_rules parsed".
+
+**Fix:** Validate the section's presence and shape in `/propose` and `/validate-spec` (fail-closed at spec creation), so `cmd_create_followup` can trust the format.
+
+---
+
+### G6 [LOW] — Undocumented env var
+
+**Where:** `scripts/monitor.sh:82` references `WF_LEGACY_SPECS_FALLBACK` with no documentation anywhere in the repo.
+
+**Fix:** Document in `config-loader.contract.md` (or wherever monitor envs live), or remove if dead.
+
+---
+
+### G7 [LOW] — Unsampled commands need follow-up audit
+
+**Where:** `commands/{quick-ship,bootstrap,config,pr-review,promote-rules,research,spec-status,workflow-summary}.md` — not sampled in this pass.
+
+**Problem:** `quick-ship` and `ship` likely overlap; `bootstrap` and `config` may share inferencer logic; `pr-review` and `review-findings` both group findings.
+
+**Fix:** Run a follow-up audit pass focused on these eight, looking specifically for overlap with the commands already audited.
+
+---
+
+### G8 [LOW] — Prior audit doc deleted in working tree
+
+**Where:** `git status` shows `D docs/workflow-audit-2026-05-04.md` (this file path).
+
+**Problem:** A prior audit was removed; this audit is its replacement. If retained as historical context, restore from git history.
+
+**Fix:** This document overwrites the deleted file. If older audit history matters, add `docs/workflow-audit-archive/` for prior snapshots.
+
+---
+
+## Priority Summary
+
+**Fix first (highest impact / lowest effort):**
+1. **D1** — extract shared Step 0 snippet (kills 6× duplication, prevents env-var drift)
+2. **I1** — fix `validate_id` arity (silent error-message degradation across hot paths)
+3. **C1** — split `/implement` into phases (biggest UX cliff in workflow)
+4. **T1** — add `WF_MONITOR_DEBUG` (unblocks all monitor debugging)
+5. **G1** — move stop-hook rules out of JSON string (maintainability cliff)
+
+**Defer or batch:** G6, G8, D5, C5, T6 — low blast radius.
+
+**Needs follow-up audit:** G7 (unsampled commands).

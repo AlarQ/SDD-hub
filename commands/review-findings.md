@@ -13,7 +13,7 @@ Load the spec config before processing any report (substitute actual feature nam
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS'
 ```
 
-Loader contract (env vars + exit codes): `~/.claude/scripts/config-loader.contract.md`. Runs solely to validate config existence — `/review-findings` does not consume the `agents` map. On non-zero, halt and print loader error; exit-code 4 → run `/explore` or `/config $ARGUMENTS`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. Runs solely to validate config existence — `/review-findings` does not consume the `agents` map.
 
 ## Steps
 1. Read all pending reports from `specs/$ARGUMENTS/reports/`. Report and finding schema: `~/.claude/scripts/report-schema.md` (canonical) — `review_status` enum, severity enum, source enum, and the spec-audit markdown contract live there. **Spec-audit reports** (filename pattern `spec-audit-*.md`, produced by `/validate-impl`) are recognized here:
