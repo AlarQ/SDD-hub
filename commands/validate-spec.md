@@ -33,28 +33,13 @@ Instruct the agent with this directive:
 
 ## Phase 2: Emit Report
 
-Write one YAML report to `specs/$ARGUMENTS/reports/spec-review.yaml` with this schema:
+Write one YAML report to `specs/$ARGUMENTS/reports/spec-review.yaml`. Schema: `docs/report-schema.md` (canonical). This gate constrains:
 
-```yaml
-gate: spec-review
-status: pass | findings | error
-findings:
-  - id: spec-review-<n>
-    severity: critical | high | medium | low | info
-    category: contract | logic-gap | missing-piece | repo-misalignment | kb-compliance | task-graph | ambiguity | testability | traceability
-    title: <short>
-    description: <detail>
-    file: specs/$ARGUMENTS/<file>
-    lines: "<start>-<end>"
-    code_snippet: <exact quoted text from the spec artifact>
-    fix_proposal: <concrete patch to the spec/design/tasks — not the code>
-    review_status: pending
-    source: llm
-```
+- `gate: spec-review`
+- `category` ∈ `contract | logic-gap | missing-piece | repo-misalignment | kb-compliance | task-graph | ambiguity | testability | traceability`
+- All findings: `source: llm`, `review_status: pending`, `file` under `specs/$ARGUMENTS/`, and `fix_proposal` patches spec/design/tasks (never code).
 
-- `status: pass` iff `findings` is empty.
-- `status: findings` iff at least one finding exists.
-- `status: error` iff the agent timed out or crashed — in that case re-run `/validate-spec $ARGUMENTS` before proceeding.
+On `status: error` (agent timeout/crash), re-run `/validate-spec $ARGUMENTS` before proceeding.
 
 ## Phase 3: Next Step
 

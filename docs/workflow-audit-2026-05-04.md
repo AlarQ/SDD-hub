@@ -32,7 +32,7 @@ should not require manual setup.
 
 ## High
 
-### H1 — Report schema fragmented across commands
+### H1 — Report schema fragmented across commands ✅ DONE
 
 **Summary.** Report YAML shape (frontmatter, finding fields, enums) is restated
 in three commands with subtly different field lists. No canonical schema doc.

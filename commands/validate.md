@@ -91,7 +91,7 @@ Each agent must return findings in the report schema (below). When constructing 
 After all agents complete, merge their findings into per-gate YAML reports. If an agent errors or times out, record a single `error` finding for that gate (do not block other gates).
 
 ## Output
-One YAML report per gate to `specs/$ARGUMENTS/reports/{task-id}-{gate}.yaml`
+One YAML report per gate to `specs/$ARGUMENTS/reports/{task-id}-{gate}.yaml`. Schema: `docs/report-schema.md` (canonical).
 
 ## Gate Aggregation (Triple-Gate Rule)
 Before determining the final status, verify ALL gates produced a report:
@@ -108,10 +108,6 @@ Before determining the final status, verify ALL gates produced a report:
   3. Do NOT delete reports here — `/learn-from-reports` mines passing reports for borderline LLM advisories and owns deletion.
   4. Stop and instruct the user: "All gates pass. Run `/learn-from-reports $ARGUMENTS` next."
 
-Report schema:
-- gate: <gate-name>
-- task_id: <id>
-- status: pass | findings | error
-- findings: list of {id, severity (critical|high|medium|low|info), category, title, description, file, lines, code_snippet, fix_proposal, review_status: pending, source: tool|llm}
+Report schema: see `docs/report-schema.md`. All findings written here use `review_status: pending`; tool gates set `source: tool`, advisory agents set `source: llm`.
 
 Gate selection: determined by ceiling intersection (Phase 1 above) using `gates.yml` and `WF_SPEC_GATES`. Advisory agents: determined by `WF_SPEC_AGENTS_VALIDATE` from `config.yml`.
