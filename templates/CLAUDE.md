@@ -28,7 +28,7 @@ This project uses a custom spec-driven development workflow with validation gate
 Two knowledge bases work together:
 
 - **General KB** (`~/.claude/knowledge-base/`) — universal rules installed globally via `setup.sh`. Contains security, architecture, testing, and style rules that apply to all projects.
-- **Project KB** (`knowledge-base/`) — project-specific rules created via `/bootstrap`. Contains language files (with `validation_tools`) and conventions discovered via the feedback loop.
+- **Project KB** (`knowledge-base/`) — project-specific rules created via `/bootstrap`. Contains language files and conventions discovered via the feedback loop.
 
 Both are read by all commands. Project rules override general rules on the same topic.
 
@@ -43,7 +43,7 @@ The `ground_rules` field on each task uses prefixes to reference rules from eith
 - Rules are selected during `/propose` and reviewed by human during spec review
 
 ### Validation
-- `validation_tools` in language file frontmatter are mandatory — every tool must run
+- Gates in `knowledge-base/gates.yml` with `blocking: true` are mandatory for matching `ground_rules` — every gate must run
 - Deterministic tool findings (`source: tool`) are high-confidence
 - Agent-based analysis findings (`source: llm`) are advisory — human decides
 - All findings go through `/review-findings` where human is final authority

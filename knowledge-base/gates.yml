@@ -1,6 +1,4 @@
 # Canonical gate registry (ADR-002).
-# Seeded from current validation_tools frontmatter in knowledge-base/languages/*.md.
-# Edit here; language-file frontmatter is display-only.
 #
 # Schema (validated by scripts/config-loader.sh):
 #   id:          ^[a-zA-Z0-9_-]{1,64}$  (unique within file)

@@ -71,7 +71,7 @@ Elm-like architecture with file-system watching for live reload:
 Two-layer knowledge base architecture:
 
 - **General KB** — lives in this repo at `knowledge-base/`. Contains universal rules: security, architecture, testing, style.
-- **Project KB** — created per-project by `/bootstrap` at `knowledge-base/`. Contains project-specific rules: language files (with `validation_tools`), conventions discovered via `/review-findings`.
+- **Project KB** — created per-project by `/bootstrap` at `knowledge-base/`. Contains project-specific rules: language files and conventions discovered via `/review-findings`.
 
 All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB.
 
@@ -82,7 +82,7 @@ Task `ground_rules` use prefix convention: `general:security/general.md`, `proje
 The configurable-workflow feature externalizes gate and agent selection into YAML config. Three files form the config layer:
 
 - **`.workflow.yml`** (repo root) — `spec_storage`, `gate_pool`, `agent_pool`, `validate_scope`. Required for any active invocation. Missing → loader exit 2; run `/bootstrap`.
-- **`knowledge-base/gates.yml`** (gate registry) — canonical list of deterministic gates with `id`, `command`, `applies_to`, `category`, `blocking`. Replaces `validation_tools` frontmatter in language files (display-only after this feature ships).
+- **`knowledge-base/gates.yml`** (gate registry) — canonical list of deterministic gates with `id`, `command`, `applies_to`, `category`, `blocking`. Sole source of truth for executable gates.
 - **`specs/<feature>/config.yml`** (per-spec config) — `tags`, `gates` (the **ceiling**), and `agents` per phase. Written by `/explore` step 0 after inferencer approval. Required on all active processing paths; missing → exit 4.
 
 **Key terms (canonical glossary — these three names are the only ones command prose may use):**
@@ -110,7 +110,7 @@ See `specs/configurable-workflow/design.md` for full ADR detail and schema defin
 
 - `/ship` is separate from `/implement` — commit/push/PR creation happens after validation
 - `/implement` checks for unmerged PRs — previous task's PR must be merged before starting next
-- Validation tools defined in language file frontmatter `validation_tools` are mandatory; skipping is not allowed
+- Gates listed in `knowledge-base/gates.yml` with `blocking: true` are mandatory for tasks whose `ground_rules` match — skipping is not allowed
 - `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition

@@ -84,40 +84,6 @@ Sweep all command prose to use only these. Add a glossary block to `CLAUDE.md` a
 
 ---
 
-### M2. Spec-audit findings vs gate findings handled asymmetrically
-
-**Summary.** `/review-findings` step 1 ingests both gate reports and synthetic spec-audit findings from `/validate-impl`. Grouping logic assumes findings come from gate reports; spec-audit findings have no report file and a different remediation path (`create-followup` not fix-apply).
-
-**Example.** `commands/review-findings.md:23` — "Spec-audit reports (filename pattern `spec-audit-*.md`)" mentioned but downstream grouping (lines 29-35) doesn't branch on type.
-
-**Proposed fix.** Add explicit Step 0 in `review-findings.md`: "Process spec-audit findings first. Each accepted spec-audit finding spawns `task-manager.sh create-followup`. Skip the fix-application sub-agent path entirely. Then proceed to Step 1 with gate findings only."
-
----
-
-### M3. `validate_scope=per-spec` defers gate failures until end-of-spec
-
-**Summary.** `validate_scope` is presented as a "cadence" option but the per-spec setting hides gate failures until all tasks are implemented. Users may not realize.
-
-**Example.** `CLAUDE.md` "validate_scope — cadence control: per-task (default), per-spec (skip per-task validate; union runs at /validate-impl)." `/validate.md:43` skips Phase 2 with a zero-findings report.
-
-**Proposed fix.** Add latency warning to the `validate_scope` doc block. Recommend `both` over `per-spec`. Make `/explore` step-0 inferencer warn when proposing `per-spec` for a code-bearing spec.
-
----
-
-### M4. Background fix sub-agents lack crash recovery
-
-**Summary.** Accepted findings spawn background sub-agents that apply fixes and update report frontmatter (`review_status: accepted`) via `yq`. If sub-agent crashes mid-update, fixes may be partially applied with stale `pending` status. No retry, no re-validation.
-
-**Example.** `commands/review-findings.md` accept-flow (~lines 42-51).
-
-**Proposed fix.**
-1. Sub-agent updates `review_status: accepted` *before* applying fixes (intent recording).
-2. After fix-apply, write `fix_status: applied|failed` separately.
-3. `/review-findings` post-loop scans for `fix_status: failed` or absent; offers resume.
-4. Always re-invoke `/validate` after fix application — never proceed straight to mining.
-
----
-
 ### M5. Empty-intersection abort behaviour inconsistent
 
 **Summary.** `/validate` records `critical` finding (`empty_intersection_ok=false`) but `/validate-impl` says only "abort before spawning Karen" with rc 3. No explicit guard shown.
@@ -135,17 +101,6 @@ if [[ $rc -eq 3 ]]; then
   exit 3
 fi
 ```
-
----
-
-## Low Severity / Complexity
-
-### L1. Post-implementation advisor findings are ephemeral
-
-**Summary.** `/implement` lines ~73-91 spawn Ultrathink Debugger + Code Quality Pragmatist as a pre-validation sanity check. Findings shown inline, not persisted. Re-running `/implement` repeats work; no audit trail.
-
-**Proposed fix.** Persist advisor output to `specs/<f>/reports/<task-id>-<agent>.yaml` with `source: llm`. Let `/review-findings` handle them through the normal accept/reject flow. Removes the bespoke inline review.
-
 ---
 
 ### L2. Config-snapshot drift only checked at `/ship`
@@ -167,28 +122,3 @@ fi
 **Proposed fix.** `/validate` Phase 1 iterates `ground_rules`, resolves each path (general:/project:), fail-closes on unresolvable. Emit error finding listing missing files.
 
 ---
-
-### L4. Three-layer config + dead `validation_tools` frontmatter
-
-**Summary.** Config lives across `.workflow.yml` + `gates.yml` + `specs/<f>/config.yml`. Old `validation_tools` frontmatter in language KB files is now "display-only" — dead weight that confuses readers.
-
-**Example.** `CLAUDE.md` "Configurable Workflow" block; language KB files still carrying `validation_tools` frontmatter.
-
-**Proposed fix.** Either delete `validation_tools` from language files and rely solely on `gates.yml`, or add a one-time `scripts/migrate-language-kb.sh` that strips them. Keep the three-file config layering — it has a purpose — but document the data ownership boundary at the top of `CLAUDE.md`.
-
----
-
-## Top 8 fixes (ordered by ROI)
-
-1. **Extract `scripts/gate-ceiling.sh`** — kills H1, simplifies M5.
-2. **Centralize loader contract in `config-loader.contract.md`** — kills H2.
-3. **Remove `rm -rf` from `/review-findings`** — kills H3.
-4. **Milestone banners on auto-chain** — kills H4.
-5. **Persist post-impl advisor findings as reports** — kills L1, simplifies M2/M4.
-6. **Split spec-audit review path (Step 0 in `/review-findings`)** — kills M2.
-7. **Drop or migrate `validation_tools` frontmatter** — kills L4.
-8. **Fail-close on unresolvable `ground_rules`** — kills L3.
-
----
-
-*Report generated 2026-05-04. Cross-reference: `specs/configurable-workflow/design.md` (ADR-003), `commands/validate.md`, `commands/validate-impl.md`, `commands/review-findings.md`, `commands/learn-from-reports.md`.*

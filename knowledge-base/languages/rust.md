@@ -1,11 +1,3 @@
----
-# display-only: canonical gate definitions live in knowledge-base/gates.yml
-validation_tools:
-  - cd workflow-tui && cargo clippy -- -D warnings
-  - cd workflow-tui && cargo test
-  - cd workflow-tui && cargo fmt -- --check
----
-
 # Rust — Project-Specific Rules (workflow-tui)
 
 General Rust rules live in `general:languages/rust.md`. These rules are specific to the workflow-tui TUI codebase.

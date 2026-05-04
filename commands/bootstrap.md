@@ -31,13 +31,13 @@ Accepts optional flags as `$ARGUMENTS`: `--force` to overwrite existing `.workfl
    - `knowledge-base/languages/`
    - `knowledge-base/conventions/`
 4. Ask the user which languages this project uses
-5. Create language files with `validation_tools` frontmatter for each selected language. For languages already covered by a general KB file (e.g. `~/.claude/knowledge-base/languages/rust.md`), only add rules that are project-specific — do not re-state rules already present in the general KB file.
+5. Create language files (no frontmatter) for each selected language. For languages already covered by a general KB file (e.g. `~/.claude/knowledge-base/languages/rust.md`), only add rules that are project-specific — do not re-state rules already present in the general KB file. Then add executable gate entries (one per validation command) to `knowledge-base/gates.yml` with `id`, `command`, `applies_to: [<language>]`, `category`, and `blocking: true`. `gates.yml` is the canonical gate registry.
 6. Generate `_index.md` listing all created files with descriptions
 7. Report what was created
 
 The general knowledge base (security, architecture, testing, style rules) is installed globally at `~/.claude/knowledge-base/` by `setup.sh` and applies to all projects automatically. This command creates only project-specific rules:
 
-- `languages/` — per-language validation tool definitions and language-specific patterns
+- `languages/` — language-specific patterns and rules (executable gates live in `knowledge-base/gates.yml`)
 - `conventions/` — project-specific conventions discovered over time (via `/review-findings` feedback loop)
 
 Target: ~5-10 rules per file. Rules should be specific and actionable — each rule should be something a validation gate can check against.
