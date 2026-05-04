@@ -2,6 +2,12 @@ Run the spec-completion audit (FR-15, ADR-008). Reuses the existing **Karen** ag
 
 Feature name: $ARGUMENTS
 
+> Terminology (canonical — only these names appear in this command):
+> - **ceiling** — gate IDs in spec `config.yml gates:` (`WF_SPEC_GATES`). Upper bound.
+> - **effective-set** — per-task `ceiling ∩ gates applicable to task ground_rules` (used by `/validate`).
+> - **spec-union** — union of effective-sets over every task in the spec. Computed by `wf_compute_union_set`. Reserved for Step 2.
+> Do not use bare "union" for ceiling/effective-set.
+
 ## Prerequisites
 
 1. Read and follow `~/.claude/knowledge-base-rules.md`.
@@ -32,11 +38,11 @@ source ~/.claude/scripts/validate-impl.sh
 wf_vi_emit_start "$ARGUMENTS"
 ```
 
-## Step 2 — Union Gate Execution (only if `validate_scope ∈ {per-spec, both}`)
+## Step 2 — Spec-Union Gate Execution (only if `validate_scope ∈ {per-spec, both}`)
 
 If `WF_VALIDATE_SCOPE` is `per-task`: skip this step.
 
-Otherwise execute the union of spec-eligible gates against the cumulative diff (first task branch-point → HEAD) via `wf_vi_run_union_gates` (T016):
+Otherwise execute the **spec-union** (union of every task's effective-set; see CLAUDE.md glossary) against the cumulative diff (first task branch-point → HEAD) via `wf_vi_run_union_gates` (T016):
 
 ```bash
 spec_dir="$WF_SPEC_STORAGE/$ARGUMENTS"
@@ -46,10 +52,10 @@ extra_evidence=""
 [[ -n "$forced_verdict" || -s "$gate_log" ]] && extra_evidence="$gate_log"
 ```
 
-Helper semantics (see `scripts/validate-impl.sh`, which delegates ceiling/union math to `scripts/gate-ceiling.sh` — same canonical helpers used by `/validate`):
-1. Spec-wide gate set = `wf_compute_union_set <spec_dir>` from `gate-ceiling.sh`: union of every task's language tags ∩ ceiling (`WF_SPEC_GATES`), plus gates with `applies_to: [any]`. Sorted, unique.
+Helper semantics (see `scripts/validate-impl.sh`, which delegates ceiling/effective-set/spec-union math to `scripts/gate-ceiling.sh` — same canonical helpers used by `/validate`):
+1. Spec-union = `wf_compute_union_set <spec_dir>` from `gate-ceiling.sh`: union of every task's effective-set (each task's language tags ∩ ceiling `WF_SPEC_GATES`), plus gates with `applies_to: [any]`. Sorted, unique.
 2. Each gate runs **once** against the cumulative diff range (deterministic order from `sort -u`).
-3. **Empty union on a code-bearing spec** → helper returns rc 3 (fail-closed per ADR-003); abort `/validate-impl` before spawning Karen.
+3. **Empty spec-union on a code-bearing spec** → helper returns rc 3 (fail-closed per ADR-003); abort `/validate-impl` before spawning Karen.
 4. **Blocking gate non-zero exit** → helper stdout = `reopen`. Captured log is passed to `wf_vi_build_prompt` as `extra_evidence`; Karen is **still** spawned, but its verdict is overridden to `reopen` in Step 4.
 5. **Non-blocking gate failure** → recorded in `gate_log` but does not force `reopen`.
 
@@ -93,5 +99,5 @@ wf_vi_emit_done "$ARGUMENTS" "$verdict" "$report_path"
 ## Notes
 
 - This command is idempotent: it does not advance task state. Re-running on a clean spec is a no-op except for new monitor events.
-- T016 owns the union gate executor helper referenced in Step 2; until then, `validate_scope=per-spec/both` callers should expect a placeholder log.
+- T016 owns the spec-union gate executor helper referenced in Step 2; until then, `validate_scope=per-spec/both` callers should expect a placeholder log.
 - Karen's identity stays generic (ADR-008) — wrapper prompt is the only specialization surface.

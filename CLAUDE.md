@@ -85,10 +85,13 @@ The configurable-workflow feature externalizes gate and agent selection into YAM
 - **`knowledge-base/gates.yml`** (gate registry) — canonical list of deterministic gates with `id`, `command`, `applies_to`, `category`, `blocking`. Replaces `validation_tools` frontmatter in language files (display-only after this feature ships).
 - **`specs/<feature>/config.yml`** (per-spec config) — `tags`, `gates` (the **ceiling**), and `agents` per phase. Written by `/explore` step 0 after inferencer approval. Required on all active processing paths; missing → exit 4.
 
-**Key terms:**
-- **Ceiling** — the eligible gate set for a spec: union of gate IDs in `config.yml gates:`. Upper bound; no gate outside this set runs.
-- **Effective set** — per-task intersection: `ceiling ∩ gates applicable to task ground_rules` (language + category match). Computed fresh each task.
-- **`validate_scope`** — cadence control: `per-task` (default), `per-spec` (skip per-task validate; union runs at `/validate-impl`), or `both`.
+**Key terms (canonical glossary — these three names are the only ones command prose may use):**
+- **ceiling** — the eligible gate set for a spec: gate IDs listed in `config.yml gates:`. Upper bound; no gate outside this set runs.
+- **effective-set** — per-task intersection: `ceiling ∩ gates applicable to task ground_rules` (language + category match). Computed fresh each task by `wf_compute_effective_set`.
+- **spec-union** — union of effective-sets over every task in the spec. Computed once by `wf_compute_union_set` for `/validate-impl` Step 2.
+- **`validate_scope`** — cadence control: `per-task` (default), `per-spec` (skip per-task validate; spec-union runs at `/validate-impl`), or `both`.
+
+Do not use the bare word "union" in command prose for either ceiling or effective-set — reserve it for **spec-union** only.
 
 **Config loader (`scripts/config-loader.sh`):**
 - Walks up from CWD to find `.workflow.yml`; single `timeout 5 yq` parse

@@ -62,24 +62,12 @@ Each command links to it instead of inlining a partial list. Optionally introduc
 
 Add a guard in `learn-from-reports.md` step 6 that warns if reports-dir was already empty on entry (could indicate an earlier rogue deletion).
 
----
-
-### H4. Auto-chain progress invisible to user
-
-**Summary.** A single `/implement` invocation can chain through `/validate` → `/review-findings` → `/learn-from-reports` → `/ship` → `/validate-impl`. None of these surfaces a milestone marker on stdout. Users running long sessions cannot tell which step is active without tailing `.monitor.jsonl`.
-
-**Example.** `commands/implement.md:7` (spec-coherence gate), then auto-chain references in `validate.md`, `review-findings.md`, `learn-from-reports.md`, `ship.md`. Monitor events emitted but no user-facing banner.
-
-**Proposed fix.**
-- At chain entry, each command prints a one-line banner: `>>> /validate <feature> (auto-chained from /implement)`.
-- At chain exit, print `<<< /validate complete: <pass|findings|error>`.
-- Optionally, add `scripts/monitor.sh tail-stdout` so `/implement` users can opt into a live event stream.
 
 ---
 
 ## Medium Severity
 
-### M1. Terminology drift: ceiling / effective set / union
+### M1. Terminology drift: ceiling / effective set / union ✅ DONE (2026-05-04)
 
 **Summary.** `CLAUDE.md` defines "ceiling" (spec eligible set) and "effective set" (per-task intersection). Commands use "union" for two different concepts: (a) over-all-tasks gate union (`/validate-impl`), (b) ceiling itself in some prose.
 

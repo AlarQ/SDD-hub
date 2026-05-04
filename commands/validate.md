@@ -2,6 +2,12 @@ Run validation gates on implemented code for a feature.
 
 Feature name: $ARGUMENTS
 
+> Terminology (canonical — only these names appear in this command):
+> - **ceiling** — gate IDs in spec `config.yml gates:` (`WF_SPEC_GATES`). Upper bound.
+> - **effective-set** — per-task `ceiling ∩ gates applicable to task ground_rules`. Computed by `wf_compute_effective_set`.
+> - **spec-union** — union of effective-sets over every task in the spec. Computed by `wf_compute_union_set` (used by `/validate-impl`).
+> Do not use bare "union" for ceiling/effective-set.
+
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
 2. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks with `status: implemented`
@@ -44,7 +50,7 @@ After computing the effective set above and before step 4 below, branch on `WF_V
   $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
     "$(printf '{"gate":"%s","reason":"scope=per-spec","scope":"per-spec"}' "<g>")"
   ```
-  Then write a single zero-findings report `specs/$ARGUMENTS/reports/<task-id>-scope-skip.yaml` with `status: pass`, skip Phase 2 entirely, and proceed to the zero-findings status update path. The spec-level union runs later via `/validate-impl` (Step 2).
+  Then write a single zero-findings report `specs/$ARGUMENTS/reports/<task-id>-scope-skip.yaml` with `status: pass`, skip Phase 2 entirely, and proceed to the zero-findings status update path. The **spec-union** runs later via `/validate-impl` (Step 2).
 
   Empty-intersection fail-closed (ADR-003) still applies: if the effective set is empty AND `empty_intersection_ok` is not `true`, treat as the existing `error` finding before this short-circuit takes effect.
 4. For each language-applicable gate whose ID is **not** in `WF_SPEC_GATES`: emit a `gate_skip` monitor event:
