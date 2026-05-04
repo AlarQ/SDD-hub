@@ -56,7 +56,7 @@ restatements.
 
 ---
 
-### H2 — Glossary triplicated despite M1 lock
+### H2 — Glossary triplicated despite M1 lock ✅ DONE
 
 **Summary.** Audit M1 (commit `13ebbaf`) locked the canonical definitions of
 `ceiling`, `effective-set`, `spec-union`. But the definitions live in three

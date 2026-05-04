@@ -2,11 +2,7 @@ Run validation gates on implemented code for a feature.
 
 Feature name: $ARGUMENTS
 
-> Terminology (canonical — only these names appear in this command):
-> - **ceiling** — gate IDs in spec `config.yml gates:` (`WF_SPEC_GATES`). Upper bound.
-> - **effective-set** — per-task `ceiling ∩ gates applicable to task ground_rules`. Computed by `wf_compute_effective_set`.
-> - **spec-union** — union of effective-sets over every task in the spec. Computed by `wf_compute_union_set` (used by `/validate-impl`).
-> Do not use bare "union" for ceiling/effective-set.
+> Terminology: see `CLAUDE.md` §Configurable Workflow for canonical definitions of **ceiling**, **effective-set**, **spec-union**. Do not use bare "union" for ceiling/effective-set.
 
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
