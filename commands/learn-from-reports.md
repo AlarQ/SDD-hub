@@ -46,6 +46,6 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
 
 7. **Report summary.** "Mined N findings: C candidates proposed, A accepted, R rejected, E edited. Reports deleted."
 
-## Chain
+## Next Step
 
-After step 7 completes, proceed to the shipping phase: read and follow `~/.claude/commands/ship.md` with the same `$ARGUMENTS` value.
+After step 7 completes, stop and instruct the user: "Mining done. Run `/ship $ARGUMENTS` next."

@@ -95,12 +95,12 @@ Before determining the final status, verify ALL gates produced a report:
 
 ## Status Update
 - If any gate has `status: error`: report which gate(s) failed and instruct: "Re-run `/validate $ARGUMENTS` to retry the failed gate(s)."
-- If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`, then proceed to the review-findings phase: read and follow `~/.claude/commands/review-findings.md` with the same $ARGUMENTS value
+- If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`, then stop and instruct the user: "Findings present. Run `/review-findings $ARGUMENTS` next."
 - If zero findings across all gates and all gates have `status: pass`:
   1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
   2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
   3. Do NOT delete reports here — `/learn-from-reports` mines passing reports for borderline LLM advisories and owns deletion.
-  4. Now proceed to the mining phase: read and follow `~/.claude/commands/learn-from-reports.md` with the same $ARGUMENTS value
+  4. Stop and instruct the user: "All gates pass. Run `/learn-from-reports $ARGUMENTS` next."
 
 Report schema:
 - gate: <gate-name>

@@ -56,18 +56,16 @@ findings:
 - `status: findings` iff at least one finding exists.
 - `status: error` iff the agent timed out or crashed — in that case re-run `/validate-spec $ARGUMENTS` before proceeding.
 
-## Phase 3: Auto-Chain
+## Phase 3: Next Step
 
-- If `status: pass`: print the approval summary and stop. `/implement` is now unblocked.
-- If `status: findings`: auto-chain into `/review-findings` — read and follow `~/.claude/commands/review-findings.md` with the same $ARGUMENTS value. Accepted findings spawn background sub-agents that apply the `fix_proposal` patches to the spec/design/tasks files (same mechanism `/review-findings` already uses for code fixes).
-- After `/review-findings` resolves all findings, re-run `/validate-spec $ARGUMENTS` exactly once to confirm `status: pass`. If findings remain after that single re-run, stop and surface them — further iterations require an explicit manual `/validate-spec` invocation (loop guard).
+- If `status: pass`: print the approval summary and stop. `/implement $ARGUMENTS` is now unblocked.
+- If `status: findings`: stop and instruct the user to run `/review-findings $ARGUMENTS`. Accepted findings spawn background sub-agents that apply the `fix_proposal` patches to the spec/design/tasks files (same mechanism `/review-findings` already uses for code fixes). After review, the user re-runs `/validate-spec $ARGUMENTS` to confirm `status: pass`.
 - If `status: error`: surface the error and instruct the user to re-run `/validate-spec $ARGUMENTS`.
 
 ## Blocking Semantics
 
 `/implement` must refuse to start a task unless `specs/$ARGUMENTS/reports/spec-review.yaml` exists with `status: pass`. The preflight check in `commands/implement.md` enforces this. The error message points the user back here.
 
-## Standalone vs Auto-Chained Use
+## Invocation
 
-- `/propose` auto-chains into `/validate-spec` at the end of spec generation — the user sees findings immediately.
-- Standalone invocation remains supported for re-runs after manual edits to `spec.md` / `design.md` / `tasks/`.
+Always invoked explicitly by the user — typically right after `/propose` finishes, and again after `/review-findings` resolves spec-review findings. Re-runs after manual edits to `spec.md` / `design.md` / `tasks/` are also supported.

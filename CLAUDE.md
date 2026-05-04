@@ -63,7 +63,7 @@ Elm-like architecture with file-system watching for live reload:
 - Commands receive feature name via `$ARGUMENTS`
 - All task status changes go through `task-manager.sh` — never edit YAML frontmatter directly
 - Task state machine: `blocked -> todo -> in-progress -> implemented -> review -> done` (canonical source: `scripts/task-manager.sh`; full docs: `plan.md`)
-- Auto-chained flow per task: `/implement` automatically chains into validate -> review-findings (if findings) -> learn-from-reports -> ship. The user only types `/implement` and interacts during finding review and rule-candidate review. Individual commands (`/validate`, `/review-findings`, `/learn-from-reports`, `/ship`) remain available for edge cases.
+- Explicit per-step invocation: each command is invoked separately by the user. After finishing, every command prints the next command to run (e.g. `/implement` → "Run `/validate $ARGUMENTS` next"). No command auto-invokes another. Sequence per task: `/implement` → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship`. After the last task transitions to `done`, the user runs `/validate-impl` for the final spec-completion audit.
 - Serial execution only — one task in flight at a time
 
 ## Dual Knowledge Base
@@ -122,5 +122,5 @@ See `specs/configurable-workflow/design.md` for full ADR detail and schema defin
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
 - `/continue-task` detects resume phase by checking task status and existing artifacts (reports, branches, PR state)
 - `/research` activates anti-hallucination mode with citation discipline — useful for bug investigation and API contract review
-- `/validate-spec` is a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent — audits `specs/<feature>/` for contract gaps, logic gaps, missing pieces, and repo misalignment before `/implement` is allowed to start. Auto-chains from `/propose`. Findings flow through `/review-findings` and patch the spec/design/tasks files (not code). Distinct from `/validate-impl` (post-implementation Karen audit of claimed-vs-actual completion, per configurable-workflow ADR-008).
+- `/validate-spec` is a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent — audits `specs/<feature>/` for contract gaps, logic gaps, missing pieces, and repo misalignment before `/implement` is allowed to start. The user runs it explicitly after `/propose`. Findings flow through `/review-findings` and patch the spec/design/tasks files (not code). Distinct from `/validate-impl` (post-implementation Karen audit of claimed-vs-actual completion, per configurable-workflow ADR-008).
 - Flow changes (command chain, task state machine, validation gates, agent spawns, hooks, artifact flow) MUST trigger review of `docs/workflow-diagram.md` — update affected Mermaid diagrams in the same change. Minor wording tweaks exempt; any structural/edge/node change is not.

@@ -89,20 +89,18 @@ This is a lightweight pre-flight check — `/validate` remains the authoritative
 
 IMPORTANT:
 - Do NOT start the next task automatically — serial execution, one task in flight at a time.
-- DO auto-chain into validation for the current task: read and follow `~/.claude/commands/validate.md` with the same $ARGUMENTS value. `/validate` then chains into `/review-findings` (if findings) or `/ship` (zero findings).
+- Do NOT auto-invoke `/validate`. Stop and instruct the user: "Task implemented. Run `/validate $ARGUMENTS` next."
 
-## Final Chain Step — Spec-Done Trigger
+## Spec-Done Detection
 
-After the validate→review-findings→ship chain completes (i.e. the current task reached `done`), check the feature's `.monitor.jsonl` tail for a `spec_last_task_done` event emitted during the final `set-status done` call:
+Before stopping, check the feature's `.monitor.jsonl` tail for a `spec_last_task_done` event emitted during a prior `set-status done` call:
 
 ```bash
 tail -50 specs/$ARGUMENTS/.monitor.jsonl 2>/dev/null \
   | grep -q '"category":"spec_last_task_done"'
 ```
 
-If present, invoke `/validate-impl $ARGUMENTS` as the final chain step. This fires only when every task in the spec is `done` and no prior `spec_audit_done` exists on the log (idempotency guard enforced by `task-manager.sh`).
-
-Standalone CLI invocations of `task-manager.sh set-status <task> done` still emit the event but do NOT auto-invoke `/validate-impl` — auto-invocation is `/implement`-chain-only, mirroring the existing `task_transition` event pattern.
+If present, surface this to the user and instruct: "All tasks for `$ARGUMENTS` are done. Run `/validate-impl $ARGUMENTS` to perform the final spec-completion audit." Do NOT invoke `/validate-impl` automatically.
 
 ## Error Recovery
 If implementation is aborted mid-task (crash, user cancels), the task is stuck at `in-progress`. Run `/continue-task $ARGUMENTS` to resume from the correct phase, or reset via `~/.claude/scripts/task-manager.sh set-status <task-file> todo` and clean up the partial branch manually. Never hand-edit task YAML frontmatter — it bypasses state-machine validation and the pre-commit hook. If the post-implementation quality check was in progress, any accepted fixes will already be on the branch.

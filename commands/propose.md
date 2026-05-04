@@ -180,6 +180,6 @@ After saving test-strategy.md, update each task file's `test_cases` field:
 
 Present all generated artifacts for human review before proceeding to implementation.
 
-## Auto-Chain: Spec Coherence Gate
+## Next Step
 
-After artifacts are presented, auto-chain into `/validate-spec` — read and follow `~/.claude/commands/validate-spec.md` with the same $ARGUMENTS value. The gate validates internal coherence, logic gaps, and repo alignment of the generated spec bundle before `/implement` is allowed to start. Findings flow through `/review-findings` and patch the spec/design/tasks files.
+This command is complete. Run `/validate-spec $ARGUMENTS` next — the spec-coherence gate validates internal coherence, logic gaps, and repo alignment of the generated bundle before `/implement` is allowed to start. Findings then flow through `/review-findings` and patch the spec/design/tasks files.

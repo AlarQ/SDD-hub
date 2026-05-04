@@ -3,7 +3,7 @@
 Visual map of the spec-driven development workflow: slash commands, agent spawns, hooks, scripts, task state machine, and artifact flow. Read these alongside `onboarding.md` for prose context. Diagrams render inline on GitHub and in Mermaid-capable viewers.
 
 **Legend**
-- Solid arrow (`-->`) — automatic / auto-chained transition
+- Solid arrow (`-->`) — user-invoked next command (printed as a "Run `/foo`" hint at the previous command's exit)
 - Dashed arrow (`-.->`) — human-gated transition (review, merge, decision)
 - Subgraph groups: commands, agents, artifacts, hooks
 
@@ -11,11 +11,11 @@ Visual map of the spec-driven development workflow: slash commands, agent spawns
 
 ## 1. Command Chain
 
-The core auto-chain (`/implement` → `/validate` → `/review-findings` → `/learn-from-reports` → `/ship`) runs without user intervention between steps. Human gates appear only at PR merge, at finding review, and at rule-candidate review. Side commands (`/spec-status`, `/continue-task`, `/pr-review`, etc.) are invokable anytime.
+Each command runs only when the user invokes it. There is no auto-chaining between slash commands — every command terminates after its own work and prints the next command to run. The per-task sequence is `/implement` → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship`. Human gates appear at finding review, rule-candidate review, and PR merge. Side commands (`/spec-status`, `/continue-task`, `/pr-review`, etc.) are invokable anytime.
 
-Before `/implement` starts, `/propose` auto-chains into `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
+After `/propose` finishes, the user runs `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` (also user-invoked) and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
 
-When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event and `/implement` auto-chains into `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
+When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event. `/implement` surfaces this event and instructs the user to run `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
@@ -356,7 +356,7 @@ Notes:
 ## Key Invariants
 
 - **Serial execution** — one task `in-progress` at a time
-- **Auto-chain** — `/implement` drives `/validate` → `/review-findings` → `/ship` without re-prompting
+- **Per-task sequence** — `/implement` → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship`, each invoked explicitly by the user
 - **All-gates** — all 5 validation gates must pass before `done`
 - **Dual KB** — general (`~/.claude/knowledge-base/`) + project (`knowledge-base/`), project overrides general
 - **One PR per task** — target is `feat/$FEATURE`, not `main`
