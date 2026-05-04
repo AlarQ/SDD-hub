@@ -2,7 +2,7 @@ Run the spec-completion audit (FR-15, ADR-008). Reuses the existing **Karen** ag
 
 Feature name: $ARGUMENTS
 
-> Terminology: see `CLAUDE.md` §Configurable Workflow for canonical definitions of **ceiling**, **effective-set**, **spec-union** (reserved for Step 2 here). Do not use bare "union" for ceiling/effective-set.
+> Terminology: see `~/.claude/scripts/workflow-glossary.md` for canonical definitions of **ceiling**, **effective-set**, **spec-union** (reserved for Step 2 here). Do not use bare "union" for ceiling/effective-set.
 
 ## Prerequisites
 

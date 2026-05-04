@@ -2,7 +2,7 @@ Run validation gates on implemented code for a feature.
 
 Feature name: $ARGUMENTS
 
-> Terminology: see `CLAUDE.md` §Configurable Workflow for canonical definitions of **ceiling**, **effective-set**, **spec-union**. Do not use bare "union" for ceiling/effective-set.
+> Terminology: see `~/.claude/scripts/workflow-glossary.md` for canonical definitions of **ceiling**, **effective-set**, **spec-union**. Do not use bare "union" for ceiling/effective-set.
 
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
