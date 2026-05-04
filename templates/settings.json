@@ -12,6 +12,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/monitor-tool-calls.sh\""
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "",
