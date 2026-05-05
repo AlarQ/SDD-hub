@@ -40,7 +40,7 @@ If monitor.sh is not found or exits non-zero, log a warning and continue.
 
 ### 0c. Render approval summary
 
-Present the agent's output to the user in this format:
+Print the reasoning + draft YAML as plain output (status, no prompt):
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -50,12 +50,18 @@ Present the agent's output to the user in this format:
 
   Draft config.yml:
   <YAML block from agent>
-
-  [A] Approve and save   [E] Edit before saving   [M] Manual entry   [S] Skip
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Wait for the user to respond with one of: A / E / M / S (case-insensitive).
+Then invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol.md`) with one question:
+- **question:** "Approve draft config?"
+- **options:**
+  - `Approve` — save YAML as-is
+  - `Edit` — paste an edited version
+  - `Manual` — enter config manually (or accept default template)
+  - `Skip` — do not write config.yml now
+
+Use the user's selection (Approve/Edit/Manual/Skip) to drive step 0d.
 
 ### 0d. Handle user response
 
@@ -93,7 +99,7 @@ Event summary:
    - What is the shortest path to delivering that value?
 
    **Agent — UX Researcher**: After the user answers all three perspective questions, spawn the `UX Researcher` agent (`design-ux-researcher`) using the Agent tool. Pass the feature description and the user's perspective answers. Instruct: "Identify assumptions to validate, edge-case user segments, and whether the shortest-path framing risks missing important user needs. Output 3-5 concise bullet points." Present the agent's output as a labeled advisory block. If the agent errors, note: *"UX Researcher analysis unavailable — will be addressed in /propose."*
-4. Ask clarifying questions **one at a time** — do NOT present all questions at once. Pick the single most important unknown area, ask about it, wait for the answer, then move to the next area. This is a conversation, not a questionnaire. Cover these areas in order:
+4. Ask clarifying questions **one at a time via the `AskUserQuestion` tool** (per `~/.claude/scripts/ask-user-protocol.md`) — one tool call per question. Do NOT present all questions at once and do NOT render them as a markdown list expecting typed replies. Provide best-guess options on each call plus an `Other` escape for free-form answers. Cover these areas in order:
    1. Scope: what's in, what's out
    2. Affected domains and modules
    3. Security implications (auth, data handling, input validation)
@@ -117,9 +123,9 @@ Event summary:
 
    If an agent errors, proceed with scope presentation without agent input and note the failure.
 
-   - Present the options clearly with trade-offs for each
-   - Wait for the user to decide — do NOT assume or choose a direction
-   - Only proceed after the user confirms the scope
+   - Present the trade-offs as a labeled advisory block, then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) with each scope fork as one question — `options` are the 2–3 architect-proposed directions plus `Other` for a custom answer.
+   - Wait for the tool result — do NOT assume or choose a direction
+   - Only proceed after the user has selected an option for every scope fork
 6. Identify which rule files from both knowledge bases are relevant to this feature
 7. Summarize understanding and list applicable ground rules (using prefix convention per `knowledge-base-rules.md`)
 8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name. When saving, include an `## Agent Insights (Explore Phase)` section after the ground-rules listing containing all agent outputs collected during the conversation, labeled by agent name. Mark as advisory. Omit agents that were not spawned or that errored.

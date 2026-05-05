@@ -38,9 +38,9 @@ If the agent errors or times out, report the failure to the user and proceed dir
 
 ### Presenting Agent Findings
 1. Group findings by priority: blockers first, then suggestions, then nits
-2. Present each finding to the human for accept/reject
+2. For each finding: print the finding details as plain output, then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Accept this fix?" options: `Accept`, `Reject`. One tool call per finding. Do NOT render accept/reject as a markdown question.
 3. On accept: apply fix, stage the change
-4. On reject: note reasoning, optionally add as project knowledge-base rule (`knowledge-base/`) if the rejection reveals a project convention
+4. On reject: follow up with one `AskUserQuestion` call carrying two questions — (a) free-text "Reason?" and (b) "Promote to project KB rule?" `Yes`/`No`. Update KB only if Yes.
 5. After all agent findings are resolved, commit accepted fixes (if any) with message referencing the agent review
 
 ## Phase 2: Human PR Comments
@@ -52,6 +52,6 @@ If the agent errors or times out, report the failure to the user and proceed dir
    - Read the referenced file and lines
    - Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
    - Generate a fix proposal with: description, code_snippet, status: pending
-4. Present each proposal for human accept/reject
+4. For each proposal: print proposal details, then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Accept this proposal?" options: `Accept`, `Reject`. One tool call per proposal.
 5. On accept: apply fix, commit with reference to comment
-6. On reject: note reasoning, optionally update project knowledge-base (`knowledge-base/`)
+6. On reject: follow up with one `AskUserQuestion` call — free-text "Reason?" and `Yes`/`No` "Promote to project KB rule?". Update KB only if Yes.

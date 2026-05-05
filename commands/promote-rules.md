@@ -30,11 +30,11 @@ Graduates rules from the project KB (`knowledge-base/`) to the general KB (`~/.c
    - Rule text (exact)
    - Proposed target in general KB (`~/.claude/knowledge-base/<category>/<file>.md`) — mirror the source category/file where a match exists; propose a sensible new path when the category is new
    - One-sentence rationale for why it qualifies
-   - Ask: **Accept / Reject / Edit?**
+   - Invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Promote this rule?" options: `Accept`, `Reject`, `Edit`. One tool call per candidate.
      - **Accept:** apply in step 4
      - **Reject:** discard candidate, move on
-     - **Edit:** prompt for revised rule text or target path, then apply as accepted
-   - **Stop and wait for user response between candidates.**
+     - **Edit:** follow up with an open-ended `AskUserQuestion` for revised rule text / target path, then apply as accepted
+   - **Stop and wait for the tool result between candidates.**
 
 4. **Apply accepted promotions.** For each accepted candidate:
    a. If the target general KB file exists, read it first, then append the rule. If it does not exist, create it with an appropriate title header matching the general KB style.

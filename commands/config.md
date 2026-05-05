@@ -90,15 +90,13 @@ Edit the config to remove or replace these IDs, then re-run `/config <feature>`.
 
      Diff (current → proposed):
    <diff output>
-
-     [A] Approve and overwrite   [R] Reject and keep current
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ```
-   Wait for the user to respond with A or R (case-insensitive).
+   Then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Approve regenerated config?" options: `Approve and overwrite`, `Reject and keep current`.
 
-4. **A — Approve:** run ID re-resolution on the proposed YAML. On failure: print the missing-ID error and stop (file unchanged). On pass: overwrite `$WF_SPEC_STORAGE/<feature>/config.yml`. Emit `config_approved` event. Report: "config.yml overwritten with regenerated config."
+4. **Approve:** run ID re-resolution on the proposed YAML. On failure: print the missing-ID error and stop (file unchanged). On pass: overwrite `$WF_SPEC_STORAGE/<feature>/config.yml`. Emit `config_approved` event. Report: "config.yml overwritten with regenerated config."
 
-5. **R — Reject:** do nothing. Report: "config.yml unchanged."
+5. **Reject:** do nothing. Report: "config.yml unchanged."
 
 ## Event Emission
 

@@ -33,8 +33,8 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    For each group:
    - List all findings in the group: for each, show severity, title, gate (source report), description, code snippet, and fix proposal. Visually separate findings within the group but present them as one review unit.
    - If the group has multiple findings, show a brief note: "These N findings target the same code region in `<file>` and are grouped for a single decision."
-   - Ask: **Accept all / Reject all?** Do NOT offer partial accept within a group — the fixes are interrelated.
-   - **Stop and wait for user response before continuing to the next group.**
+   - Invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol.md`) with one question per group: **"Accept or reject this group?"** options: `Accept all`, `Reject all`. Do NOT offer partial accept within a group — the fixes are interrelated. Do NOT render the prompt as a plain markdown question.
+   - **Stop and wait for the tool result before continuing to the next group.**
    - If Accept:
      - Spawn a sub-agent (using the Agent tool with `run_in_background: true` and `model: "sonnet"`) to apply all fixes in this group. The `model: "sonnet"` parameter is mandatory — do not omit it and do not use a different model. Sub-agent instructions:
        1. Re-read the target file before editing.
@@ -42,8 +42,8 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
        3. After all fixes applied, update `review_status` to `"accepted"` on each finding in the group's report YAML file.
      - **File exclusivity rule:** Before spawning, check if another sub-agent is currently editing the same file. If so, wait for that sub-agent to complete first, then spawn. Groups targeting different files spawn immediately (parallel).
      - Do NOT wait for the sub-agent to finish before presenting the next group (unless the next group targets the same file — in that case, wait for the previous sub-agent first).
-   - If Reject: ask for reasoning, update review_status to "rejected" and set review_notes on ALL findings in the group.
-   - If Reject + new rule needed: create/update the relevant file in the **project** knowledge-base (per `knowledge-base-rules.md`) and update `knowledge-base/_index.md`, set rule_added: true on the relevant finding(s).
+   - If Reject: invoke `AskUserQuestion` again with two questions in one call — (a) free-text "Reason for rejecting this group?" (open-ended), and (b) "Add reject reasoning as project KB rule?" with options `Yes`/`No`. Use answers to set review_notes on ALL findings in the group; review_status → "rejected".
+   - If the KB-rule answer was `Yes`: create/update the relevant file in the **project** knowledge-base (per `knowledge-base-rules.md`) and update `knowledge-base/_index.md`, set rule_added: true on the relevant finding(s).
    - After processing, show running tally: "X accepted, Y rejected so far (Z fixes in progress)"
 5. After all groups have been reviewed, wait for any in-flight fix sub-agents to complete. Report: "All N fix sub-agents completed." If any sub-agent errored, report which group/file failed and ask the user whether to retry or skip that fix (set review_status back to "pending" if retry, or "rejected" if skip).
 6. Set review_status to "noted" on all informational findings
@@ -54,7 +54,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 
 Reports are NOT deleted here — `/learn-from-reports` mines them first and owns deletion.
 
-- If any fixes were applied (accepted actionable findings — informational findings do not count): ask the user whether they want to re-run validation or skip re-validation and proceed to mining + shipping.
+- If any fixes were applied (accepted actionable findings — informational findings do not count): invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Re-run validation now?" options: `Re-validate`, `Skip and proceed to mining`.
   - If user wants re-validation: archive existing reports out of the active path so `/validate` regenerates fresh ones without losing the prior batch (mining input). Run `mv specs/$ARGUMENTS/reports specs/$ARGUMENTS/reports.archived-$(date +%s)`. Do **not** `rm -rf` — report deletion is owned solely by `/learn-from-reports`. Then run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`. Stop and instruct the user: "Fixes applied. Run `/validate $ARGUMENTS` next."
   - If user wants to skip: run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS` next."
 - If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS` next."

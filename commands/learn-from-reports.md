@@ -28,11 +28,11 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
    - Source findings: id, file, lines, severity, one-line description each
    - Proposed project KB file path (use `knowledge-base-rules.md` resolution: `knowledge-base/<category>/<file>.md`)
    - Proposed rule text (concise, imperative, fits the existing KB voice)
-   - Ask: **Accept / Reject / Edit?**
+   - Invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Add this candidate as a project KB rule?" options: `Accept`, `Reject`, `Edit`. One tool call per candidate.
      - **Accept:** apply in step 5
      - **Reject:** discard candidate, move on
-     - **Edit:** prompt for revised rule text or target file, then apply as accepted
-   - **Stop and wait for user response between candidates.**
+     - **Edit:** follow up with an open-ended `AskUserQuestion` for revised rule text / target file, then apply as accepted
+   - **Stop and wait for the tool result between candidates.**
    - If no candidates were generated, report: "No new rule candidates found." and continue to step 6.
 
 5. **Apply accepted rules.** For each accepted candidate:
