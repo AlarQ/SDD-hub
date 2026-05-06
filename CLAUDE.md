@@ -102,6 +102,36 @@ The configurable-workflow feature externalizes gate and agent selection into YAM
 
 See `specs/configurable-workflow/design.md` for full ADR detail and schema definitions.
 
+## Tier System (small | medium | large)
+
+Specs are tiered to right-size flow ceremony. Tier is inferred at `/explore` step 0 by `engineering-config-inferencer` and approved by the user; written to `specs/<feature>/config.yml` as `tier:`.
+
+| Tier | Threshold (defaults) | Flow shape |
+|------|----------------------|------------|
+| `small`  | ≤5 tasks, ≤10 files | `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Karen audit. |
+| `medium` | ≤10 tasks, ≤30 files | `/explore` → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
+| `large`  | unbounded            | Full unchanged flow. |
+
+Defaults live in `.workflow.yml` under `tiers:`. Per-spec override via `tier_ceiling:` in `specs/<feature>/config.yml`.
+
+**Hard rules force ≥`medium`:** auth, crypto, secrets, DB migrations, public API contract changes, cross-service interactions. Encoded in inferencer rubric.
+
+**Tier breach:** `/implement` step 0 runs `scripts/tier-check.sh <feature>`. Exit 9 → user picks `Continue` (acknowledge, proceed) or `Abort` (run `/promote-tier <feature>` — re-runs propose at next tier, preserves implemented tasks).
+
+Loader exports: `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, `WF_TIER_AGENT_SKIP` (see `scripts/config-loader.contract.md`).
+
+Monitor events: `tier_inferred`, `tier_approved`, `tier_breach`, `tier_promoted`, `validate_impl_skipped`.
+
+## Bug-Fix Flow (/fix)
+
+Standalone command for production bugs/regressions. Skips `/explore` and `/propose` entirely. Artifact: `specs/fixes/<slug>/fix.md` (frontmatter `type: fix`, sections: Repro, Root Cause, Fix Plan, Regression Test).
+
+Flow: `/fix <slug>` → BDD repro → spawn `ultrathink-debugger` for root cause → write `fix.md` → capture pre-fix test failure → apply fix → regression test must pass → lint + ground-rule-matched gates (skip Phase-2 agent gates by default unless diff touches auth/crypto/migrations) → `/ship` (PR title prefix `fix:`).
+
+No `design.md`, no `test-strategy`, no `/validate-spec`, no `/validate-impl`, no tier system. Use `task-manager.sh init-fix <slug>` to scaffold the artifact.
+
+Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
+
 ## Key Design Decisions
 
 - `/ship` is separate from `/implement` — commit/push/PR creation happens after validation

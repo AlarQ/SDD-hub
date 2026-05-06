@@ -42,6 +42,7 @@ If asked to read any of these, refuse immediately with: `FORBIDDEN: <filename> i
 Produce YAML matching this exact schema:
 
 ```yaml
+tier: small | medium | large    # required
 tags: [list of 1-5 relevant tags, each ^[a-zA-Z0-9_-]{1,32}$]
 gates:
   - <gate-id>          # each must exist in gates.yml
@@ -52,6 +53,28 @@ agents:
   validate:   [list of fully-qualified agent IDs]
   pr-review:  [list of fully-qualified agent IDs]
 ```
+
+### Tier Inference Rubric
+
+Pick the smallest tier that fits, then escalate on hard rules.
+
+| Tier | Heuristic |
+|------|-----------|
+| `small`  | ≤5 tasks, ≤10 files, in-place edit, single domain, no new public surface |
+| `medium` | ≤10 tasks, ≤30 files, may add new module within existing subsystem |
+| `large`  | new subsystem, multi-domain, public API, or anything above medium ceilings |
+
+**Hard rules — force ≥`medium`** (override any "small" heuristic):
+- Touches auth, crypto, secrets handling, or session/token storage
+- Database/schema migration
+- Public API contract change (request/response shape, REST routes, gRPC proto)
+- Cross-service interaction or new external integration
+
+**Hard rules — force `large`:**
+- New top-level module/subsystem
+- Architectural decision warranting an ADR (new persistence layer, framework swap, auth strategy change)
+
+If unsure between two tiers, pick the larger. Misclassifying small skips Phase-2 agent gates — security/compliance issues will not surface.
 
 ### ID Validation Rules
 
@@ -97,6 +120,7 @@ Agents selected: <phase: agents with reason>
 
 **Block 2 — Draft config (YAML fenced block):**
 ```yaml
+tier: <small|medium|large>
 tags: [...]
 gates:
   - ...
@@ -134,6 +158,7 @@ FALLBACK: Unable to infer config — <reason>. Manual entry required.
 
 Then emit a minimal default template:
 ```yaml
+tier: medium    # safe default in fallback — never small (would skip agent gates)
 tags: []
 gates: []
 agents:
@@ -147,8 +172,10 @@ agents:
 ## Monitor Events
 
 The caller (`/explore`) logs these events — you do not write them directly:
-- `config_inferred` — after you return your output
+- `config_inferred` — after you return your output (payload includes `tier`)
 - `config_approved` — after the user approves
+- `tier_inferred` — emitted with `{"tier":"<value>"}` immediately after parsing your YAML
+- `tier_approved` — emitted after user accepts the tier (or `/config` override)
 
 Your output (reasoning block + YAML block) is captured and included in the `config_inferred` event payload by the caller. Keep the reasoning block concise so the event remains readable.
 

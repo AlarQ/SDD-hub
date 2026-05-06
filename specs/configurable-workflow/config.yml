@@ -1,3 +1,4 @@
+tier: large
 tags: [shell, markdown, rust]
 gates:
   - rust-clippy

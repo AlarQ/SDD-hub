@@ -21,3 +21,14 @@
 
 # validate_scope: per-task
 #   Optional override of .workflow.yml validate_scope. ADR-007.
+
+# tier: small | medium | large
+#   Required. Inferred by config-inferencer at /explore step 0 (user-approved).
+#   Drives flow shape: small skips spec.md/design.md/test-strategy.md/validate-spec
+#   and skips Phase-2 agent gates + /validate-impl. medium skips design.md +
+#   test-strategy.md + validate-spec. large = full flow.
+
+# tier_ceiling:
+#   Optional per-spec override of .workflow.yml tiers.<tier> thresholds.
+#   tasks: <int|null>
+#   files: <int|null>

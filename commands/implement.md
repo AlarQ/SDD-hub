@@ -22,7 +22,24 @@ Before running any step, load the spec config (substituting the actual feature n
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_IMPLEMENT=%s\nWF_SPEC_CONFIG_FILE=%s\n" "${WF_SPEC_AGENTS_IMPLEMENT:-}" "${WF_SPEC_CONFIG_FILE:-}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents), `WF_SPEC_CONFIG_FILE` (snapshot source).
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents), `WF_SPEC_CONFIG_FILE` (snapshot source), `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`.
+
+### Tier-Ceiling Check (hard stop on breach)
+
+After `wf_load_config --spec $ARGUMENTS`, run:
+
+```bash
+bash ~/.claude/scripts/tier-check.sh $ARGUMENTS
+```
+
+- Exit `0` → continue.
+- Exit `9` → **HARD STOP**. The script printed `WF_TIER_BREACH=<tasks>:<files>` and `CEILING=<tc>:<fc>`. Show the user the actual vs ceiling and prompt via `AskUserQuestion`:
+  - **question:** "Spec exceeds `<tier>` tier ceiling (<actuals> vs <ceilings>). Continue or abort?"
+  - **options:**
+    - `Continue` — acknowledge breach, proceed at current tier (no re-propose). Emit `tier_breach` event with `{"resolution":"continue"}`.
+    - `Abort` — stop now. Print: "Run `/promote-tier $ARGUMENTS` to re-run propose at the next tier, then re-run `/implement $ARGUMENTS`."
+
+The `tier_breach` event was already emitted by `tier-check.sh`; the user's resolution is logged as a follow-up event with the same category.
 
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`

@@ -20,7 +20,8 @@ wf__warn() { echo "WARN: $*"  >&2; }
 wf__unset_partials() {
   unset WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL \
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
-        WF_SPEC_GATES WF_SPEC_HAS_CONFIG
+        WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
+        WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
   local v
   while IFS= read -r v; do [[ -n "$v" ]] && unset "$v"; done \
     < <(compgen -v | grep '^WF_SPEC_AGENTS_' || true)
@@ -276,8 +277,32 @@ wf_load_config() {
       WF_VALIDATE_SCOPE="$spec_scope"
     fi
 
+    # Tier resolution: spec config.yml `tier` (required) → ceilings from
+    # spec.tier_ceiling override else .workflow.yml tiers.<tier>.
+    local tier
+    tier="$(wf__json_get "$spec_json" '.tier' '')" || {
+      wf__err "$spec_cfg: tier extraction failed"; wf__unset_partials; return 5
+    }
+    case "$tier" in
+      small|medium|large) ;;
+      "") wf__err "$spec_cfg: tier required (small|medium|large). Re-run /explore step 0 or /config."; wf__unset_partials; return 4 ;;
+      *)  wf__err "$spec_cfg: tier invalid: '$tier' (expected: small, medium, large)"; wf__unset_partials; return 4 ;;
+    esac
+    WF_SPEC_TIER="$tier"
+
+    local tc fc as
+    tc="$(wf__json_get "$spec_json" ".tier_ceiling.tasks" '')"
+    fc="$(wf__json_get "$spec_json" ".tier_ceiling.files" '')"
+    [[ -z "$tc" ]] && tc="$(wf__json_get "$cfg_json" ".tiers.${tier}.tasks" '')"
+    [[ -z "$fc" ]] && fc="$(wf__json_get "$cfg_json" ".tiers.${tier}.files" '')"
+    as="$(printf '%s' "$cfg_json" | wf__timeout 5 yq e -r ".tiers.${tier}.agent_skip[]?" - 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')"
+    WF_TIER_TASK_CEILING="$tc"
+    WF_TIER_FILE_CEILING="$fc"
+    WF_TIER_AGENT_SKIP="$as"
+
     WF_SPEC_HAS_CONFIG=1
-    export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
+    export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
+           WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
   fi
 
   WF_CONFIG_LOADED=1
@@ -341,6 +366,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
       _wf_allowed_vars=(
         WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
+        WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
       )
       for var in "${_wf_allowed_vars[@]}"; do
         eval "[[ \"\${${var}+x}\" ]]" 2>/dev/null || continue

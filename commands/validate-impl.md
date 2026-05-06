@@ -25,7 +25,18 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$A
   "$WF_SPEC_GATES" "$WF_VALIDATE_SCOPE" "${WF_GATE_POOL:-}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_GATES`, `WF_VALIDATE_SCOPE`, `WF_GATE_POOL`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_GATES`, `WF_VALIDATE_SCOPE`, `WF_GATE_POOL`, `WF_SPEC_TIER`.
+
+### Tier early-exit
+
+If `WF_SPEC_TIER == small`, skip the entire Karen audit:
+
+```bash
+bash ~/.claude/scripts/monitor.sh log_event "$ARGUMENTS" validate_impl_skipped "" \
+  '{"reason":"tier_small"}'
+```
+
+Print: "Spec tier is `small` — `/validate-impl` skipped. Mark spec `done` directly and run `/ship`." Exit 0.
 
 ## Step 1 — Emit `spec_audit_start`
 

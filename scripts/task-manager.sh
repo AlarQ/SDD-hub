@@ -137,6 +137,7 @@ Commands:
                                   Auto-create a follow-up task from a spec-audit finding
   check-unvalidated <tasks-dir>  Check for tasks with status: implemented or review
   status <tasks-directory>       Show status dashboard with dependencies and health diagnostics
+  init-fix <slug>                Scaffold specs/fixes/<slug>/fix.md from template (used by /fix)
   help                           Show this help message
 EOF
 }
@@ -391,6 +392,32 @@ cmd_check_unvalidated() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 check_yq
 
+cmd_init_fix() {
+  local slug="${1:?Usage: task-manager.sh init-fix <slug>}"
+  [[ "$slug" =~ ^[a-z][a-z0-9-]{0,63}$ ]] || die "Invalid slug: $slug (expected ^[a-z][a-z0-9-]{0,63}$)"
+  # Resolve fixes dir under spec_storage. Source loader best-effort.
+  local storage="${WF_SPEC_STORAGE:-}"
+  if [[ -z "$storage" ]] && [[ -f "$HOME/.claude/scripts/config-loader.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME/.claude/scripts/config-loader.sh" 2>/dev/null
+    wf_load_config 2>/dev/null && storage="$WF_SPEC_STORAGE"
+  fi
+  [[ -n "$storage" ]] || die "Cannot resolve spec_storage (run /bootstrap)"
+  local dir="$storage/fixes/$slug"
+  mkdir -p "$dir"
+  local fix_file="$dir/fix.md"
+  if [[ -f "$fix_file" ]]; then
+    echo "EXISTS: $fix_file" >&2
+    return 0
+  fi
+  local tmpl="$HOME/.claude/templates/fix.md.template"
+  [[ -f "$tmpl" ]] || die "Template missing: $tmpl"
+  local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  sed -e "s|<SLUG>|$slug|g" -e "s|<ISO-8601>|$now|g" -e "s|<TEST_NAME>|TBD|g" \
+    "$tmpl" > "$fix_file"
+  echo "$fix_file"
+}
+
 case "${1:-help}" in
   validate)         shift; cmd_validate "$@" ;;
   set-status)       shift; cmd_set_status "$@" ;;
@@ -399,6 +426,7 @@ case "${1:-help}" in
   create-followup)  shift; cmd_create_followup "$@" ;;
   check-unvalidated) shift; cmd_check_unvalidated "$@" ;;
   status)           shift; cmd_status "$@" ;;
+  init-fix)         shift; cmd_init_fix "$@" ;;
   help|--help|-h)   usage ;;
   *)                die "Unknown command: $1. Run 'task-manager.sh help' for usage." ;;
 esac

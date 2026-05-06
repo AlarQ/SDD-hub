@@ -27,6 +27,10 @@ Idempotent: re-sourcing is a no-op unless `WF_RELOAD=1`.
 | `WF_SPEC_GATES` | newline-sep IDs | `--spec` only | Spec ceiling: gate IDs from `config.yml gates:`. May be empty. |
 | `WF_SPEC_HAS_CONFIG` | `1` | `--spec` only | Marker that per-spec config loaded. |
 | `WF_SPEC_AGENTS_<PHASE>` | space-sep IDs | `--spec` only | One per phase present in `config.yml agents:`. `<PHASE>` ∈ `EXPLORE`, `PROPOSE`, `IMPLEMENT`, `VALIDATE`, `PR_REVIEW`. Absent if phase not configured. |
+| `WF_SPEC_TIER` | enum | `--spec` only | `small` \| `medium` \| `large`. Required in `config.yml`; absence → exit 4. Drives flow shape. |
+| `WF_TIER_TASK_CEILING` | int or empty | `--spec` only | Task-count ceiling for this tier (per-spec `tier_ceiling.tasks` override → `.workflow.yml tiers.<tier>.tasks`). Empty = unbounded. |
+| `WF_TIER_FILE_CEILING` | int or empty | `--spec` only | File-count ceiling for this tier. Empty = unbounded. |
+| `WF_TIER_AGENT_SKIP` | space-sep IDs | `--spec` only | Agent gates to skip in `/validate` Phase 2 for this tier. Empty for medium/large by default. |
 
 All variables unset on any failure path (no partial state).
 
@@ -37,7 +41,7 @@ All variables unset on any failure path (no partial state).
 | 0 | success | — | — |
 | 2 | `.workflow.yml` missing, malformed, or has invalid `spec_storage`/`gate_pool`/`agent_pool`/`validate_scope` | `ERROR: .workflow.yml ...` | Run `/bootstrap`; or fix path/scope value. |
 | 3 | `gates.yml` malformed or has duplicate gate IDs | `ERROR: <pool>: malformed` / `duplicate gate ids: ...` | Fix `knowledge-base/gates.yml`. |
-| 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, or unresolved agent id | `ERROR: per-spec config missing: ...` etc. | Run `/config <feature>` or `/explore <feature>`; fix gate/agent ids in `specs/<f>/config.yml`. |
+| 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, unresolved agent id, or missing/invalid `tier` | `ERROR: per-spec config missing: ...` / `tier required (small\|medium\|large)` etc. | Run `/config <feature>` or `/explore <feature>`; fix gate/agent/tier in `specs/<f>/config.yml`. |
 | 5 | `yq` timeout (5s) or JSON extraction failure | `ERROR: <file>: yq timeout` | Retry; investigate filesystem/`yq` perf. |
 | 6 | `yq` not installed, or unknown loader argument | `ERROR: yq not installed` | `brew install yq`. |
 

@@ -30,8 +30,8 @@ Run from the dev-workflow repository root:
 ```
 
 This installs:
-- 13 slash commands to `~/.claude/commands/`:
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `review-findings`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`
+- Slash commands to `~/.claude/commands/`:
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-spec`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `promote-rules`, `fix`, `promote-tier`
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 - 35+ agent definitions to `~/.claude/agents/`
@@ -113,6 +113,10 @@ project-root/
 ## Workflow Walkthrough
 
 The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/continue-task`, `/quick-ship`, and `/research` available anytime). Each stage produces specific artifacts and has a clear next step.
+
+**Tier branching.** After `/explore` step 0 sets `tier:` in `config.yml`, the path forks: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl`; `medium` skips `/validate-spec`; `large` runs the full flow. See [Tiered specs](#tiered-specs).
+
+**`/fix` bypass.** Bug fixes use `/fix <slug>` and skip `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, and tiering. See [Bug-fix flow (`/fix`)](#bug-fix-flow-fix).
 
 ### Stage 0: `/bootstrap` (once per project)
 
@@ -331,6 +335,54 @@ gh pr create --base main --head feat/<name>
 ```
 
 This is the full feature review — all task branches have been merged into the integration branch.
+
+## Tiered specs
+
+Specs are tiered to right-size flow ceremony — `/explore` → `/propose` → `/implement` is too heavy for trivial changes. Tier is inferred at `/explore` step 0 by `engineering-config-inferencer`, approved by the user (single key), and written to `specs/<feature>/config.yml` as `tier:`.
+
+| Tier | Threshold (defaults) | Flow shape |
+|------|----------------------|------------|
+| `small`  | ≤5 tasks, ≤10 files | `/propose` writes tasks/ only (skip spec.md, design.md, test-strategy.md). Skip `/validate-spec`. `/validate` runs lint+tests only — Phase-2 agent gates are skipped per `WF_TIER_AGENT_SKIP`. Skip `/validate-impl` Karen audit. |
+| `medium` | ≤10 tasks, ≤30 files | `/propose` writes spec.md + tasks/ (skip design.md + test-strategy.md). Skip `/validate-spec`. Full per-task gates. `/validate-impl` runs. |
+| `large`  | unbounded            | Full unchanged flow. |
+
+Defaults live in `.workflow.yml` under `tiers:`. Per-spec override via `tier_ceiling:` in `specs/<feature>/config.yml`.
+
+**Hard rules force ≥`medium`:** auth, crypto, secrets, DB migrations, public API contract changes, cross-service interactions. Encoded in the inferencer rubric — these never tier as `small`.
+
+**Tier breach.** `/implement` step 0 runs `scripts/tier-check.sh <feature>`. Exit 9 → user picks:
+- `Continue` — acknowledge, proceed at current tier.
+- `Abort` — run `/promote-tier <feature>`. Re-runs `/propose` at next tier (`small → medium`, `medium → large`) for remaining scope only; `done`/`implemented` tasks are preserved.
+
+Loader exports `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, `WF_TIER_AGENT_SKIP` (canonical contract: `scripts/config-loader.contract.md`). Monitor events: `tier_inferred`, `tier_approved`, `tier_breach`, `tier_promoted`, `validate_impl_skipped`.
+
+## Bug-fix flow (`/fix`)
+
+Standalone command for production bugs, regressions, and hotfixes. Skips `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, and the tier system entirely.
+
+**When to use vs the feature flow.** Use `/fix` when there is a known broken behavior to repro and patch. Use the feature flow when scope is open-ended or design choices remain.
+
+**Artifact.** `specs/fixes/<slug>/fix.md` (frontmatter `type: fix`). Sections:
+- **Repro** — BDD `Given / When / Then-broken`.
+- **Root Cause** — written from `ultrathink-debugger` output.
+- **Fix Plan** — minimal change set.
+- **Regression Test** — pre-fix must fail; post-fix must pass.
+
+Scaffold via `task-manager.sh init-fix <slug>`.
+
+**Step list.**
+1. BDD repro captured into `fix.md`.
+2. Spawn `ultrathink-debugger` for root cause.
+3. Write `fix.md` (Root Cause + Fix Plan + Regression Test).
+4. Pre-fix test must fail (recorded).
+5. Apply fix.
+6. Regression test must pass.
+7. Lint + ground-rule-matched gates run. Phase-2 agent gates are skipped by default unless the diff touches auth/crypto/migrations.
+8. `/ship` with PR title prefix `fix:`.
+
+**Not run:** `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants `/promote-rules`).
+
+Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 
 ## Task Lifecycle
 
@@ -589,3 +641,5 @@ gh pr create --base main --head feat/<feature>
 | `/continue-task <name>` | Resume interrupted work | Active task in `specs/<name>/tasks/` |
 | `/quick-ship` | Ship without workflow | Git repo with changes |
 | `/research` | Bug investigation, API review | None |
+| `/fix <slug>` | Production bug / regression / hotfix | `.workflow.yml`, git repo |
+| `/promote-tier <name>` | After tier-breach abort at `/implement` step 0 | `specs/<name>/config.yml` with current tier < `large` |
