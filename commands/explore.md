@@ -89,6 +89,18 @@ If monitor.sh is not found or exits non-zero, log a warning and continue — eve
 Event summary:
 - `config_inferred` — fires in step 0b immediately after the agent returns output (before user sees approval summary)
 - `config_approved` — fires in step 0e after config.yml is written (A, E, or M paths only; S path emits nothing)
+- `tier_inferred` — fires in step 0b alongside `config_inferred`, payload `{"tier":"<value>"}` extracted from agent YAML
+- `tier_approved` — fires in step 0e alongside `config_approved`, payload `{"tier":"<final value>"}`
+
+### 0f. Tier — required field
+
+The agent's YAML must include `tier: small|medium|large`. If the YAML lacks `tier`, treat as agent error and route to manual entry. The tier drives downstream flow shape:
+
+- `small` → `/propose` writes only `tasks/`. `/validate-spec` early-exits. `/validate` skips Phase-2 agent gates listed in `WF_TIER_AGENT_SKIP`. `/validate-impl` early-exits.
+- `medium` → `/propose` writes `spec.md` + `tasks/` (no `design.md`/`test-strategy.md`). `/validate-spec` audits `spec.md` only.
+- `large` → unchanged full flow.
+
+If the agent picked `small` and the spec keywords include `auth`, `security`, `migration`, `api`, `schema`, or `crypto`, override to `medium` and note the override in reasoning. The user can override via `Edit` path.
 
 ## Steps
 1. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) to understand available ground rules

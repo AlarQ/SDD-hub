@@ -1,0 +1,35 @@
+---
+type: fix
+slug: <SLUG>
+status: in-progress
+regression_test: <TEST_NAME>
+created: <ISO-8601>
+---
+
+# Fix: <SLUG>
+
+## Repro
+
+**Given** <preconditions>
+**When** <action>
+**Then (broken)** <observed>
+**Then (expected)** <expected>
+
+## Root Cause
+
+<one paragraph: function + file + line + why-it-breaks. Output of ultrathink-debugger.>
+
+Affected files:
+- `<path>`
+- `<path>`
+
+## Fix Plan
+
+<paragraph: minimal change. Diff hint optional.>
+
+## Regression Test
+
+- Name: `<TEST_NAME>`
+- Location: `<path>`
+- Pre-fix behavior: **must fail** (captured in `pre-fix.log`)
+- Post-fix behavior: must pass

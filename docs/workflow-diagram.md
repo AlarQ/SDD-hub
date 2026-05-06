@@ -19,6 +19,8 @@ When the last task in a spec transitions to `done`, `task-manager.sh` emits a `s
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
+`/explore` step 0 sets `WF_SPEC_TIER` (`small | medium | large`). Tier forks the flow: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl`; `medium` skips `/validate-spec`; `large` is the unchanged full flow. `/implement` step 0 runs `tier-check.sh`; on breach (exit 9) the user picks `Continue` (proceed) or `Abort` → `/promote-tier` → re-runs `/propose` at the next tier (preserved `done`/`implemented` tasks remain).
+
 ```mermaid
 graph LR
     subgraph Setup["One-time setup"]
@@ -27,9 +29,12 @@ graph LR
 
     subgraph Core["Core spec-driven flow"]
         EXP["/explore"]
+        TIER{WF_SPEC_TIER}
         PROP["/propose"]
         VSPEC_PRE["/validate-spec"]
         IMPL["/implement"]
+        TCHK{tier-check.sh}
+        PROMO["/promote-tier"]
         VAL["/validate"]
         REV["/review-findings"]
         LEARN["/learn-from-reports"]
@@ -51,19 +56,27 @@ graph LR
     end
 
     BOOT -.-> EXP
-    EXP -.-> PROP
-    PROP --> VSPEC_PRE
+    EXP --> TIER
+    TIER -->|small / medium / large| PROP
+    PROP -->|small: skip| IMPL
+    PROP -->|medium / large| VSPEC_PRE
     VSPEC_PRE -->|findings| REV
     VSPEC_PRE -->|pass| IMPL
-    IMPL --> VAL
+    IMPL --> TCHK
+    TCHK -->|no breach| VAL
+    TCHK -.->|breach: Continue| VAL
+    TCHK -.->|breach: Abort| PROMO
+    PROMO -.-> PROP
     VAL -->|findings| REV
     VAL -->|zero findings| LEARN
+    VAL -.->|small: lint+tests only| LEARN
     VAL -.->|scope=per-spec: skip| LEARN
     REV -->|re-validate| VAL
     REV -->|skip| LEARN
     LEARN --> SHIP
     SHIP -.->|PR merged| IMPL
-    SHIP -.->|last task done| VIMPL
+    SHIP -.->|medium/large: last task done| VIMPL
+    SHIP -.->|small: skip audit| Core
     VIMPL --> KAREN
     KAREN --> VIMPL
     VIMPL -->|verdict=complete| Core
@@ -77,6 +90,22 @@ graph LR
     CONT -.-> SHIP
     STAT -.-> Core
     PRR -.-> SHIP
+```
+
+### `/fix` — bug-fix flow
+
+Standalone entry. Bypasses `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, and the tier system. Artifact: `specs/fixes/<slug>/fix.md`.
+
+```mermaid
+graph LR
+    FIX["/fix &lt;slug&gt;"] --> REPRO[BDD repro]
+    REPRO --> UD[ultrathink-debugger]
+    UD --> FIXMD[write fix.md<br/>Root Cause + Fix Plan + Regression Test]
+    FIXMD --> PRE[pre-fix test<br/>must FAIL]
+    PRE --> APPLY[apply fix]
+    APPLY --> POST[regression test<br/>must PASS]
+    POST --> GATES[lint + ground-rule-matched gates<br/>Phase-2 agents skipped unless<br/>auth/crypto/migrations in diff]
+    GATES --> SH["/ship (PR title: fix:)"]
 ```
 
 ---

@@ -64,6 +64,8 @@ After computing the effective set above and before step 4 below, branch on `WF_V
 
 Spawn agents **in parallel** to analyze code against knowledge-base rules. Agent list comes from `WF_SPEC_AGENTS_VALIDATE` (space-separated IDs loaded in Step 0). If `WF_SPEC_AGENTS_VALIDATE` is empty, skip Phase 2 entirely (no advisory agents for this spec).
 
+**Tier-based skip:** Before spawning, filter the agent list against `WF_TIER_AGENT_SKIP` (space-separated). For each skipped agent, emit a `gate_skip` event with `{"agent":"<id>","reason":"tier_skip","tier":"<WF_SPEC_TIER>"}`. By default `small` tier skips `security`, `code-quality`, `architecture`, `compliance` — leaving lint + tests + any deterministic gates only. If the resulting list is empty after filtering, skip Phase 2 entirely.
+
 Each spawned agent receives:
 - The task file path and changed files (from `estimated_files` or git diff)
 - All `ground_rules` files referenced in the task (per `knowledge-base-rules.md`)

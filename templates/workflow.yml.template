@@ -15,3 +15,13 @@
 # validate_scope: per-task
 #   One of: per-task, per-spec, both. Governs when /validate runs gates.
 #   See ADR-007.
+
+# tiers:
+#   Spec-tier ceiling thresholds and per-tier behavior. Drives flow shape
+#   (spec.md/design.md/test-strategy.md skip rules, agent-gate skip on /validate,
+#   /validate-impl skip, file/task ceilings checked at /implement step 0).
+#   Defaults shown.
+# tiers:
+#   small:  { tasks: 5,  files: 10, agent_skip: [security, code-quality, architecture, compliance] }
+#   medium: { tasks: 10, files: 30, agent_skip: [] }
+#   large:  { tasks: null, files: null, agent_skip: [] }

@@ -13,9 +13,23 @@ Before generating any artifact, load the spec config (substituting the actual fe
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PROPOSE=%s\n" "${WF_SPEC_AGENTS_PROPOSE:-}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_PROPOSE`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_PROPOSE`, `WF_SPEC_TIER`.
 
 If `WF_SPEC_AGENTS_PROPOSE` is non-empty, it lists the agent IDs to spawn during spec/design generation (overrides the default keyword-based conditional list below). Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
+
+### Tier branching (artifact ceiling)
+
+`WF_SPEC_TIER` controls which artifacts get written:
+
+| Tier | spec.md | design.md | test-strategy.md | tasks/ | Architect/Backend/UX/UI/AI/TestStrategist agents |
+|------|---------|-----------|------------------|--------|--------------------------------------------------|
+| `small`  | skip | skip | skip | yes  | skip all |
+| `medium` | yes  | skip | skip | yes  | skip Software Architect, Backend Architect, UX/UI, AI Engineer, Test Strategist |
+| `large`  | yes  | yes  | yes  | yes  | full set per default keyword logic |
+
+Branch on `WF_SPEC_TIER` at the top of the generation loop. For sections "skipped" do NOT spawn the corresponding agent and do NOT write the file.
+
+For `small`, the only generated artifact is `tasks/001-*.md` (decompose directly from prd.md/conversation context). Keep ground_rules minimal — language file + any explicitly relevant general rule.
 
 ## Steps
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context

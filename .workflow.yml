@@ -2,3 +2,17 @@ spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
 agent_pool: ~/.claude/agents
 validate_scope: per-task
+
+tiers:
+  small:
+    tasks: 5
+    files: 10
+    agent_skip: [security, code-quality, architecture, compliance]
+  medium:
+    tasks: 10
+    files: 30
+    agent_skip: []
+  large:
+    tasks: null
+    files: null
+    agent_skip: []
