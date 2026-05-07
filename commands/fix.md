@@ -49,8 +49,20 @@ slug: <slug>
 status: in-progress
 regression_test: <test-name>
 created: <ISO-8601>
+repo: <name>           # required only if WF_SPEC_STORAGE_MODE=vault — must be in default_repos[]
 ---
 ```
+
+In vault mode (`WF_SPEC_STORAGE_MODE=vault` from Step 0's `wf_load_config`), refuse if `repo:` is missing. Fixes are spec-less, so `wf_load_config --spec` does not apply — resolve against `default_repos[]` from `.workflow.yml`:
+
+```bash
+WF_TASK_REPO_PATH="$(yq -r ".default_repos[] | select(.name == \"$repo\") | .path" "$WF_CONFIG_FILE" | head -1)"
+[[ -z "$WF_TASK_REPO_PATH" || "$WF_TASK_REPO_PATH" == "null" ]] && { echo "ERROR: repo '$repo' not in .workflow.yml default_repos[]" >&2; exit 1; }
+WF_TASK_REPO_PATH="${WF_TASK_REPO_PATH/#\~/$HOME}"
+git -C "$WF_TASK_REPO_PATH" rev-parse --show-toplevel >/dev/null || { echo "ERROR: $WF_TASK_REPO_PATH is not a git work tree" >&2; exit 1; }
+```
+
+All git ops, regression-test execution, lint, and ship steps below run inside `WF_TASK_REPO_PATH` (use `git -C "$WF_TASK_REPO_PATH" …`). Single-repo mode: `WF_TASK_REPO_PATH="$WF_REPO_ROOT"`.
 
 Sections: `## Repro`, `## Root Cause`, `## Fix Plan`, `## Regression Test`.
 

@@ -384,6 +384,20 @@ Scaffold via `task-manager.sh init-fix <slug>`.
 
 Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 
+## Multi-repo specs (vault mode)
+
+When specs live in a master-brain Obsidian vault and span multiple code repos (e.g. frontend + backend), use `spec_storage_mode: vault` in the vault's `.workflow.yml`. Per-spec `config.yml` declares `repos[]` (logical name → absolute path → role). Loader exports `WF_REPO_NAMES` + `WF_REPO_PATHS` and validates each is a git work tree (exit 7 on failure).
+
+**Setup.** Run `/bootstrap` from inside the vault directory (which must not itself be a git repo). Pick `vault` mode and add bindings (`name`, `path`, `role`) for each code repo. Default bindings land in `default_repos[]` and pre-populate every new spec's `repos[]`.
+
+**Per-task `repo:` field.** Hard rule: one task = one repo. `task-manager.sh validate` enforces membership in `repos[].name`. Cross-repo work splits into sibling tasks under the same spec. `repo:<name>:` ground-rule prefix references that repo's `knowledge-base/`. Each command (`/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`) resolves `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and runs git/gates/PR creation inside that path.
+
+**Gate filter.** Gates may set `applies_to_repos: [<name>, …]` to restrict to specific repos (e.g. `eslint` only on `frontend`). Default = applies everywhere.
+
+**`/quick-ship`** in vault mode requires `--repo <name>`. **`/validate-impl`** runs Odium with per-repo diff sections.
+
+Monitor events: `repo_bound`, `repo_missing`, `gate_repo_switch`.
+
 ## Task Lifecycle
 
 ### State machine

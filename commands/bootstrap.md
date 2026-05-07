@@ -5,6 +5,28 @@ Accepts optional flags as `$ARGUMENTS`: `--force` to overwrite existing `.workfl
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` — check general KB prerequisite only (project KB doesn't exist yet, this command creates it)
 
+## Step A0 — Pick storage mode (vault vs repo)
+
+Before writing `.workflow.yml`, ask via `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`):
+
+- **question:** "Where do specs live for this project?"
+- **options:**
+  - `repo` — specs/ live in this git repo (single-repo flow, default)
+  - `vault` — specs/ live in this directory (e.g. master-brain Obsidian vault) and bind one or more external git repos for code
+
+If the user picks `vault`:
+1. Confirm `pwd` is **not** a git work tree (vault mode is incompatible with running from inside a code repo). If it is, refuse: "Vault mode requires running from a non-repo directory. cd to your vault and re-run `/bootstrap`."
+2. Loop with `AskUserQuestion` to collect repo bindings — for each: `name` (kebab-case), `path` (absolute or `~`-prefixed), `role` (free text, e.g. `frontend`, `backend`, `ops`). Stop the loop when the user picks `Done`.
+3. For each entry: verify `path` resolves to a git work tree (`git -C "<path>" rev-parse --show-toplevel`). Refuse the entry on failure.
+4. Hold the bindings to write into `.workflow.yml` `default_repos:` in Step A.
+5. Emit `repo_bound` per accepted entry:
+   ```bash
+   bash "$HOME/.claude/scripts/monitor.sh" log_event "_bootstrap" repo_bound "" \
+     "$(printf '{"repo":"%s","path":"%s","role":"%s"}' "$name" "$path" "$role")"
+   ```
+
+Persist the chosen mode in memory for Step A as `STORAGE_MODE` (`repo` or `vault`).
+
 ## Step A — Write `.workflow.yml`
 
 1. Check if `.workflow.yml` already exists at repo root.
@@ -19,10 +41,13 @@ Accepts optional flags as `$ARGUMENTS`: `--force` to overwrite existing `.workfl
 3. (fresh path) Verify `$(pwd)/.workflow.yml` is not a symlink (`[[ ! -L .workflow.yml ]]`). If it is, refuse: same error as above.
 
 4. Write `.workflow.yml` from `~/.claude/templates/workflow.yml.template`. Touch **only** `.workflow.yml` — no other files.
+   - If `STORAGE_MODE=vault`: set `spec_storage_mode: vault` and `default_repos:` to the bindings collected in A0. Otherwise leave both fields commented (defaults to `repo`).
 
 5. Report: "Wrote .workflow.yml" (or "Updated .workflow.yml" for --force/--repair).
 
 ## Step B — Write project knowledge-base
+
+If `STORAGE_MODE=vault`: skip Step B entirely. The vault directory does not host a project KB; each bound repo keeps its own `knowledge-base/` (created by running `/bootstrap` inside that repo). Print: "Vault mode — skipping project KB. Run `/bootstrap` inside each bound repo to create its `knowledge-base/`."
 
 1. Check if `knowledge-base/` already exists — if yes, skip to Step B6 (do not overwrite).
 2. Read `~/.claude/knowledge-base/_index.md`. Summarize to the user which categories and topics are already covered by the general KB (security, architecture, testing, style, documentation, code-review, any language files). Keep this list in context for all subsequent steps — do not create project rules that duplicate these topics.

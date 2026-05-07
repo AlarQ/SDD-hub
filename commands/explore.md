@@ -26,6 +26,8 @@ If `$ARGUMENTS` is non-empty (feature name provided), spawn the `Config Inferenc
 - The full contents of `knowledge-base/gates.yml` (if it exists)
 - A listing of all agent files under the configured `agent_pool` directory
 - The project's `CLAUDE.md`
+- `WF_SPEC_STORAGE_MODE` value (`repo` or `vault`)
+- When `WF_SPEC_STORAGE_MODE=vault`: the `default_repos[]` block from `.workflow.yml`. Path verification already ran in the loader (exit 7 on bad path) so the inferencer can trust the entries — it only decides which subset the spec needs.
 
 Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block."
 

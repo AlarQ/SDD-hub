@@ -68,6 +68,14 @@ Helper semantics (see `scripts/validate-impl.sh`, which delegates ceiling/effect
 4. **Blocking gate non-zero exit** → helper stdout = `reopen`. Captured log is passed to `wf_vi_build_prompt` as `extra_evidence`; Odium is **still** spawned, but its verdict is overridden to `reopen` in Step 4.
 5. **Non-blocking gate failure** → recorded in `gate_log` but does not force `reopen`.
 
+### Multi-repo handling (vault mode)
+
+When `WF_REPO_NAMES` is non-empty, Steps 2–3 fan out **per repo** instead of using a single `merge-base main feat/$ARGUMENTS..HEAD` range:
+
+- Spec-union (Step 2) is computed once for the spec, then each gate runs **once per repo** that has at least one task assigned (filter tasks by `repo:` field). Diff range per repo: `git -C "$(wf_repo_path <name>)" diff $(git -C "$(wf_repo_path <name>)" merge-base main feat/$ARGUMENTS)..HEAD`. Gate output is labeled with the repo name in `gate_log`.
+- The Odium prompt (Step 3) embeds **per-repo diff sections**, each labeled `### Repo: <name> (<path>)` followed by that repo's diff. Tasks are grouped by repo in the task list. Ground-rule resolution preserves `repo:<name>:` prefixes.
+- A gate failure in any repo forces `verdict=reopen` (same as single-repo case). The `extra_evidence` log includes which repo failed.
+
 ## Step 3 — Build Odium Wrapper Prompt
 
 ```bash

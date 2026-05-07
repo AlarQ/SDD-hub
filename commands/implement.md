@@ -41,12 +41,16 @@ bash ~/.claude/scripts/tier-check.sh $ARGUMENTS
 
 The `tier_breach` event was already emitted by `tier-check.sh`; the user's resolution is logged as a follow-up event with the same category.
 
+### Multi-repo task resolution
+
+After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/multi-repo-resolution.md`. This sets `WF_TASK_REPO_PATH` (= repo root for single-repo flow, or the bound repo's path for vault flow). All subsequent `git` and edit operations in this command run against `WF_TASK_REPO_PATH`. Use `git -C "$WF_TASK_REPO_PATH" <cmd>` form throughout — every `git ...` invocation in the steps below is implicitly scoped that way.
+
 ## Steps
 1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> in-progress`
 2. Set monitor context: run `~/.claude/scripts/monitor.sh set_context $ARGUMENTS <task-id>` (replace `<task-id>` with the numeric ID from the prerequisite step, e.g. `001`)
-3. Ensure the feature integration branch exists: `feat/$ARGUMENTS` (create from `main` if first task and push to remote: `git push -u origin feat/$ARGUMENTS`)
-4. Pull latest feature branch: `git checkout feat/$ARGUMENTS && git pull`
-5. Check if task branch already exists: `git rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`
+3. Ensure the feature integration branch exists in the task repo: `git -C "$WF_TASK_REPO_PATH" rev-parse --verify feat/$ARGUMENTS` (create from `main` and push: `git -C "$WF_TASK_REPO_PATH" push -u origin feat/$ARGUMENTS` if first task in this repo)
+4. Pull latest feature branch: `git -C "$WF_TASK_REPO_PATH" checkout feat/$ARGUMENTS && git -C "$WF_TASK_REPO_PATH" pull`
+5. Check if task branch already exists: `git -C "$WF_TASK_REPO_PATH" rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`
    - If it exists, ask the user: "Task branch `feat/$ARGUMENTS/{task-id}-{task-name}` already exists (likely from a previous aborted attempt). Delete it and start fresh, or continue on the existing branch?"
    - If starting fresh: delete the branch (`git branch -D feat/$ARGUMENTS/{task-id}-{task-name}`) and create a new one
    - If continuing: checkout the existing branch and proceed
@@ -85,7 +89,7 @@ The `tier_breach` event was already emitted by `tier-check.sh`; the user's resol
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), spawn the implement-phase agents from `WF_SPEC_AGENTS_IMPLEMENT` for a pre-validation sanity check. If `WF_SPEC_AGENTS_IMPLEMENT` is empty, skip this step. If it contains `code-quality-pragmatist` or any advisory agent, spawn it using the Agent tool. The spawned agent(s) receive:
-- All changed files (`git diff --name-only --diff-filter=ACMR feat/$ARGUMENTS...HEAD`)
+- All changed files (`git -C "$WF_TASK_REPO_PATH" diff --name-only --diff-filter=ACMR feat/$ARGUMENTS...HEAD`)
 - The task file (scope, ground rules)
 - The project's `CLAUDE.md`
 

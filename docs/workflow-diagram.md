@@ -25,6 +25,12 @@ Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and 
 graph LR
     subgraph Setup["One-time setup"]
         BOOT["/bootstrap"]
+        STORAGE{spec_storage_mode}
+        REPO_MODE["repo<br/>specs in repo"]
+        VAULT_MODE["vault<br/>specs in vault<br/>+ default_repos[]"]
+        BOOT --> STORAGE
+        STORAGE -->|repo| REPO_MODE
+        STORAGE -->|vault| VAULT_MODE
     end
 
     subgraph Core["Core spec-driven flow"]
@@ -209,6 +215,14 @@ graph TB
         PR[task PR → feat/$FEATURE]
     end
 
+    subgraph MultiRepo["Vault mode (spec_storage_mode=vault)"]
+        REPOS[config.yml repos[]]
+        TASK_REPO[task.repo: name]
+        WTRP[WF_TASK_REPO_PATH]
+        REPOS --> TASK_REPO
+        TASK_REPO --> WTRP
+    end
+
     subgraph Monitor
         CTX[.monitor-context]
         JSONL[specs/$FEATURE/.monitor.jsonl]
@@ -242,6 +256,9 @@ graph TB
     SNAP -.->|drift check| SH
     SH --> PR
     PR --> FEAT
+    WTRP -.->|git -C scoped| IM
+    WTRP -.->|gates cd into| VA
+    WTRP -.->|gh pr in this repo only| SH
 ```
 
 ---
@@ -389,7 +406,8 @@ Notes:
 - **All-gates** — all 5 validation gates must pass before `done`
 - **Dual KB** — general (`~/.claude/knowledge-base/`) + project (`knowledge-base/`), project overrides general
 - **One PR per task** — target is `feat/$FEATURE`, not `main`
-- **Ground rules prefix** — `general:...` / `project:...` / unprefixed defaults to project
+- **Ground rules prefix** — `general:...` / `project:...` / `repo:<name>:...` (vault mode) / unprefixed defaults to project
+- **Multi-repo (vault mode)** — `spec_storage_mode: vault` + per-spec `repos[]`. One task = one repo (`repo:` field). Each command resolves `WF_TASK_REPO_PATH` and runs git/gates inside it. PR opens in that repo's remote only.
 - **No YAML edits** — all status changes via `task-manager.sh`
 - **No bypass** — PreToolUse hook blocks `--no-verify` / `--no-gpg-sign`
 

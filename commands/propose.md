@@ -31,6 +31,14 @@ Branch on `WF_SPEC_TIER` at the top of the generation loop. For sections "skippe
 
 For `small`, the only generated artifact is `tasks/001-*.md` (decompose directly from prd.md/conversation context). Keep ground_rules minimal — language file + any explicitly relevant general rule.
 
+### Multi-repo branching
+
+If `WF_REPO_NAMES` is non-empty (loaded by Step 0 via `wf_load_config --spec`):
+- Each generated task **must** declare a `repo: <name>` frontmatter field where `<name>` is one of `WF_REPO_NAMES`.
+- Hard rule: one task = one repo. If a logical chunk of work spans repos, split into sibling tasks (e.g. `001-api-endpoint` with `repo: backend` + `002-ui-form` with `repo: frontend`) sharing the spec.
+- The Senior Project Manager agent receives `WF_REPO_NAMES` + `WF_REPO_PATHS` and must emit per-task repo assignments using path heuristics (file paths under each repo's tree, role hints from `repos[].role`). Architect/Backend/UX agents each receive the path of the repo they advise on so file references resolve.
+- When a `repo:<name>:` ground-rules prefix appears, ensure `<name>` is in `WF_REPO_NAMES` (loader rejects unknown names at validate time).
+
 ## Steps
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context
 2. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) — identify all applicable rules from both

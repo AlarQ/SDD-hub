@@ -23,6 +23,12 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 
 If `WF_SPEC_AGENTS_PR_REVIEW` is non-empty, spawn those agent IDs instead of the default `engineering-code-reviewer`. Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
 
+### Multi-repo resolution
+
+After Step 0, resolve the task's bound repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH`. Code Reviewer (and any agent in `WF_SPEC_AGENTS_PR_REVIEW`) receives `WF_TASK_REPO_PATH` plus the diff scoped to that repo (`git -C "$WF_TASK_REPO_PATH" diff <base>...HEAD`). All `gh pr` calls run from inside `WF_TASK_REPO_PATH` so they target the right remote.
+
+If the task identification step fell back to "most recent shipped task", read its `repo:` field from the task file before proceeding.
+
 ## Phase 1: Agent-Powered Code Review
 
 Spawn the agent(s) from `WF_SPEC_AGENTS_PR_REVIEW` (if non-empty) or fall back to the default `Code Reviewer` agent (`engineering-code-reviewer`) when the list is empty. The agent(s) receive:
