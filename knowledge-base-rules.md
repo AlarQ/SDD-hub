@@ -13,7 +13,8 @@ When resolving `ground_rules` paths referenced in task files, use these prefixes
 
 - `general:` — resolves to `~/.claude/knowledge-base/` (e.g., `general:security/general.md`)
 - `project:` — resolves to `knowledge-base/` (e.g., `project:languages/rust.md`)
-- Unprefixed paths default to `project:` for backward compatibility
+- `repo:<name>:` — resolves to `<bound-repo-path>/knowledge-base/` (e.g., `repo:frontend:languages/ts.md`). `<name>` must match a `repos[].name` entry in `specs/<feature>/config.yml`.
+- Unprefixed paths default to `project:` for backward compatibility (single-repo flow only).
 
 ### Resolution Examples
 
@@ -21,16 +22,18 @@ When resolving `ground_rules` paths referenced in task files, use these prefixes
 |---|---|
 | `general:security/general.md` | `~/.claude/knowledge-base/security/general.md` |
 | `project:languages/rust.md` | `knowledge-base/languages/rust.md` |
+| `repo:frontend:languages/ts.md` | `<repos[name=frontend].path>/knowledge-base/languages/ts.md` |
 | `languages/go.md` (unprefixed) | `knowledge-base/languages/go.md` |
 
-## Reading Both Knowledge Bases
+## Reading Knowledge Bases
 
-To identify applicable rules, read both index files:
+To identify applicable rules, read every applicable index file:
 
 - `~/.claude/knowledge-base/_index.md` — general rules (security, architecture, testing, style)
-- `knowledge-base/_index.md` — project-specific rules (languages, conventions)
+- `knowledge-base/_index.md` — project-specific rules (languages, conventions). Skipped under `spec_storage_mode: vault` (no project KB lives next to the vault).
+- For each entry in the spec's `repos[]`: `<repos[i].path>/knowledge-base/_index.md` — repo-specific rules. Multi-repo specs union all of these.
 
-Project rules override general rules on the same topic.
+Project (or repo-specific) rules override general rules on the same topic. Repo-specific rules apply only to tasks whose `repo:` field matches that binding.
 
 ## Important Rules
 

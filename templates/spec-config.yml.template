@@ -32,3 +32,18 @@
 #   Optional per-spec override of .workflow.yml tiers.<tier> thresholds.
 #   tasks: <int|null>
 #   files: <int|null>
+
+# repos: []
+#   Multi-repo binding. Required when .workflow.yml spec_storage_mode=vault.
+#   Each entry binds a logical name to a checked-out git repo. Tasks pick
+#   one via the task-frontmatter `repo:` field. Loader expands `~`, validates
+#   each path is a git working tree (loader exit 7 on failure).
+#   Example:
+#     repos:
+#       - name: frontend
+#         path: ~/Desktop/projects/foo-web
+#         role: frontend
+#       - name: backend
+#         path: ~/Desktop/projects/foo-api
+#         role: backend
+#   Hard rule: one task = one repo. Cross-repo work splits into sibling tasks.
