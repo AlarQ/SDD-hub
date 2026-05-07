@@ -306,6 +306,146 @@ test_loader_spec_gates_shape_well_formed() {
          done <<<"$WF_SPEC_GATES" )
 }
 
+# --- vault-CWD fallback tests ---
+
+# Build a vault dir + N code repos. Args: number of repos, primary index (-1 for none).
+# Echoes "<vault>|<repo0_path>|<repo1_path>|..." for the test to consume.
+mk_vault() {
+  local n_repos="${1:-1}" primary_idx="${2:--1}"
+  local vault="$TEST_TMPDIR/vault"
+  mkdir -p "$vault/specs/demo/tasks"
+  local vault_real; vault_real="$(realpath -- "$vault")"
+
+  local repos_yaml="" i repo repo_real role_line
+  for ((i = 0; i < n_repos; i++)); do
+    local repo="$TEST_TMPDIR/repo$i"
+    mkdir -p "$repo/knowledge-base" "$repo/agent_pool"
+    repo_real="$(realpath -- "$repo")"
+    cat > "$repo/.workflow.yml" <<EOF
+spec_storage: $vault_real/specs
+gate_pool: knowledge-base/gates.yml
+agent_pool: agent_pool
+validate_scope: per-task
+spec_storage_mode: vault
+EOF
+    cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
+    : > "$repo/agent_pool/code-quality-pragmatist.md"
+    ( cd "$repo" && git init -q && git -c user.email=t@t -c user.name=t add -A \
+        && git -c user.email=t@t -c user.name=t commit -q -m init ) >/dev/null 2>&1 || true
+
+    role_line=""
+    [[ "$primary_idx" == "$i" ]] && role_line="    role: primary"
+    repos_yaml+="$(printf '  - name: repo%d\n    path: %s\n%s\n' "$i" "$repo_real" "$role_line")"
+    repos_yaml+=$'\n'
+  done
+
+  cat > "$vault/specs/demo/config.yml" <<EOF
+tier: small
+gates:
+  - rust-clippy
+agents:
+  validate:
+    - code-quality-pragmatist
+repos:
+$repos_yaml
+EOF
+
+  local out="$vault"
+  for ((i = 0; i < n_repos; i++)); do out+="|$TEST_TMPDIR/repo$i"; done
+  printf '%s' "$out"
+}
+
+test_vault_cwd_with_spec_resolves_primary_repo() {
+  require_yq || return 0
+  local info vault r0 r1
+  info="$(mk_vault 2 1)"
+  IFS='|' read -r vault r0 r1 <<<"$info"
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_REPO_ROOT" == "$(realpath -- "$r1")" ]] \
+      && [[ "$WF_VAULT_ROOT" == "$(realpath -- "$vault")" ]] \
+      && [[ "$WF_SPEC_HAS_CONFIG" == "1" ]] )
+}
+
+test_vault_cwd_no_role_picks_first() {
+  require_yq || return 0
+  local info vault r0 r1
+  info="$(mk_vault 2 -1)"
+  IFS='|' read -r vault r0 r1 <<<"$info"
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_REPO_ROOT" == "$(realpath -- "$r0")" ]] )
+}
+
+test_vault_cwd_no_spec_arg_fails_2() {
+  require_yq || return 0
+  local info vault
+  info="$(mk_vault 1 0)"
+  IFS='|' read -r vault _ <<<"$info"
+  local rc=0
+  ( cd "$vault" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "2" ]]
+}
+
+test_vault_cwd_spec_config_missing_fails_2() {
+  local empty="$TEST_TMPDIR/empty-vault"
+  mkdir -p "$empty"
+  local rc=0
+  ( cd "$empty" && source "$LOADER" && wf_load_config --spec demo ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "2" ]]
+}
+
+test_vault_cwd_repos_empty_fails_4() {
+  require_yq || return 0
+  local vault="$TEST_TMPDIR/vault-empty"
+  mkdir -p "$vault/specs/demo"
+  cat > "$vault/specs/demo/config.yml" <<EOF
+tier: small
+repos: []
+EOF
+  local rc=0
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "4" ]]
+}
+
+test_vault_cwd_repo_path_invalid_fails_7() {
+  require_yq || return 0
+  local vault="$TEST_TMPDIR/vault-bad"
+  mkdir -p "$vault/specs/demo"
+  cat > "$vault/specs/demo/config.yml" <<EOF
+tier: small
+repos:
+  - name: ghost
+    path: $TEST_TMPDIR/does-not-exist
+    role: primary
+EOF
+  local rc=0
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "7" ]]
+}
+
+test_vault_cwd_storage_mismatch_warns() {
+  require_yq || return 0
+  # Build vault + repo, but rewrite repo's spec_storage to point outside vault.
+  local info vault r0
+  info="$(mk_vault 1 0)"
+  IFS='|' read -r vault r0 <<<"$info"
+  local outside="$TEST_TMPDIR/outside-specs"
+  mkdir -p "$outside"
+  local outside_real; outside_real="$(realpath -- "$outside")"
+  sed -i.bak "s|spec_storage:.*|spec_storage: $outside_real|" "$r0/.workflow.yml"
+  # spec re-discovery via WF_SPEC_STORAGE will fail (no demo/config.yml there) — exit 4 is expected.
+  # But we only assert the WARN: line precedes the failure.
+  local err rc=0
+  err="$(cd "$vault" && source "$LOADER"; wf_load_config --spec demo 2>&1 1>/dev/null)" || rc=$?
+  grep -q "lies outside vault CWD" <<<"$err"
+}
+
+test_repo_cwd_unchanged_no_vault_root() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  ( cd "$repo" && source "$LOADER" && wf_load_config \
+      && [[ -z "${WF_VAULT_ROOT:-}" ]] )
+}
+
 echo "=== test-config-loader.sh ==="
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
@@ -331,6 +471,14 @@ run_test "validate_scope=disabled exits 2 and names enum in error" test_loader_v
 run_test "validate_scope documented in both templates" test_loader_validate_scope_templates_documented
 run_test "grep guard: no script has inline source of config-loader.sh" test_loader_no_script_has_inline_source_of_config_loader
 run_test "WF_SPEC_GATES shape: newline-sep, regex-valid, no leading/trailing NL" test_loader_spec_gates_shape_well_formed
+run_test "vault CWD with --spec resolves primary repo" test_vault_cwd_with_spec_resolves_primary_repo
+run_test "vault CWD with no role picks first repo"      test_vault_cwd_no_role_picks_first
+run_test "vault CWD without --spec fails exit 2"        test_vault_cwd_no_spec_arg_fails_2
+run_test "vault CWD with no specs/<f>/config.yml fails exit 2" test_vault_cwd_spec_config_missing_fails_2
+run_test "vault CWD with empty repos[] fails exit 4"    test_vault_cwd_repos_empty_fails_4
+run_test "vault CWD with bad repo path fails exit 7"    test_vault_cwd_repo_path_invalid_fails_7
+run_test "vault CWD warns when chosen repo spec_storage outside vault" test_vault_cwd_storage_mismatch_warns
+run_test "repo CWD unchanged: WF_VAULT_ROOT unset"      test_repo_cwd_unchanged_no_vault_root
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

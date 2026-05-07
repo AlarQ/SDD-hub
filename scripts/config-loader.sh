@@ -22,7 +22,7 @@ wf__unset_partials() {
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS
+        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
   local v
   while IFS= read -r v; do [[ -n "$v" ]] && unset "$v"; done \
     < <(compgen -v | grep '^WF_SPEC_AGENTS_' || true)
@@ -112,11 +112,62 @@ wf_load_config() {
     printf '%s' "$path"
   }
 
-  local root
+  local root vault_cfg=""
   if ! root="$(find_workflow_root "$PWD" 2>/dev/null)"; then
-    wf__err ".workflow.yml not found walking up from $PWD. Run /bootstrap to create it."
-    wf__unset_partials
-    return 2
+    # Vault-CWD fallback: when CWD has no `.workflow.yml` but holds
+    # `specs/<feature>/config.yml` (master-brain vault layout), derive
+    # WF_REPO_ROOT from one of the spec's `repos[]` entries.
+    if [[ -z "$spec" ]]; then
+      wf__err ".workflow.yml not found walking up from $PWD. Run /bootstrap to create it."
+      wf__unset_partials
+      return 2
+    fi
+    if ! vault_cfg="$(find_vault_spec_config "$spec" "$PWD" 2>/dev/null)"; then
+      wf__err ".workflow.yml not found walking up from $PWD, and no vault spec config at $PWD/specs/$spec/config.yml. Run /bootstrap or /explore $spec."
+      wf__unset_partials
+      return 2
+    fi
+    local vault_root vault_json vault_repos_count chosen_idx="" chosen_path="" chosen_role="" i_role i_path rc=0
+    vault_root="$(realpath -- "$PWD" 2>/dev/null)" || {
+      wf__err "vault root unresolvable: $PWD"; wf__unset_partials; return 2
+    }
+    vault_json="$(wf__yq_json "$vault_cfg")"; rc=$?
+    case "$rc" in
+      0) ;;
+      124) wf__err "$vault_cfg: yq timeout"; wf__unset_partials; return 5 ;;
+      90)  wf__unset_partials; return 6 ;;
+      *)   wf__err "$vault_cfg: malformed"; wf__unset_partials; return 4 ;;
+    esac
+    vault_repos_count="$(printf '%s' "$vault_json" | wf__timeout 5 yq e -r '(.repos // []) | length' - 2>/dev/null || echo 0)"
+    [[ "$vault_repos_count" =~ ^[0-9]+$ ]] || vault_repos_count=0
+    if [[ "$vault_repos_count" -eq 0 ]]; then
+      wf__err "$vault_cfg: repos[] required for vault-CWD invocation"
+      wf__unset_partials; return 4
+    fi
+    local vi
+    for ((vi = 0; vi < vault_repos_count; vi++)); do
+      i_role="$(printf '%s' "$vault_json" | wf__timeout 5 yq e -r ".repos[$vi].role // \"\"" - 2>/dev/null)"
+      if [[ "$i_role" == "primary" ]]; then chosen_idx="$vi"; chosen_role="primary"; break; fi
+    done
+    [[ -z "$chosen_idx" ]] && chosen_idx=0
+    i_path="$(printf '%s' "$vault_json" | wf__timeout 5 yq e -r ".repos[$chosen_idx].path // \"\"" - 2>/dev/null)"
+    [[ -n "$i_path" ]] || { wf__err "$vault_cfg: repos[$chosen_idx].path missing"; wf__unset_partials; return 7; }
+    [[ "$i_path" == *".."* ]] && { wf__err "$vault_cfg: repos[$chosen_idx].path has '..': $i_path"; wf__unset_partials; return 7; }
+    case "$i_path" in
+      "~"|"~/"*) chosen_path="${HOME}${i_path:1}" ;;
+      /*)        chosen_path="$i_path" ;;
+      *)         chosen_path="$vault_root/$i_path" ;;
+    esac
+    chosen_path="$(realpath -- "$chosen_path" 2>/dev/null)" || {
+      wf__err "$vault_cfg: repos[$chosen_idx] path unresolvable: $i_path"
+      wf__unset_partials; return 7
+    }
+    [[ -d "$chosen_path" && -f "$chosen_path/.workflow.yml" ]] || {
+      wf__err "$vault_cfg: repos[$chosen_idx] missing .workflow.yml: $chosen_path"
+      wf__unset_partials; return 7
+    }
+    WF_VAULT_ROOT="$vault_root"
+    root="$chosen_path"
   fi
   WF_REPO_ROOT="$root"
   WF_CONFIG_FILE="$root/.workflow.yml"
@@ -153,6 +204,12 @@ wf_load_config() {
     wf__unset_partials; return 2
   }
   WF_SPEC_STORAGE="$storage_abs"
+
+  if [[ -n "${WF_VAULT_ROOT:-}" ]]; then
+    if [[ "$storage_abs" != "$WF_VAULT_ROOT" && "$storage_abs" != "$WF_VAULT_ROOT"/* ]]; then
+      wf__warn "chosen repo's spec_storage ($storage_abs) lies outside vault CWD ($WF_VAULT_ROOT); vault-found spec config may not be re-discoverable via spec_storage."
+    fi
+  fi
 
   raw="$(wf__json_get "$cfg_json" '.gate_pool' 'knowledge-base/gates.yml')" || {
     wf__err "$WF_CONFIG_FILE: gate_pool extraction failed"; wf__unset_partials; return 5
@@ -410,6 +467,7 @@ wf_load_config() {
   WF_CONFIG_LOADED=1
   export WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL \
          WF_AGENT_POOL WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_STORAGE_MODE
+  [[ -n "${WF_VAULT_ROOT:-}" ]] && export WF_VAULT_ROOT
   return 0
 }
 
@@ -502,7 +560,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
-        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS
+        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
       )
       for var in "${_wf_allowed_vars[@]}"; do
         eval "[[ \"\${${var}+x}\" ]]" 2>/dev/null || continue
