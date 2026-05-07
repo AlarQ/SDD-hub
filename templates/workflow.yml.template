@@ -25,3 +25,16 @@
 #   small:  { tasks: 5,  files: 10, agent_skip: [security, code-quality, architecture, compliance] }
 #   medium: { tasks: 10, files: 30, agent_skip: [] }
 #   large:  { tasks: null, files: null, agent_skip: [] }
+
+# spec_storage_mode: repo
+#   One of: repo, vault.
+#   - repo  — specs/ live inside the same git repo as code. Single-repo flow.
+#   - vault — specs/ live in a vault (e.g. master-brain Obsidian vault) and
+#             each spec binds one or more code repos via repos[] in the
+#             per-spec config.yml. Multi-repo flow.
+
+# default_repos: []
+#   Optional list of repo bindings prefilled by /bootstrap when
+#   spec_storage_mode=vault. Each entry: { name: <id>, path: <abs|~>, role: <free> }.
+#   Used as the default for repos[] on new specs; per-spec config.yml may
+#   override or extend.

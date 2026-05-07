@@ -21,7 +21,8 @@ wf__unset_partials() {
   unset WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL \
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
-        WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
+        WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
+        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS
   local v
   while IFS= read -r v; do [[ -n "$v" ]] && unset "$v"; done \
     < <(compgen -v | grep '^WF_SPEC_AGENTS_' || true)
@@ -173,6 +174,17 @@ wf_load_config() {
   }
   WF_VALIDATE_SCOPE="$scope"
 
+  local storage_mode
+  storage_mode="$(wf__json_get "$cfg_json" '.spec_storage_mode' 'repo')" || {
+    wf__err "$WF_CONFIG_FILE: spec_storage_mode extraction failed"; wf__unset_partials; return 5
+  }
+  case "$storage_mode" in
+    repo|vault) ;;
+    *) wf__err "$WF_CONFIG_FILE: spec_storage_mode invalid: '$storage_mode' (expected: repo, vault)"
+       wf__unset_partials; return 2 ;;
+  esac
+  WF_SPEC_STORAGE_MODE="$storage_mode"
+
   # gates.yml parse
   local gates_json
   gates_json="$(wf__yq_json "$WF_GATE_POOL")"; rc=$?
@@ -300,15 +312,94 @@ wf_load_config() {
     WF_TIER_FILE_CEILING="$fc"
     WF_TIER_AGENT_SKIP="$as"
 
+    # repos[] — multi-repo binding (optional under spec_storage_mode=repo,
+    # required under vault). Validate each path is a git work tree.
+    local repos_count name path role abs_path names_acc="" paths_acc=""
+    repos_count="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r '(.repos // []) | length' - 2>/dev/null || echo 0)"
+    [[ "$repos_count" =~ ^[0-9]+$ ]] || repos_count=0
+    if [[ "$WF_SPEC_STORAGE_MODE" == "vault" && "$repos_count" -eq 0 ]]; then
+      wf__err "$spec_cfg: repos[] required when spec_storage_mode=vault"
+      wf__unset_partials; return 4
+    fi
+    local i
+    for ((i = 0; i < repos_count; i++)); do
+      name="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r ".repos[$i].name // \"\"" - 2>/dev/null)"
+      path="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r ".repos[$i].path // \"\"" - 2>/dev/null)"
+      role="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r ".repos[$i].role // \"\"" - 2>/dev/null)"
+      [[ -n "$name" ]] || { wf__err "$spec_cfg: repos[$i].name missing"; wf__unset_partials; return 4; }
+      [[ "$name" =~ ^[a-z0-9][a-z0-9_-]{0,31}$ ]] || {
+        wf__err "$spec_cfg: repos[$i].name invalid: '$name' (expected ^[a-z0-9][a-z0-9_-]{0,31}$)"
+        wf__unset_partials; return 4
+      }
+      [[ -n "$path" ]] || { wf__err "$spec_cfg: repos[$i].path missing"; wf__unset_partials; return 7; }
+      [[ "$path" == *".."* ]] && { wf__err "$spec_cfg: repos[$i].path has '..': $path"; wf__unset_partials; return 7; }
+      case "$path" in
+        "~"|"~/"*) abs_path="${HOME}${path:1}" ;;
+        /*)        abs_path="$path" ;;
+        *)         abs_path="$WF_REPO_ROOT/$path" ;;
+      esac
+      abs_path="$(realpath_safe "$abs_path" 2>/dev/null)" || {
+        wf__err "$spec_cfg: repos[$i] ($name) unresolvable: $path"; wf__unset_partials; return 7
+      }
+      [[ -d "$abs_path" ]] || {
+        wf__err "$spec_cfg: repos[$i] ($name) not a directory: $abs_path"; wf__unset_partials; return 7
+      }
+      git -C "$abs_path" rev-parse --show-toplevel >/dev/null 2>&1 || {
+        wf__err "$spec_cfg: repos[$i] ($name) not a git repo: $abs_path"; wf__unset_partials; return 7
+      }
+      # Duplicate-name check
+      if grep -Fxq -- "$name" <<<"$names_acc" 2>/dev/null; then
+        wf__err "$spec_cfg: repos[] duplicate name: $name"; wf__unset_partials; return 4
+      fi
+      names_acc+="${names_acc:+$'\n'}$name"
+      paths_acc+="${paths_acc:+$'\n'}$abs_path"
+    done
+    WF_REPO_NAMES="$names_acc"
+    WF_REPO_PATHS="$paths_acc"
+
     WF_SPEC_HAS_CONFIG=1
     export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
-           WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
+           WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
+           WF_REPO_NAMES WF_REPO_PATHS
   fi
 
   WF_CONFIG_LOADED=1
   export WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL \
-         WF_AGENT_POOL WF_CONFIG_FILE WF_VALIDATE_SCOPE
+         WF_AGENT_POOL WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_STORAGE_MODE
   return 0
+}
+
+# wf_repo_path <name> — print abs path of bound repo by logical name. rc 1 if unknown.
+# Requires WF_REPO_NAMES / WF_REPO_PATHS populated (i.e. wf_load_config --spec ran
+# against a spec config.yml that declared repos[]).
+wf_repo_path() {
+  local want="${1:-}" n p
+  [[ -n "$want" ]] || { wf__err "wf_repo_path: name required"; return 1; }
+  [[ -n "${WF_REPO_NAMES:-}" ]] || { wf__err "wf_repo_path: no repos bound (load with --spec)"; return 1; }
+  local -a names paths
+  while IFS= read -r n; do names+=("$n"); done <<<"$WF_REPO_NAMES"
+  while IFS= read -r p; do paths+=("$p"); done <<<"$WF_REPO_PATHS"
+  local i
+  for i in "${!names[@]}"; do
+    [[ "${names[$i]}" == "$want" ]] && { printf '%s' "${paths[$i]}"; return 0; }
+  done
+  wf__err "wf_repo_path: unknown repo name: $want (known: $(echo "$WF_REPO_NAMES" | tr '\n' ' '))"
+  return 1
+}
+
+# wf_for_each_repo <fn> — invoke <fn> NAME PATH for each bound repo.
+# <fn> may be any shell function or external command. Stops on first non-zero.
+wf_for_each_repo() {
+  local fn="${1:-}" n p
+  [[ -n "$fn" ]] || { wf__err "wf_for_each_repo: fn required"; return 1; }
+  [[ -n "${WF_REPO_NAMES:-}" ]] || return 0
+  local -a names paths
+  while IFS= read -r n; do names+=("$n"); done <<<"$WF_REPO_NAMES"
+  while IFS= read -r p; do paths+=("$p"); done <<<"$WF_REPO_PATHS"
+  local i rc
+  for i in "${!names[@]}"; do
+    "$fn" "${names[$i]}" "${paths[$i]}" || { rc=$?; return "$rc"; }
+  done
 }
 
 # _wf_snapshot_json
@@ -367,6 +458,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
+        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS
       )
       for var in "${_wf_allowed_vars[@]}"; do
         eval "[[ \"\${${var}+x}\" ]]" 2>/dev/null || continue

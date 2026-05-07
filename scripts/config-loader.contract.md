@@ -31,6 +31,9 @@ Idempotent: re-sourcing is a no-op unless `WF_RELOAD=1`.
 | `WF_TIER_TASK_CEILING` | int or empty | `--spec` only | Task-count ceiling for this tier (per-spec `tier_ceiling.tasks` override → `.workflow.yml tiers.<tier>.tasks`). Empty = unbounded. |
 | `WF_TIER_FILE_CEILING` | int or empty | `--spec` only | File-count ceiling for this tier. Empty = unbounded. |
 | `WF_TIER_AGENT_SKIP` | space-sep IDs | `--spec` only | Agent gates to skip in `/validate` Phase 2 for this tier. Empty for medium/large by default. |
+| `WF_SPEC_STORAGE_MODE` | enum | always | `repo` (default) \| `vault`. `vault` = specs live outside any code repo (e.g. master-brain Obsidian) and bind code repos via per-spec `repos[]`. |
+| `WF_REPO_NAMES` | newline-sep names | `--spec` only, when `repos[]` declared | Logical repo names from per-spec `config.yml repos[]`. Parallel to `WF_REPO_PATHS`. Empty when spec declares none. |
+| `WF_REPO_PATHS` | newline-sep abs paths | `--spec` only, when `repos[]` declared | Absolute repo paths matching `WF_REPO_NAMES` (same index). Each verified to be a git work tree at load time. |
 
 All variables unset on any failure path (no partial state).
 
@@ -44,6 +47,7 @@ All variables unset on any failure path (no partial state).
 | 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, unresolved agent id, or missing/invalid `tier` | `ERROR: per-spec config missing: ...` / `tier required (small\|medium\|large)` etc. | Run `/config <feature>` or `/explore <feature>`; fix gate/agent/tier in `specs/<f>/config.yml`. |
 | 5 | `yq` timeout (5s) or JSON extraction failure | `ERROR: <file>: yq timeout` | Retry; investigate filesystem/`yq` perf. |
 | 6 | `yq` not installed, or unknown loader argument | `ERROR: yq not installed` | `brew install yq`. |
+| 7 | per-spec `repos[]` entry has missing/invalid path, escapes via `..`, points at non-directory, or target is not a git work tree | `ERROR: <spec.yml>: repos[i] (<name>) ...` | Fix `path:` in `specs/<f>/config.yml`; ensure repo cloned and is a git work tree. |
 
 Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `gates.yml` modifications) without failing.
 
@@ -55,6 +59,8 @@ Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `gates.yml` modi
 
 - `wf_write_snapshot <outfile>` — JSON snapshot of `WF_SPEC_GATES` + all `WF_SPEC_AGENTS_*`. Used by `/implement` Step 0.
 - `wf_check_snapshot_drift <snapfile>` — compares current env to snapshot; `SNAPSHOT_OK` (rc 0) or `SNAPSHOT_DRIFT` (rc 1). Silent rc 0 if snapfile absent.
+- `wf_repo_path <name>` — print absolute path of bound repo by logical name. Returns rc 1 if `name` is unknown or no repos bound. Requires loader called with `--spec`.
+- `wf_for_each_repo <fn>` — invoke `<fn> NAME PATH` for each entry in `WF_REPO_NAMES`/`WF_REPO_PATHS`. Stops on first non-zero rc.
 
 ## Environment knobs
 

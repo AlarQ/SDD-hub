@@ -66,11 +66,24 @@ emit_transition_event() {
   if ctx="$(read_context 2>/dev/null)"; then
     mon_feature="$(echo "$ctx" | head -1)"
     [[ -n "$mon_feature" ]] || return 0
-    log_event "$mon_feature" "task_transition" "$task_id" \
-      "$(printf '{"from_status":"%s","to_status":"%s","task_file":"%s"}' \
+    local repo_field
+    repo_field=$(read_frontmatter "$task_file" '.repo' 2>/dev/null || echo "null")
+    [[ "$repo_field" == "null" ]] && repo_field=""
+    local payload
+    if [[ -n "$repo_field" ]]; then
+      payload=$(printf '{"from_status":"%s","to_status":"%s","task_file":"%s","repo":"%s"}' \
         "$(escape_json_string "$from_status")" \
         "$(escape_json_string "$to_status")" \
-        "$(escape_json_string "$task_file")")" || echo "WARN: monitor event emission failed" >&2
+        "$(escape_json_string "$task_file")" \
+        "$(escape_json_string "$repo_field")")
+    else
+      payload=$(printf '{"from_status":"%s","to_status":"%s","task_file":"%s"}' \
+        "$(escape_json_string "$from_status")" \
+        "$(escape_json_string "$to_status")" \
+        "$(escape_json_string "$task_file")")
+    fi
+    log_event "$mon_feature" "task_transition" "$task_id" "$payload" \
+      || echo "WARN: monitor event emission failed" >&2
   fi
 }
 
@@ -175,6 +188,29 @@ resolve_ground_rule_path() {
   case "$prefixed_path" in
     general:*) echo "$GENERAL_KB_BASE/${prefixed_path#general:}" ;;
     project:*) echo "$project_kb/${prefixed_path#project:}" ;;
+    repo:*)
+      # repo:<name>:<rel-path> — resolves under that bound repo's knowledge-base/
+      local rest="${prefixed_path#repo:}" repo_name="${rest%%:*}" rel="${rest#*:}"
+      local repo_root=""
+      if command -v wf_repo_path >/dev/null 2>&1; then
+        repo_root="$(wf_repo_path "$repo_name" 2>/dev/null || true)"
+      fi
+      if [[ -z "$repo_root" ]]; then
+        # Best-effort: search WF_REPO_NAMES / WF_REPO_PATHS directly
+        if [[ -n "${WF_REPO_NAMES:-}" && -n "${WF_REPO_PATHS:-}" ]]; then
+          local _i=0 _n
+          while IFS= read -r _n; do
+            if [[ "$_n" == "$repo_name" ]]; then
+              repo_root="$(printf '%s\n' "$WF_REPO_PATHS" | sed -n "$((_i+1))p")"
+              break
+            fi
+            _i=$((_i + 1))
+          done <<<"$WF_REPO_NAMES"
+        fi
+      fi
+      [[ -n "$repo_root" ]] || { echo "/dev/null/unresolved-repo:$repo_name"; return 0; }
+      echo "$repo_root/knowledge-base/$rel"
+      ;;
     *)         echo "$project_kb/$prefixed_path" ;;
   esac
 }
@@ -198,6 +234,28 @@ update_frontmatter() {
     echo "---"
     [ -n "$body" ] && printf '%s\n' "$body"
   } > "$file"
+}
+
+# Resolve the spec dir for a task file (parent of tasks/) and return its repo
+# name allowlist (newline-sep). Empty stdout means spec declares no repos[].
+_wf_tm_spec_repo_names() {
+  local task_file="$1" spec_cfg
+  spec_cfg="$(dirname "$(dirname "$task_file")")/config.yml"
+  [[ -f "$spec_cfg" ]] || return 0
+  _wf_yq e -r '(.repos // []) | .[].name' "$spec_cfg" 2>/dev/null || true
+}
+
+# If the task's spec declares repos[], require task.repo to be one of them.
+validate_repo_field() {
+  local file="$1" allowlist task_repo
+  allowlist="$(_wf_tm_spec_repo_names "$file")"
+  [[ -z "$allowlist" ]] && return 0
+  task_repo=$(read_frontmatter "$file" '.repo')
+  if [[ "$task_repo" == "null" || -z "$task_repo" ]]; then
+    die "Spec declares repos[]; task missing required field 'repo' in $file"
+  fi
+  grep -Fxq -- "$task_repo" <<<"$allowlist" || \
+    die "Task 'repo: $task_repo' not in spec repos[] allowlist [$(echo "$allowlist" | tr '\n' ' ')] in $file"
 }
 
 # Validate required scalar and array fields, status, and max_files.
@@ -255,6 +313,7 @@ cmd_validate() {
   [ "$delim_count" -lt 2 ] && die "Task file missing YAML frontmatter delimiters: $file"
   validate_required_fields "$file"
   validate_ground_rules "$file"
+  validate_repo_field "$file"
   local status
   status=$(read_frontmatter "$file" ".status")
   if [ "$status" = "blocked" ]; then
