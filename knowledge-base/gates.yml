@@ -1,1 +1,23 @@
+# Gate registry — canonical list of deterministic gates available to specs.
+# Each entry:
+#   id:               <slug>                 # unique; matches per-spec config.yml gates[]
+#   command:          "<shell command>"      # run from $WF_TASK_REPO_PATH
+#   applies_to:       [<ground-rule paths>]  # spec uses this gate iff at least one
+#                                            # task ground_rule matches one of these
+#   category:         security | code-quality | architecture | compliance | testing
+#   blocking:         true|false             # true = task cannot ship until pass
+#   applies_to_repos: [<name>, ...]          # OPTIONAL (vault mode). When set,
+#                                            # gate runs only for tasks whose
+#                                            # `repo:` is in this list. Default
+#                                            # (omitted) = applies to every repo.
+#                                            # Skipped gates emit `gate_skip` with
+#                                            # reason: "applies_to_repos".
+#
+# Example:
+#   - id: ts-lint
+#     command: "npx eslint --max-warnings 0 ."
+#     applies_to: ["project:languages/ts.md", "repo:frontend:languages/ts.md"]
+#     category: code-quality
+#     blocking: true
+#     applies_to_repos: [frontend]
 gates: []

@@ -17,14 +17,22 @@ If `WF_SPEC_STORAGE_MODE=vault`:
 1. Parse `$ARGUMENTS` for `--repo <name>` (any position). Strip the flag and value before treating the remainder as branch name / PR title. Refuse if `--repo` appears without a value.
 2. Without `--repo <name>`, refuse: "Vault config detected — pass `--repo <name>` to pick a bound repo (one of: $WF_REPO_NAMES)."
 3. Resolve `target_path="$(wf_repo_path "$name")"` — must succeed (loader exit 7 / function rc 1 on unknown).
-4. Vault `repos[]` lives in per-spec `config.yml`, not `.workflow.yml`. For `/quick-ship` (which is spec-less), resolve `<name>` against `default_repos[]` from `.workflow.yml` instead: `target_path="$(yq -r ".default_repos[] | select(.name == \"$name\") | .path" .workflow.yml | head -1)"`. Refuse if empty. Verify `git -C "$target_path" rev-parse --show-toplevel` succeeds.
+4. Vault `repos[]` lives in per-spec `config.yml`, not `.workflow.yml`. For `/quick-ship` (which is spec-less), resolve `<name>` against `default_repos[]` from `.workflow.yml`. Validate the name shape *before* feeding it into yq (no interpolation; use `strenv()`):
+   ```bash
+   [[ "$name" =~ ^[a-z0-9][a-z0-9_-]{0,31}$ ]] || { echo "ERROR: --repo name invalid" >&2; exit 1; }
+   target_path="$(name="$name" yq -r '.default_repos[] | select(.name == strenv(name)) | .path' "$WF_CONFIG_FILE" | head -1)"
+   [[ -z "$target_path" || "$target_path" == "null" ]] && { echo "ERROR: --repo '$name' not in .workflow.yml default_repos[]" >&2; exit 1; }
+   target_path="${target_path/#\~/$HOME}"
+   toplevel="$(git -C "$target_path" rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: $target_path not a git work tree" >&2; exit 1; }
+   [[ "$(cd "$target_path" && pwd -P)" == "$(cd "$toplevel" && pwd -P)" ]] || { echo "ERROR: $target_path is inside repo $toplevel, not the toplevel" >&2; exit 1; }
+   ```
 5. All subsequent `git` / `gh` ops in this command run as `git -C "$target_path"` and `(cd "$target_path" && gh ...)`.
 2. Check for shippable work (at least one must be true):
    - Staged changes exist
    - Unstaged changes exist
    - Unpushed commits on current branch
    - If none of the above, report "Nothing to ship" and stop
-3. Scan `git status` and `git diff --cached --name-only` for sensitive files (.env, .env.*, credentials*, secrets*, *-key.pem, *.key, *.p12) — if found, warn the user and ask whether to proceed
+3. Scan `git status` and `git diff --cached --name-only` for sensitive files (.env, .env.*, credentials*, secrets*, *-key.pem, *.key, *.p12). If any match, present them to the user via the `AskUserQuestion` tool with options "Abort" (default — recommended) and "Proceed anyway". Stop on Abort.
 
 ## Steps
 

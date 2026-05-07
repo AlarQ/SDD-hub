@@ -29,8 +29,13 @@ wf__unset_partials() {
 }
 
 # wf__yq_json <file> -> stdout JSON; rc: 0 ok, 124 timeout, 90 yq missing, other parse error
+# Emits a loud stderr line on missing yq so sourced callers that bypass
+# wf_load_config (or silence its stderr) still surface the problem.
 wf__yq_json() {
-  command -v yq >/dev/null 2>&1 || return 90
+  if ! command -v yq >/dev/null 2>&1; then
+    wf__err "yq not installed (required by config-loader.sh; brew install yq)"
+    return 90
+  fi
   wf__timeout 5 yq e -o=json '.' "$1" 2>/dev/null
 }
 
@@ -46,6 +51,10 @@ wf__resolve_path() {
 wf__json_get() {
   # wf__json_get <json> <yq-path> [default]
   local json="$1" path="$2" def="${3:-}"
+  if ! command -v yq >/dev/null 2>&1; then
+    wf__err "yq not installed (required by config-loader.sh; brew install yq)"
+    return 5
+  fi
   local out
   out="$(printf '%s' "$json" | wf__timeout 5 yq e -r "$path // \"__WF_NULL__\"" - 2>/dev/null)" || return 5
   [[ "$out" == "__WF_NULL__" ]] && out="$def"
@@ -344,8 +353,15 @@ wf_load_config() {
       [[ -d "$abs_path" ]] || {
         wf__err "$spec_cfg: repos[$i] ($name) not a directory: $abs_path"; wf__unset_partials; return 7
       }
-      git -C "$abs_path" rev-parse --show-toplevel >/dev/null 2>&1 || {
+      local _toplevel
+      _toplevel="$(git -C "$abs_path" rev-parse --show-toplevel 2>/dev/null)" || {
         wf__err "$spec_cfg: repos[$i] ($name) not a git repo: $abs_path"; wf__unset_partials; return 7
+      }
+      # Strict-equality: reject pointing at a subdirectory of a different repo.
+      _toplevel="$(realpath_safe "$_toplevel" 2>/dev/null)" || _toplevel=""
+      [[ "$abs_path" == "$_toplevel" ]] || {
+        wf__err "$spec_cfg: repos[$i] ($name) path is inside repo $_toplevel, not the toplevel: $abs_path"
+        wf__unset_partials; return 7
       }
       # Duplicate-name check
       if grep -Fxq -- "$name" <<<"$names_acc" 2>/dev/null; then
@@ -356,6 +372,34 @@ wf_load_config() {
     done
     WF_REPO_NAMES="$names_acc"
     WF_REPO_PATHS="$paths_acc"
+
+    # Ground-rules cross-check: every `repo:<name>:` prefix in spec task
+    # frontmatter must reference a name in WF_REPO_NAMES. Fail-closed here
+    # (instead of letting commands silently skip an unresolved KB rule at gate
+    # time). Skipped when no tasks/ dir yet (pre-/propose) or no repos[].
+    if [[ -n "$names_acc" ]]; then
+      local tasks_dir="$WF_SPEC_STORAGE/$spec/tasks"
+      if [[ -d "$tasks_dir" ]]; then
+        local bad_refs="" tf line ref refname
+        while IFS= read -r tf; do
+          # Extract first YAML frontmatter block (between leading --- and next ---).
+          while IFS= read -r line; do
+            # Match `repo:<name>:<rest>` tokens inside ground_rules entries.
+            [[ "$line" =~ repo:([a-z0-9][a-z0-9_-]{0,31}): ]] || continue
+            refname="${BASH_REMATCH[1]}"
+            grep -Fxq -- "$refname" <<<"$names_acc" && continue
+            ref="$(basename "$tf"):$refname"
+            grep -Fxq -- "$ref" <<<"$bad_refs" 2>/dev/null && continue
+            bad_refs+="${bad_refs:+$'\n'}$ref"
+          done < <(awk '/^---[[:space:]]*$/{c++; next} c==1' "$tf" 2>/dev/null)
+        done < <(find "$tasks_dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null)
+        if [[ -n "$bad_refs" ]]; then
+          wf__err "$spec_cfg: ground_rules reference unknown repo names (known: $(echo "$names_acc" | tr '\n' ' ')):"
+          while IFS= read -r ref; do wf__err "  $ref"; done <<<"$bad_refs"
+          wf__unset_partials; return 7
+        fi
+      fi
+    fi
 
     WF_SPEC_HAS_CONFIG=1
     export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG \

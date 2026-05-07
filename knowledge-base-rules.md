@@ -15,6 +15,7 @@ When resolving `ground_rules` paths referenced in task files, use these prefixes
 - `project:` — resolves to `knowledge-base/` (e.g., `project:languages/rust.md`)
 - `repo:<name>:` — resolves to `<bound-repo-path>/knowledge-base/` (e.g., `repo:frontend:languages/ts.md`). `<name>` must match a `repos[].name` entry in `specs/<feature>/config.yml`.
 - Unprefixed paths default to `project:` for backward compatibility (single-repo flow only).
+- **Vault mode (`spec_storage_mode: vault`):** bare `project:` (and unprefixed) paths are rejected. Specs hosted in a vault have no `knowledge-base/` next to them — every rule must come from `general:` or `repo:<name>:`. `task-manager.sh validate` enforces this at task-validation time.
 
 ### Resolution Examples
 
