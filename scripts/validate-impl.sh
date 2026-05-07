@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # validate-impl.sh — sourced helpers for the /validate-impl command (FR-15, ADR-008).
-# Builds the Karen wrapper prompt, persists the audit report, and emits monitor events.
+# Builds the Odium wrapper prompt, persists the audit report, and emits monitor events.
 # Depends on: config-loader.sh (caller sources it first), monitor.sh (sourced by helpers).
 # shellcheck disable=SC1090,SC1091
 
@@ -45,7 +45,7 @@ wf_vi_diff_range() {
 }
 
 # wf_vi_build_prompt <feature> <spec_dir> [extra_evidence_file]
-# -> stdout: full Karen wrapper prompt
+# -> stdout: full Odium wrapper prompt
 wf_vi_build_prompt() {
   local feature="$1" spec_dir="$2" extra="${3:-}"
   local spec_md="$spec_dir/spec.md" prd_md="$spec_dir/prd.md"

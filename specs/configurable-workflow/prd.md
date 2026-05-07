@@ -37,7 +37,7 @@ Externalize "which gates/agents run" and "where specs live" into config. LLM cur
 - Security: `realpath` + symlink rejection + absolute-or-`$HOME` requirement on `spec_storage`; `[a-zA-Z0-9_-]+` ID allowlist in every script that reads gate/agent IDs; `timeout 5 yq` on every parse; fail-closed on errors
 - Config loader caches yq reads (single parse per script invocation, exports env vars)
 - `validate_scope ∈ {per-task, per-spec, both}` — gate cadence control at repo default (`.workflow.yml`) with per-spec override; small features can skip per-task `/validate` and rely on the spec-completion audit
-- `/validate-impl` command — runs once when all spec tasks reach `done`; reuses existing **Karen** agent (`agents/karen.md`) via wrapper prompt; produces FR × status audit matrix and routes partial/missing findings through `/review-findings`
+- `/validate-impl` command — runs once when all spec tasks reach `done`; reuses existing **Odium** agent (`agents/odium.md`) via wrapper prompt; produces FR × status audit matrix and routes partial/missing findings through `/review-findings`
 - `task-manager.sh set-status done` — emits `spec_last_task_done` event when last task transitions; `/implement` auto-chain invokes `/validate-impl` in response
 
 **OUT**
@@ -64,8 +64,8 @@ Externalize "which gates/agents run" and "where specs live" into config. LLM cur
 - **Storage configurable** via `.workflow.yml`, default `specs/` in repo.
 - **Monitor path resolution + new event categories** both v1.
 - **Done specs untouched.** No migration.
-- **Gate cadence configurable, spec audit mandatory.** `validate_scope` lets users opt into per-task, per-spec, or both. Irrespective of cadence, a Karen-backed `/validate-impl` audit runs at last-task-done. ADR-007 / ADR-008.
-- **Karen reused for spec audit** — no new agent; wrapper prompt at call-site carries spec.md / prd.md / task list / diff range. ADR-008.
+- **Gate cadence configurable, spec audit mandatory.** `validate_scope` lets users opt into per-task, per-spec, or both. Irrespective of cadence, a Odium-backed `/validate-impl` audit runs at last-task-done. ADR-007 / ADR-008.
+- **Odium reused for spec audit** — no new agent; wrapper prompt at call-site carries spec.md / prd.md / task list / diff range. ADR-008.
 
 ## Config Schemas
 

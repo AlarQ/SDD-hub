@@ -18,7 +18,7 @@
 | `claude-md-compliance-checker` | `/validate` | New gate: compliance check against knowledge-base rules |
 | `engineering-security-engineer` | `/validate` | Run as the security LLM gate |
 | `ultrathink-debugger` | `/implement` | Spawn when implementation hits errors/failures |
-| `karen` | `/spec-status` or new `/reality-check` | Post-feature completion audit — verify tasks are actually done |
+| `odium` | `/spec-status` or new `/reality-check` | Post-feature completion audit — verify tasks are actually done |
 
 ### Tier 2 — Conditional/Domain-Specific
 
@@ -108,7 +108,7 @@ Spawn `engineering-software-architect` during design.md generation. It evaluates
 
 ### Phase 5: Reality Check Gate
 
-New command `/reality-check` (or integrate into `/spec-status`) using `karen` agent. Runs after all tasks are shipped — verifies the feature actually works end-to-end before merging the feature branch to main.
+New command `/reality-check` (or integrate into `/spec-status`) using `odium` agent. Runs after all tasks are shipped — verifies the feature actually works end-to-end before merging the feature branch to main.
 
 ### Phase 6: Conditional Agent Registry
 

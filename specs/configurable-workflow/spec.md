@@ -180,22 +180,22 @@ Semantics:
 
 Validation: enum allowlist. Unknown value → fail closed (loader exit 2). Missing field → `per-task`. Loader exports `WF_VALIDATE_SCOPE`.
 
-### FR-15: `/validate-impl` Command + Karen Wrapper
+### FR-15: `/validate-impl` Command + Odium Wrapper
 
-New `commands/validate-impl.md`. Runs once when all spec tasks reach `done`. Reuses existing **Karen agent** (`agents/karen.md`) unchanged — wrapper prompt at the call-site supplies spec-specific context.
+New `commands/validate-impl.md`. Runs once when all spec tasks reach `done`. Reuses existing **Odium agent** (`agents/odium.md`) unchanged — wrapper prompt at the call-site supplies spec-specific context.
 
 Steps:
 
 1. `source config-loader.sh --spec <feature>` → loads ceiling, scope, agents.
-2. If `validate_scope ∈ {per-spec, both}`: execute **union** of spec-eligible gates (FR-2 `applies_to` filter ∩ FR-3 spec ceiling) against the spec's cumulative diff (first task branch-point → HEAD). **Gate-failure path:** if any blocking gate in the union exits non-zero, the audit report verdict is forced to `reopen` AND Karen is still spawned — the wrapper prompt includes the failing-gate output as additional evidence alongside the Karen inputs in step 3. Non-blocking gate failures are recorded but do not force `reopen`.
-3. Spawn Karen with a wrapper prompt containing:
+2. If `validate_scope ∈ {per-spec, both}`: execute **union** of spec-eligible gates (FR-2 `applies_to` filter ∩ FR-3 spec ceiling) against the spec's cumulative diff (first task branch-point → HEAD). **Gate-failure path:** if any blocking gate in the union exits non-zero, the audit report verdict is forced to `reopen` AND Odium is still spawned — the wrapper prompt includes the failing-gate output as additional evidence alongside the Odium inputs in step 3. Non-blocking gate failures are recorded but do not force `reopen`.
+3. Spawn Odium with a wrapper prompt containing:
    - Parsed FR list from `specs/<feature>/spec.md` (every `### FR-N:` heading).
    - `specs/<feature>/prd.md` IN/OUT scope.
    - Task list with final statuses.
    - Report paths under `specs/<feature>/reports/`.
    - Git diff range (branch-point → HEAD).
    - Explicit instruction: produce an FR × status matrix (`implemented | partial | missing`), list orphan code not traceable to any FR, flag over-engineering.
-4. Write Karen's report to `specs/<feature>/reports/spec-audit-<ISO8601>.md`.
+4. Write Odium's report to `specs/<feature>/reports/spec-audit-<ISO8601>.md`.
 5. Emit `spec_audit_start` before, `spec_audit_done` after.
 6. Partial/missing findings route through `/review-findings` accept/reject. Accepted items spawn new `todo` tasks in the spec; rejected items can become project-KB rules.
 7. Clean audit → emit `spec_complete`, set spec frontmatter `status: shipped` in `specs/<feature>/spec.md`.
@@ -208,7 +208,7 @@ Steps:
 
 - Report location: `specs/<feature>/reports/spec-audit-<ISO8601>.md`. Schema: YAML frontmatter (`feature`, `timestamp`, `scope`, `verdict ∈ {complete, reopen}`), markdown body with FR matrix + orphan-code list + over-engineering flags.
 - `/review-findings` accepts a `spec-audit-*.md` report the same way it accepts per-task reports (`source: llm`). Accepted "missing FR" findings auto-create follow-up tasks via `task-manager.sh`; the task name references the FR ID and description. Rejected findings may become project-KB rules via the normal feedback loop.
-- Unknown FR references in Karen's output (e.g. `FR-99` when spec only declares FR-1..17) → fail closed; no task auto-created; error lists the unknown IDs.
+- Unknown FR references in Odium's output (e.g. `FR-99` when spec only declares FR-1..17) → fail closed; no task auto-created; error lists the unknown IDs.
 
 ## BDD Scenarios
 
@@ -391,31 +391,31 @@ Given a spec with three tasks, two already in status done and one in status impl
 When task-manager.sh set-status <last-task> done succeeds
 Then a spec_last_task_done event is emitted on the spec's .monitor.jsonl
 And /implement auto-chain invokes /validate-impl <feature>
-And Karen is spawned with a wrapper prompt containing spec.md FR list, prd.md scope, task list, and git diff range
+And Odium is spawned with a wrapper prompt containing spec.md FR list, prd.md scope, task list, and git diff range
 ```
 
-**Scenario: union gate failure forces reopen with Karen evidence**
+**Scenario: union gate failure forces reopen with Odium evidence**
 ```
 Given a spec with validate_scope ∈ {per-spec, both}
 And the union of spec-eligible gates includes at least one blocking gate
 When /validate-impl executes union gate execution
 And at least one blocking gate exits non-zero
 Then the audit report verdict is "reopen"
-And Karen is still spawned with the failing gate output embedded in the wrapper prompt as additional evidence
-And spec_audit_done is emitted after Karen completes
+And Odium is still spawned with the failing gate output embedded in the wrapper prompt as additional evidence
+And spec_audit_done is emitted after Odium completes
 And spec.md frontmatter status is NOT updated to shipped
 ```
 
 **Scenario: clean audit marks spec shipped**
 ```
-Given every FR in spec.md has corresponding implemented code traceable via Karen's matrix
+Given every FR in spec.md has corresponding implemented code traceable via Odium's matrix
 When /validate-impl completes
 Then the report verdict field is "complete"
 And a spec_complete monitor event is emitted
 And spec.md frontmatter status is updated to "shipped"
 ```
 
-**Scenario: Karen finds missing FR → spec reopens**
+**Scenario: Odium finds missing FR → spec reopens**
 ```
 Given an FR in spec.md has no corresponding implementation
 When /validate-impl runs
@@ -533,10 +533,10 @@ Then a loud warning is displayed to the user
 And the loader still executes (trust boundary is filesystem, not block)
 ```
 
-**Scenario: Unknown FR id in Karen audit output rejected (Spoofing — High)**
+**Scenario: Unknown FR id in Odium audit output rejected (Spoofing — High)**
 ```
 Given spec.md declares FR-1 through FR-17
-And Karen's audit report references "FR-99 missing"
+And Odium's audit report references "FR-99 missing"
 When /review-findings processes the audit report
 Then the unknown FR id is rejected before any task auto-creation
 And the command exits non-zero naming the unknown id(s) and the FR list consulted

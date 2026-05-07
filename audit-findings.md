@@ -70,7 +70,7 @@ Scope: `/Users/ernestbednarczyk/Desktop/projects/dev-workflow` — commands, age
 - `plan.md` references `/commit` — no `commands/commit.md` exists (superseded by `/ship`).
 
 ### Orphans
-- `agents/karen.md` defined, never invoked by any command.
+- `agents/odium.md` defined, never invoked by any command.
 
 ### Setup gap
 - `setup.sh:287` verification loop misses `knowledge-base/languages/shell.md` (copied via wildcard but not verified).
@@ -96,7 +96,7 @@ Commands evolved independently. No single source of truth for gates, states, con
 5. Implement grouping + mutex logic, or downgrade docs to "manual review, one at a time".
 6. Extract `knowledge-base/conventions/{git-commits,validation-gates,validation-report}.md` — dedupe 9 commands.
 7. Regenerate `templates/CLAUDE.md` from `CLAUDE.md` in `setup.sh`.
-8. Delete orphan `karen.md` + `/commit` references.
+8. Delete orphan `odium.md` + `/commit` references.
 
 ## False Positives Excluded
 

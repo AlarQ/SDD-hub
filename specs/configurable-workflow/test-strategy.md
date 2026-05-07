@@ -173,20 +173,20 @@ TUI parser, scanner integration, and pipeline widget are postponed with the rest
 - **Integration seams:** loader ↔ `config-paths.sh` (enum helper reuse)
 - **Shared fixtures (creates):** `tests/fixtures/config/workflow-scope-per-task.yml`, `workflow-scope-per-spec.yml`, `workflow-scope-invalid.yml`, `spec-config-scope-override.yml`
 
-### T014 — validate-impl-command-and-karen-wrapper
-- **Theme:** audit command orchestration + Karen wrapper contract (no agent edits)
+### T014 — validate-impl-command-and-odium-wrapper
+- **Theme:** audit command orchestration + Odium wrapper contract (no agent edits)
 - **Owns:**
   - `/validate-impl` loads scope via config-loader `--spec`
   - FR id parsing from spec.md `### FR-N:` headings
-  - Karen wrapper prompt includes FR list + PRD scope + task list + report paths + git diff range
+  - Odium wrapper prompt includes FR list + PRD scope + task list + report paths + git diff range
   - Report frontmatter written with `{feature, timestamp, scope, verdict}`
   - `spec_audit_start` / `spec_audit_done` event order
   - `verdict=complete` → spec.md `status: shipped` + `spec_complete`
   - `verdict=reopen` → `spec_reopened` emitted, spec status unchanged
-  - Karen invocation uses existing `agents/karen.md` (no diff to agent file)
+  - Odium invocation uses existing `agents/odium.md` (no diff to agent file)
 - **Must NOT test:** trigger detection (T015), scope-dependent gate execution (T016), review-findings integration (T017)
-- **Integration seams:** `/validate-impl` ↔ config-loader (`--spec`) ↔ Karen (via Agent tool) ↔ monitor events
-- **Shared fixtures (creates):** `tests/fixtures/spec-audit/sample-spec/` (3 FRs, 2 tasks, stubbed Karen output for deterministic test)
+- **Integration seams:** `/validate-impl` ↔ config-loader (`--spec`) ↔ Odium (via Agent tool) ↔ monitor events
+- **Shared fixtures (creates):** `tests/fixtures/spec-audit/sample-spec/` (3 FRs, 2 tasks, stubbed Odium output for deterministic test)
 
 ### T015 — last-task-done-trigger
 - **Theme:** all-done detector + auto-chain invocation
@@ -225,7 +225,7 @@ TUI parser, scanner integration, and pipeline widget are postponed with the rest
   - Rejected finding remains available for `/learn-from-reports` mining
   - `--reaudit` flag clears the `spec_audit_done` idempotency guard so T015 trigger can re-fire
   - Cycle convergence: after follow-up tasks reach done, chain re-runs `/validate-impl` until verdict=complete
-- **Must NOT test:** Karen spawn (T014), scope execution (T016), trigger detection (T015)
+- **Must NOT test:** Odium spawn (T014), scope execution (T016), trigger detection (T015)
 - **Integration seams:** audit report ↔ `/review-findings` accept/reject ↔ `task-manager.sh create-followup` ↔ spec.md FR allowlist
 - **Shared fixtures (creates):** `tests/fixtures/spec-audit/reopen-report-with-missing-fr.md`, `tests/fixtures/spec-audit/reopen-report-unknown-fr.md`
 
@@ -262,10 +262,10 @@ Every BDD scenario from `spec.md` → exactly one owning task.
 | per-spec mode skips per-task validate | T016 |
 | last-task-done triggers spec audit | T015 |
 | clean audit marks spec shipped | T014 |
-| Karen finds missing FR → spec reopens | T017 |
+| Odium finds missing FR → spec reopens | T017 |
 | Reaudit cycle after follow-up tasks land | T017 |
 | per-spec mode runs union at /validate-impl | T016 |
-| Unknown FR id in Karen audit output rejected | T017 (allowlist); T014 reports event |
+| Unknown FR id in Odium audit output rejected | T017 (allowlist); T014 reports event |
 | validate_scope enum enforced | T013 |
 
 ### Security
@@ -295,7 +295,7 @@ No unowned scenarios. The deliberate split (loader-level rejection in T001/T002;
 | Full-stack dogfood: `.workflow.yml` → loader → callers → commands | T011 | Cleanup task is final gate; E2E against `/tmp/vault` is defining deliverable |
 | `WF_VALIDATE_SCOPE` ↔ `/validate` skip branch ↔ `/validate-impl` union | T016 | `/validate-impl` is the sole union-execution authority; `/validate` is the sole skip-branch authority |
 | `task-manager.sh set-status done` ↔ `.monitor.jsonl` event ↔ `/implement` chain invocation | T015 | Detector + auto-chain form a single feedback edge; splitting their tests hides race/idempotency bugs |
-| `/validate-impl` ↔ Karen (Agent tool) ↔ audit report schema | T014 | Wrapper prompt + report frontmatter form the agent contract; stub Karen for determinism |
+| `/validate-impl` ↔ Odium (Agent tool) ↔ audit report schema | T014 | Wrapper prompt + report frontmatter form the agent contract; stub Odium for determinism |
 | audit report ↔ `/review-findings` ↔ `task-manager.sh create-followup` ↔ FR-id allowlist | T017 | Reopen flow spans four components; allowlist is the critical security boundary — must be tested end-to-end not just unit |
 
 ## Risk Flags
@@ -307,7 +307,7 @@ No unowned scenarios. The deliberate split (loader-level rejection in T001/T002;
 | **MEDIUM** | T011 E2E vault test ambiguity — "goes green end-to-end" undefined. Risk of shallow smoke test. | T011 E2E must explicitly exercise steps (a)–(e) listed in its task owns section above. Assert each step produces its expected artifact. |
 | **MEDIUM** | T004 "tampered spec config" test — snapshot format instability causes false positives on yq canonicalization. | Snapshot compares normalized JSON of effective fields (`gates[]`, `agents` map), not raw YAML text. Cover: whitespace-only → no drift; gate removed/added → drift; agent reordering → drift if order-significant (document choice). |
 | **LOW** | T003 pre-commit hook subdir test must reproduce git's hook invocation context (cwd = subdir, GIT_DIR set). Naive `cd subdir && run` misses git env. | Real git init fixture under `tests/fixtures/nested-subdir-repo/`; invoke via `git -C subdir commit --dry-run` or call hook directly with `PWD=subdir` AND `GIT_DIR` set. Do not rely on bare cd. |
-| **MEDIUM** | T014 Karen-stub drift — tests use a stubbed Karen for determinism; stub could lag real Karen's output format. | Stub output and real-Karen prompt live in the same `commands/validate-impl.md` file; schema-shape test validates both stub output AND any real-Karen output against the frontmatter + FR-matrix section contract. CI periodically replays the stubbed prompt against real Karen and diffs shape only. |
+| **MEDIUM** | T014 Odium-stub drift — tests use a stubbed Odium for determinism; stub could lag real Odium's output format. | Stub output and real-Odium prompt live in the same `commands/validate-impl.md` file; schema-shape test validates both stub output AND any real-Odium output against the frontmatter + FR-matrix section contract. CI periodically replays the stubbed prompt against real Odium and diffs shape only. |
 | **MEDIUM** | T017 follow-up task creation could create duplicate tasks if the same `spec-audit-*.md` report is processed twice. | `task-manager.sh create-followup` writes a `source_report` field into the task frontmatter; creation is a no-op when an existing task already references that report+FR pair. |
 | **LOW** | T015 all-done detector false-negative on concurrent completion — two near-simultaneous `set-status done` calls could both think another task is still pending. | Serial execution rule (CLAUDE.md) forbids concurrent task completion; detector verifies by re-reading all task statuses after the transition rather than trusting prior state. |
 | **LOW** | T016 union computation silently drops a gate when spec_storage sits on a case-insensitive filesystem (macOS default) — gate id collisions across case. | `validate_id` regex already rejects non-ASCII; add unit test ensuring duplicate-id detection in `gates.yml` is case-sensitive (reject exact-match duplicates; document that case-differing ids are valid). |

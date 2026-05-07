@@ -18,7 +18,7 @@ test_cases:
   - "gate_skip event for per-spec-skipped tasks includes task id, feature, scope, and gate ids skipped"
   - "/implement auto-chain under scope=per-spec proceeds to /review-findings with zero findings after gate_skip"
   - "Doc-only tasks with empty_intersection_ok: true pass cleanly under all three scope modes"
-  - "Union execution: blocking gate non-zero exit → audit verdict forced to reopen; failing-gate output passed to Karen wrapper as evidence"
+  - "Union execution: blocking gate non-zero exit → audit verdict forced to reopen; failing-gate output passed to Odium wrapper as evidence"
   - "Union execution: non-blocking gate failure recorded but does not force reopen"
 ground_rules:
   - general:languages/shell.md
@@ -33,7 +33,7 @@ Make scope semantics real. `/validate` honors `WF_VALIDATE_SCOPE` and short-circ
 ## Public API delta
 
 - `commands/validate.md` — first step: read `WF_VALIDATE_SCOPE`. If `per-spec`: emit `gate_skip` events for every gate in the task's intersection with `reason=scope=per-spec`, then exit zero-findings. If `per-task` or `both`: existing T004 semantics.
-- `commands/validate-impl.md` — new step (inserted before Karen spawn per FR-15 step 2): if `scope ∈ {per-spec, both}`, compute union `{g | g ∈ WF_SPEC_GATES ∧ g.applies_to ∩ union(task.ground_rules_languages) ≠ ∅}`, execute each gate once against the cumulative diff range. Results are part of the audit report input.
+- `commands/validate-impl.md` — new step (inserted before Odium spawn per FR-15 step 2): if `scope ∈ {per-spec, both}`, compute union `{g | g ∈ WF_SPEC_GATES ∧ g.applies_to ∩ union(task.ground_rules_languages) ≠ ∅}`, execute each gate once against the cumulative diff range. Results are part of the audit report input.
 - `scripts/monitor.sh` — accept `scope=per-spec` as a valid `gate_skip` reason string alongside existing reasons.
 
 ## Implementation Notes
@@ -52,8 +52,8 @@ Make scope semantics real. `/validate` honors `WF_VALIDATE_SCOPE` and short-circ
 
 ### Original notes
 
-- "Cumulative diff" range = first-task branch-point → current HEAD. Same range used by Karen wrapper prompt in T014.
+- "Cumulative diff" range = first-task branch-point → current HEAD. Same range used by Odium wrapper prompt in T014.
 - Union computation is deterministic given sorted inputs — document the sort order.
 - Gate execution paralysm: same parallelism model as current `/validate` (spawn agents in parallel per existing `/validate` Phase 2 pattern).
-- Empty-intersection fail-closed rule (ADR-003) still applies: if the union is empty AND at least one task is code-bearing, `/validate-impl` fails closed before spawning Karen.
+- Empty-intersection fail-closed rule (ADR-003) still applies: if the union is empty AND at least one task is code-bearing, `/validate-impl` fails closed before spawning Odium.
 - Do NOT bypass fail-closed when `scope=per-spec` — an empty union on a code spec is still a bug.

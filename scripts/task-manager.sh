@@ -290,7 +290,7 @@ cmd_set_status() {
 }
 
 # Create a follow-up task auto-generated from a spec-audit accepted finding (T017).
-# Validates FR id against spec.md FR allowlist (security boundary — Karen may hallucinate).
+# Validates FR id against spec.md FR allowlist (security boundary — Odium may hallucinate).
 # Inherits ground_rules from spec.md "## Applicable Ground Rules" section.
 cmd_create_followup() {
   local feature="${1:-}" fr_id="${2:-}" description="${3:-}"

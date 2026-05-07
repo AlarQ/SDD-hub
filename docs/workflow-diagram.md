@@ -15,7 +15,7 @@ Each command runs only when the user invokes it. There is no auto-chaining betwe
 
 After `/propose` finishes, the user runs `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` (also user-invoked) and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
 
-When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event. `/implement` surfaces this event and instructs the user to run `/validate-impl` (implementation-completion audit via Karen, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
+When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event. `/implement` surfaces this event and instructs the user to run `/validate-impl` (implementation-completion audit via Odium, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
@@ -43,7 +43,7 @@ graph LR
 
     subgraph Audit["Implementation-completion audit"]
         VIMPL["/validate-impl"]
-        KAREN["Karen agent"]
+        ODIUM["Odium agent"]
     end
 
     subgraph Side["Side commands"]
@@ -77,8 +77,8 @@ graph LR
     SHIP -.->|PR merged| IMPL
     SHIP -.->|medium/large: last task done| VIMPL
     SHIP -.->|small: skip audit| Core
-    VIMPL --> KAREN
-    KAREN --> VIMPL
+    VIMPL --> ODIUM
+    ODIUM --> VIMPL
     VIMPL -->|verdict=complete| Core
     VIMPL -.->|verdict=reopen| REV
     REV -.->|accept missing/partial FR<br/>create-followup| IMPL
@@ -333,7 +333,7 @@ graph LR
 
 ```mermaid
 graph LR
-    VIMPL["/validate-impl"] --> KAREN[Karen]
+    VIMPL["/validate-impl"] --> ODIUM[Odium]
 ```
 
 ### 5h. `/review-findings` — finding triage

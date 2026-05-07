@@ -6,7 +6,7 @@ Feature name: $ARGUMENTS
 
 Pre-implementation spec-coherence gate. Catches contract gaps, missing pieces, logic gaps, and repo misalignment in `specs/$ARGUMENTS/` so they are fixed in the spec rather than discovered at implementation or validation time.
 
-Distinct from `/validate-impl` (post-implementation Karen audit of claimed-vs-actual completion) and `/validate` (per-task code gates).
+Distinct from `/validate-impl` (post-implementation Odium audit of claimed-vs-actual completion) and `/validate` (per-task code gates).
 
 ## Prerequisites
 

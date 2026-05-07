@@ -35,7 +35,7 @@ ground_rules:
 
 ## Description
 
-Close the loop: route Karen's audit output through the existing `/review-findings` accept/reject machinery (same affordance as per-task LLM findings), auto-create follow-up tasks for accepted "missing" / "partial" findings, and wire the reopen path so a spec that fails its audit does not ship.
+Close the loop: route Odium's audit output through the existing `/review-findings` accept/reject machinery (same affordance as per-task LLM findings), auto-create follow-up tasks for accepted "missing" / "partial" findings, and wire the reopen path so a spec that fails its audit does not ship.
 
 ## Public API delta
 
@@ -49,7 +49,7 @@ Close the loop: route Karen's audit output through the existing `/review-finding
 
 ## Implementation Notes
 
-- FR-id allowlist is the critical security boundary. Karen can hallucinate. Reject unknown FR ids loudly with the full FR list attached.
+- FR-id allowlist is the critical security boundary. Odium can hallucinate. Reject unknown FR ids loudly with the full FR list attached.
 - Follow-up tasks inherit spec ground_rules rather than re-inferring — deterministic, auditable, avoids second LLM round.
 - Rejected findings becoming KB rules piggybacks on the existing `/learn-from-reports` mining pass; no new code here — the report just remains in `reports/` until that command runs.
 - `/validate-impl --reaudit` flag added to `commands/validate-impl.md`. Kept small. **Mechanism (append-only, no log mutation):** the flag appends a `spec_reaudit_requested` sentinel event to `.monitor.jsonl` with `{feature, requested_ts, reason}`. It does NOT truncate, rewrite, or delete any prior `spec_audit_done` event — event logs are strictly append-only and the audit trail must remain intact.

@@ -20,7 +20,7 @@ User is reconsidering TUI investment — a web UI may replace or supplement `wor
 - `scripts/config-loader.sh` + `scripts/config-paths.sh` + shell caller integration.
 - Ceiling semantics at `/validate` (FR-7), snapshot drift detection in `/ship`.
 - `/explore` step 0 inferencer, `/config`, `/bootstrap` on existing repos.
-- `validate_scope` + `/validate-impl` + Karen wrapper + last-task-done trigger.
+- `validate_scope` + `/validate-impl` + Odium wrapper + last-task-done trigger.
 - All security scenarios (FR-level, loader-level, phase-command-level).
 
 ## What a future UI spec must pick up

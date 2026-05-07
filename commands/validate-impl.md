@@ -1,4 +1,4 @@
-Run the spec-completion audit (FR-15, ADR-008). Reuses the existing **Karen** agent (`agents/karen.md`) unchanged — all spec-specific context flows through the wrapper prompt built here.
+Run the spec-completion audit (FR-15, ADR-008). Reuses the existing **Odium** agent (`agents/odium.md`) unchanged — all spec-specific context flows through the wrapper prompt built here.
 
 Feature name: $ARGUMENTS
 
@@ -29,7 +29,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$A
 
 ### Tier early-exit
 
-If `WF_SPEC_TIER == small`, skip the entire Karen audit:
+If `WF_SPEC_TIER == small`, skip the entire Odium audit:
 
 ```bash
 bash ~/.claude/scripts/monitor.sh log_event "$ARGUMENTS" validate_impl_skipped "" \
@@ -64,11 +64,11 @@ extra_evidence=""
 Helper semantics (see `scripts/validate-impl.sh`, which delegates ceiling/effective-set/spec-union math to `scripts/gate-ceiling.sh` — same canonical helpers used by `/validate`):
 1. Spec-union = `wf_compute_union_set <spec_dir>` from `gate-ceiling.sh`: union of every task's effective-set (each task's language tags ∩ ceiling `WF_SPEC_GATES`), plus gates with `applies_to: [any]`. Sorted, unique.
 2. Each gate runs **once** against the cumulative diff range (deterministic order from `sort -u`).
-3. **Empty spec-union on a code-bearing spec** → helper returns rc 3 (fail-closed per ADR-003); abort `/validate-impl` before spawning Karen.
-4. **Blocking gate non-zero exit** → helper stdout = `reopen`. Captured log is passed to `wf_vi_build_prompt` as `extra_evidence`; Karen is **still** spawned, but its verdict is overridden to `reopen` in Step 4.
+3. **Empty spec-union on a code-bearing spec** → helper returns rc 3 (fail-closed per ADR-003); abort `/validate-impl` before spawning Odium.
+4. **Blocking gate non-zero exit** → helper stdout = `reopen`. Captured log is passed to `wf_vi_build_prompt` as `extra_evidence`; Odium is **still** spawned, but its verdict is overridden to `reopen` in Step 4.
 5. **Non-blocking gate failure** → recorded in `gate_log` but does not force `reopen`.
 
-## Step 3 — Build Karen Wrapper Prompt
+## Step 3 — Build Odium Wrapper Prompt
 
 ```bash
 spec_dir="$(bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$ARGUMENTS"' && echo "$WF_SPEC_STORAGE/'"$ARGUMENTS"'"')"
@@ -85,9 +85,9 @@ The wrapper prompt contains:
 - Failing-gate output, if step 2 captured any.
 - Required output: YAML frontmatter (`feature`, `timestamp`, `scope`, `verdict`) + FR × Status matrix + orphan-code section + over-engineering flags.
 
-## Step 4 — Spawn Karen via Agent Tool
+## Step 4 — Spawn Odium via Agent Tool
 
-Spawn the Karen agent (`subagent_type: karen`) with the prompt file's content. **Do not edit `agents/karen.md`.** Capture the agent's full Markdown output into a temp file `/tmp/spec-audit-body-$$.md`.
+Spawn the Odium agent (`subagent_type: odium`) with the prompt file's content. **Do not edit `agents/odium.md`.** Capture the agent's full Markdown output into a temp file `/tmp/spec-audit-body-$$.md`.
 
 Parse `verdict` from the agent's frontmatter. If step 2 set `forced_verdict=reopen`, override agent verdict to `reopen`.
 
@@ -109,4 +109,4 @@ wf_vi_emit_done "$ARGUMENTS" "$verdict" "$report_path"
 
 - This command is idempotent: it does not advance task state. Re-running on a clean spec is a no-op except for new monitor events.
 - T016 owns the spec-union gate executor helper referenced in Step 2; until then, `validate_scope=per-spec/both` callers should expect a placeholder log.
-- Karen's identity stays generic (ADR-008) — wrapper prompt is the only specialization surface.
+- Odium's identity stays generic (ADR-008) — wrapper prompt is the only specialization surface.

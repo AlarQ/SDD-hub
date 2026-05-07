@@ -146,15 +146,15 @@ ADR-005.
   - Negative: two cadence knobs to reason about; `per-spec` delays gate failure signal until spec end (mitigated by mandatory audit + FR matrix); enum drift risk if future modes added (mitigated by strict allowlist at loader).
 - **Alternatives:** (a) per-task hardcoded (status quo — rejected, small-feature pain unaddressed); (b) skip gates entirely for short specs (rejected — correctness regression, no FR verification); (c) dynamic per-task heuristic (rejected — non-deterministic, brittle).
 
-### ADR-008 — Reuse Karen agent for spec-completion audit
+### ADR-008 — Reuse Odium agent for spec-completion audit
 
 - **Status:** Accepted
-- **Context:** Spec-level audit needs an agent that specializes in claimed-vs-actual gap analysis across a feature's full artifact set. Options: (a) reuse existing Karen agent, (b) enhance Karen with spec-specific affordances, (c) fork a purpose-built `spec-completion-auditor`.
-- **Decision:** Reuse Karen unchanged. Supply spec-specific context (spec.md FR list, prd.md scope, task list, report paths, git diff range) via a wrapper prompt at the call-site in `commands/validate-impl.md`. Karen's existing ethos — "distinguish claimed vs actual completion, identify half-implemented features, produce realistic gap analysis" — is already the right shape; explicit spec/PRD parsing lives in the wrapper, not the agent definition.
+- **Context:** Spec-level audit needs an agent that specializes in claimed-vs-actual gap analysis across a feature's full artifact set. Options: (a) reuse existing Odium agent, (b) enhance Odium with spec-specific affordances, (c) fork a purpose-built `spec-completion-auditor`.
+- **Decision:** Reuse Odium unchanged. Supply spec-specific context (spec.md FR list, prd.md scope, task list, report paths, git diff range) via a wrapper prompt at the call-site in `commands/validate-impl.md`. Odium's existing ethos — "distinguish claimed vs actual completion, identify half-implemented features, produce realistic gap analysis" — is already the right shape; explicit spec/PRD parsing lives in the wrapper, not the agent definition.
 - **Consequences:**
-  - Positive: zero agent-definition churn; Karen's identity stays generic and useful elsewhere; wrapper prompt is the only specialization surface and is easy to iterate; matches existing pattern of `/validate` Phase 2 spawning generic agents with phase-specific context.
-  - Negative: wrapper-prompt drift (mitigated by a single wrapper template versioned under `commands/validate-impl.md`); Karen output format not strictly schema-constrained at the agent level (mitigated by FR-id allowlist + Markdown section headers enforced in the wrapper).
-- **Alternatives:** (b) enhance Karen with spec-awareness (rejected — couples Karen to this workflow, bloats agent definition); (c) fork `spec-completion-auditor` (rejected — duplicates Karen's ethos, two agents to maintain, no functional gain).
+  - Positive: zero agent-definition churn; Odium's identity stays generic and useful elsewhere; wrapper prompt is the only specialization surface and is easy to iterate; matches existing pattern of `/validate` Phase 2 spawning generic agents with phase-specific context.
+  - Negative: wrapper-prompt drift (mitigated by a single wrapper template versioned under `commands/validate-impl.md`); Odium output format not strictly schema-constrained at the agent level (mitigated by FR-id allowlist + Markdown section headers enforced in the wrapper).
+- **Alternatives:** (b) enhance Odium with spec-awareness (rejected — couples Odium to this workflow, bloats agent definition); (c) fork `spec-completion-auditor` (rejected — duplicates Odium's ethos, two agents to maintain, no functional gain).
 
 ## Backend Design
 
@@ -378,14 +378,14 @@ emit spec_last_task_done event
    ├─ if scope in {per-spec, both}:
    │    union(spec-eligible gates) ∩ gates.yml applies_to
    │    execute once over cumulative diff (branch-point → HEAD)
-   │    ├─ all blocking gates pass → continue to Karen normally
+   │    ├─ all blocking gates pass → continue to Odium normally
    │    └─ any blocking gate non-zero → force verdict=reopen;
-   │         Karen still spawned, failing-gate output appended to wrapper prompt
+   │         Odium still spawned, failing-gate output appended to wrapper prompt
    │         (non-blocking gate failure is recorded but does not force reopen)
-   ├─ spawn Karen agent with wrapper prompt:
+   ├─ spawn Odium agent with wrapper prompt:
    │    spec.md FR list + prd.md scope + tasks status + reports/ + diff range
    │  emit spec_audit_start
-   ├─ Karen produces FR × status matrix + orphan-code list + over-eng flags
+   ├─ Odium produces FR × status matrix + orphan-code list + over-eng flags
    │  write specs/<feature>/reports/spec-audit-<ISO8601>.md
    │  emit spec_audit_done
    │
@@ -411,8 +411,8 @@ verdict branch:
 | **LOW** | Empty gate intersection at `/validate` — false-green ship. | Fail closed when intersection is empty AND task category is code-bearing. Loud `gate_skip` event with reason `empty intersection`. Block transition to `done`. Doc-only tasks declare empty-OK explicitly. |
 | **LOW** | Referential integrity across the three config files — spec config references IDs in `gates.yml` and `~/.claude/agents/`; either side can drift. | `config-loader.sh` validates all referenced IDs at parse time; fails closed listing missing IDs. `/config` re-resolves against current pools. |
 | **HIGH** | Existing-repo adoption friction — primary target is existing repos with no `.workflow.yml`. A naive `/bootstrap` writer could clobber unrelated files, follow a hostile symlink at the target, or silently re-run with different defaults. | `/bootstrap` writer touches only `.workflow.yml`; idempotent (no-op when file already present, prints current config); `--force` required for overwrite and shows diff + confirmation; writer refuses when target path is a symlink (`lstat` check before write); `--repair` preserves present fields and fills only missing ones. |
-| **MEDIUM** | `per-spec` mode delays gate failure feedback until spec end; a bad change caught only after N tasks are already committed. | Mandatory Karen audit + FR × status matrix catches behavioural gaps at end; `both` mode available when user wants per-task safety net plus end-of-spec audit; report verdict `reopen` spawns follow-up tasks rather than silently merging. |
-| **LOW** | Karen wrapper-prompt drift — spec-audit quality depends on one prompt template not the agent definition. | Template versioned in `commands/validate-impl.md`; schema-shape test on audit report verifies FR-matrix presence + status enum + orphan-code section; FR-id allowlist rejects hallucinated IDs. |
+| **MEDIUM** | `per-spec` mode delays gate failure feedback until spec end; a bad change caught only after N tasks are already committed. | Mandatory Odium audit + FR × status matrix catches behavioural gaps at end; `both` mode available when user wants per-task safety net plus end-of-spec audit; report verdict `reopen` spawns follow-up tasks rather than silently merging. |
+| **LOW** | Odium wrapper-prompt drift — spec-audit quality depends on one prompt template not the agent definition. | Template versioned in `commands/validate-impl.md`; schema-shape test on audit report verifies FR-matrix presence + status enum + orphan-code section; FR-id allowlist rejects hallucinated IDs. |
 | **LOW** | All-done detector races — concurrent `set-status done` calls could double-fire `spec_last_task_done`. | Detector checks prior `spec_audit_done` event before emitting; `/validate-impl` is idempotent within a single done-sweep; serial execution rule (CLAUDE.md) already forbids concurrent task completion. |
 
 ## Scaling / Integration Notes
@@ -427,7 +427,7 @@ verdict branch:
 
 **New (commands/agents):** `commands/config.md`, `commands/validate-impl.md`, `agents/engineering/engineering-config-inferencer.md`
 
-**Unchanged agents (reused):** `agents/karen.md` — spawned from `/validate-impl` with wrapper prompt (ADR-008)
+**Unchanged agents (reused):** `agents/odium.md` — spawned from `/validate-impl` with wrapper prompt (ADR-008)
 
 **Modified (shell):** `scripts/monitor.sh`, `scripts/task-manager.sh`, `scripts/pre-commit-hook.sh`, `setup.sh`
 

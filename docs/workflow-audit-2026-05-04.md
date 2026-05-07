@@ -115,7 +115,7 @@ Findings grouped by category, prioritized **High / Medium / Low** by impact. Eac
 
 **Where:** `scripts/report-schema.md:9` declares per-task gate reports as `<task-id>-<gate>.yaml`, spec-audit reports as `.md`. `commands/learn-from-reports.md:15` reads only `.yaml`.
 
-**Problem:** Spec-audit `.md` reports never feed the mining pass. Patterns inside Karen's spec audit are invisible to `/learn-from-reports`. `/review-findings.md:19` correctly reads both, so behavior is inconsistent across commands.
+**Problem:** Spec-audit `.md` reports never feed the mining pass. Patterns inside Odium's spec audit are invisible to `/learn-from-reports`. `/review-findings.md:19` correctly reads both, so behavior is inconsistent across commands.
 
 **Fix:** Teach mining to read both extensions, OR explicitly document "spec audits are mined inline at `/validate-impl` time" with rationale.
 
@@ -181,7 +181,7 @@ Findings grouped by category, prioritized **High / Medium / Low** by impact. Eac
 
 **Where:** `scripts/validate-impl.sh` `wf_vi_run_union_gates` returns forced-verdict via stdout while writing logs to a path arg.
 
-**Problem:** Caller in `commands/validate-impl.md` Step 4 must read stdout for verdict AND parse the log file for gate detail. Verdict-override rule ("Karen's verdict is final unless a gate failed") requires correlating both.
+**Problem:** Caller in `commands/validate-impl.md` Step 4 must read stdout for verdict AND parse the log file for gate detail. Verdict-override rule ("Odium's verdict is final unless a gate failed") requires correlating both.
 
 **Fix:** Return single JSON to stdout: `{"verdict": "...", "gate_failures": [...], "log_path": "..."}`. One channel, one parse.
 
@@ -255,7 +255,7 @@ Findings grouped by category, prioritized **High / Medium / Low** by impact. Eac
 
 **Where:** `scripts/validate-impl.sh:32` `wf_vi_diff_range` falls back to `HEAD~1` if both `merge-base main feat/$X` and `feat/$X^` fail.
 
-**Problem:** Karen audits a meaningless one-commit diff; verdict appears authoritative.
+**Problem:** Odium audits a meaningless one-commit diff; verdict appears authoritative.
 
 **Fix:** Fail loud: `echo "Cannot determine diff range for $feature; refusing to audit" >&2; return 5`.
 

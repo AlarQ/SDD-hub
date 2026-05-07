@@ -342,7 +342,7 @@ Specs are tiered to right-size flow ceremony — `/explore` → `/propose` → `
 
 | Tier | Threshold (defaults) | Flow shape |
 |------|----------------------|------------|
-| `small`  | ≤5 tasks, ≤10 files | `/propose` writes tasks/ only (skip spec.md, design.md, test-strategy.md). Skip `/validate-spec`. `/validate` runs lint+tests only — Phase-2 agent gates are skipped per `WF_TIER_AGENT_SKIP`. Skip `/validate-impl` Karen audit. |
+| `small`  | ≤5 tasks, ≤10 files | `/propose` writes tasks/ only (skip spec.md, design.md, test-strategy.md). Skip `/validate-spec`. `/validate` runs lint+tests only — Phase-2 agent gates are skipped per `WF_TIER_AGENT_SKIP`. Skip `/validate-impl` Odium audit. |
 | `medium` | ≤10 tasks, ≤30 files | `/propose` writes spec.md + tasks/ (skip design.md + test-strategy.md). Skip `/validate-spec`. Full per-task gates. `/validate-impl` runs. |
 | `large`  | unbounded            | Full unchanged flow. |
 

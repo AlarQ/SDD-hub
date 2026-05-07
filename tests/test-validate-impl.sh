@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # test-validate-impl.sh — T014 tests for scripts/validate-impl.sh helpers
-# and the spec_audit_* monitor categories. No real Karen spawn — Karen is
+# and the spec_audit_* monitor categories. No real Odium spawn — Odium is
 # invoked by the slash command via the Agent tool, not by these helpers.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

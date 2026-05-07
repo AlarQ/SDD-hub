@@ -98,7 +98,7 @@ The configurable-workflow feature externalizes gate and agent selection into YAM
 
 **`/validate` ceiling semantics:** Executes intersection of spec-eligible gates ∩ gates applicable to task `ground_rules`. Skipped gates emit `gate_skip` events.
 
-**`/validate-impl`:** Runs once when all spec tasks reach `done`. Spawns Karen with spec FR list, prd.md scope, task list, and git diff range. Verdict `complete` → spec shipped; verdict `reopen` → `/review-findings` spawns follow-up tasks.
+**`/validate-impl`:** Runs once when all spec tasks reach `done`. Spawns Odium with spec FR list, prd.md scope, task list, and git diff range. Verdict `complete` → spec shipped; verdict `reopen` → `/review-findings` spawns follow-up tasks.
 
 See `specs/configurable-workflow/design.md` for full ADR detail and schema definitions.
 
@@ -108,7 +108,7 @@ Specs are tiered to right-size flow ceremony. Tier is inferred at `/explore` ste
 
 | Tier | Threshold (defaults) | Flow shape |
 |------|----------------------|------------|
-| `small`  | ≤5 tasks, ≤10 files | `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Karen audit. |
+| `small`  | ≤5 tasks, ≤10 files | `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. |
 | `medium` | ≤10 tasks, ≤30 files | `/explore` → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
 | `large`  | unbounded            | Full unchanged flow. |
 
@@ -151,6 +151,6 @@ Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
 - `/continue-task` detects resume phase by checking task status and existing artifacts (reports, branches, PR state)
 - `/research` activates anti-hallucination mode with citation discipline — useful for bug investigation and API contract review
-- `/validate-spec` is a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent — audits `specs/<feature>/` for contract gaps, logic gaps, missing pieces, and repo misalignment before `/implement` is allowed to start. The user runs it explicitly after `/propose`. Findings flow through `/review-findings` and patch the spec/design/tasks files (not code). Distinct from `/validate-impl` (post-implementation Karen audit of claimed-vs-actual completion, per configurable-workflow ADR-008).
+- `/validate-spec` is a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent — audits `specs/<feature>/` for contract gaps, logic gaps, missing pieces, and repo misalignment before `/implement` is allowed to start. The user runs it explicitly after `/propose`. Findings flow through `/review-findings` and patch the spec/design/tasks files (not code). Distinct from `/validate-impl` (post-implementation Odium audit of claimed-vs-actual completion, per configurable-workflow ADR-008).
 - All interactive user prompts in workflow commands MUST use the `AskUserQuestion` tool (per `scripts/ask-user-protocol.md`). Plain markdown question lists / `[A][B][C]` text menus / "type your answer below" prose are not allowed.
 - Flow changes (command chain, task state machine, validation gates, agent spawns, hooks, artifact flow) MUST trigger review of `docs/workflow-diagram.md` — update affected Mermaid diagrams in the same change. Minor wording tweaks exempt; any structural/edge/node change is not.
