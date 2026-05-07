@@ -25,6 +25,7 @@ Spawn the `Spec Reviewer` agent (`engineering-spec-reviewer`) using the Agent to
 - Project KB path: `knowledge-base/`
 - The project's `CLAUDE.md`
 - The repository root for grep/glob verification of referenced paths and symbols
+- When `WF_REPO_NAMES` is non-empty (vault mode): pass `WF_REPO_NAMES` + `WF_REPO_PATHS` so the Spec Reviewer resolves file/symbol references against each bound repo (not the vault). The reviewer must verify each task's `repo:` field is a member of `WF_REPO_NAMES` and that referenced files actually live under that repo's tree.
 
 Instruct the agent with this directive:
 

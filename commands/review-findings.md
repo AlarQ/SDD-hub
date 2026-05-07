@@ -40,6 +40,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
        1. Re-read the target file before editing.
        2. Apply all `fix_proposal`s in the group in reverse line order (highest line number first) to avoid offset drift.
        3. After all fixes applied, update `review_status` to `"accepted"` on each finding in the group's report YAML file.
+       4. **Multi-repo (vault mode):** if the group's `file` paths are relative, resolve them against the owning task's `WF_TASK_REPO_PATH` (per `~/.claude/scripts/multi-repo-resolution.md`). Pass `WF_TASK_REPO_PATH` to the sub-agent in its prompt so edits land inside the bound repo, not the vault.
      - **File exclusivity rule:** Before spawning, check if another sub-agent is currently editing the same file. If so, wait for that sub-agent to complete first, then spawn. Groups targeting different files spawn immediately (parallel).
      - Do NOT wait for the sub-agent to finish before presenting the next group (unless the next group targets the same file — in that case, wait for the previous sub-agent first).
    - If Reject: invoke `AskUserQuestion` again with two questions in one call — (a) free-text "Reason for rejecting this group?" (open-ended), and (b) "Add reject reasoning as project KB rule?" with options `Yes`/`No`. Use answers to set review_notes on ALL findings in the group; review_status → "rejected".

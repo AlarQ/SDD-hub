@@ -52,7 +52,20 @@ agents:
   implement:  [list of fully-qualified agent IDs]
   validate:   [list of fully-qualified agent IDs]
   pr-review:  [list of fully-qualified agent IDs]
+repos:                 # optional; emit only when caller is a vault (spec_storage_mode=vault)
+  - name: <kebab-case>
+    path: <abs|~ path>
+    role: <free text>
 ```
+
+### Multi-Repo Inference (vault mode only)
+
+The caller passes `WF_SPEC_STORAGE_MODE` and (when `vault`) the `default_repos[]` list from `.workflow.yml`. Rules:
+
+- `spec_storage_mode: repo` (or absent) → omit `repos:` from output.
+- `spec_storage_mode: vault` → emit `repos:`. Start from `default_repos[]`. Drop entries the spec PRD/description does not need (e.g. an API-only spec drops the `frontend` binding). Add any binding the PRD names but `default_repos` lacks (warn `FALLBACK (repos): added <name> not in default_repos[]`).
+- Every emitted `path` must already exist as a git work tree per the caller-provided directory listing. If a path is unverifiable, drop the entry and add a `FALLBACK` note.
+- Never invent repo names not present in `default_repos[]` or the PRD.
 
 ### Tier Inference Rubric
 

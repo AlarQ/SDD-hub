@@ -21,6 +21,19 @@ Before running any gate or spawning any agent, run (substituting the actual feat
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_GATES=%s\nWF_SPEC_AGENTS_VALIDATE=%s\nWF_GATE_POOL=%s\n" "$WF_SPEC_GATES" "${WF_SPEC_AGENTS_VALIDATE:-}" "${WF_GATE_POOL:-}"'
 ```
 
+### Multi-repo task resolution
+
+Before Phase 1, resolve task repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH`. Every gate command in Phase 1 runs as `(cd "$WF_TASK_REPO_PATH" && <gate command>)`. Phase 2 advisory agents receive `WF_TASK_REPO_PATH` and a scoped diff (`git -C "$WF_TASK_REPO_PATH" diff feat/$ARGUMENTS...HEAD`) instead of repo-root diff.
+
+### `applies_to_repos` filter
+
+For each gate in the effective set, check its `applies_to_repos` field in `gates.yml`. If present and the task's `repo:` is not in the list, skip the gate and emit:
+```bash
+$HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
+  "$(printf '{"gate":"%s","reason":"applies_to_repos","repo":"%s"}' "<id>" "$task_repo")"
+```
+Default (no `applies_to_repos` field) = applies to all repos. This filter applies after the ceiling intersection.
+
 ## Phase 1: Gate Ceiling Intersection (hard gates)
 
 For each task with `status: implemented`:

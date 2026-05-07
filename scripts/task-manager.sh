@@ -208,7 +208,7 @@ resolve_ground_rule_path() {
           done <<<"$WF_REPO_NAMES"
         fi
       fi
-      [[ -n "$repo_root" ]] || { echo "/dev/null/unresolved-repo:$repo_name"; return 0; }
+      [[ -n "$repo_root" ]] || { echo "ERROR: unresolved repo:$repo_name (not in WF_REPO_NAMES)" >&2; return 1; }
       echo "$repo_root/knowledge-base/$rel"
       ;;
     *)         echo "$project_kb/$prefixed_path" ;;

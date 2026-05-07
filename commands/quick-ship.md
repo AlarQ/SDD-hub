@@ -3,7 +3,22 @@ Ship current changes: commit, push, and create a PR. Works in any git repo witho
 Optional: branch name or PR title via $ARGUMENTS
 
 ## Prerequisites
-1. Verify we're in a git repository — if not, refuse and stop
+1. Verify we're in a git repository — if not, refuse and stop.
+
+### Vault-mode preflight
+
+Source the loader first:
+
+```bash
+source ~/.claude/scripts/config-loader.sh 2>/dev/null && wf_load_config 2>/dev/null || true
+```
+
+If `WF_SPEC_STORAGE_MODE=vault`:
+1. Parse `$ARGUMENTS` for `--repo <name>` (any position). Strip the flag and value before treating the remainder as branch name / PR title. Refuse if `--repo` appears without a value.
+2. Without `--repo <name>`, refuse: "Vault config detected — pass `--repo <name>` to pick a bound repo (one of: $WF_REPO_NAMES)."
+3. Resolve `target_path="$(wf_repo_path "$name")"` — must succeed (loader exit 7 / function rc 1 on unknown).
+4. Vault `repos[]` lives in per-spec `config.yml`, not `.workflow.yml`. For `/quick-ship` (which is spec-less), resolve `<name>` against `default_repos[]` from `.workflow.yml` instead: `target_path="$(yq -r ".default_repos[] | select(.name == \"$name\") | .path" .workflow.yml | head -1)"`. Refuse if empty. Verify `git -C "$target_path" rev-parse --show-toplevel` succeeds.
+5. All subsequent `git` / `gh` ops in this command run as `git -C "$target_path"` and `(cd "$target_path" && gh ...)`.
 2. Check for shippable work (at least one must be true):
    - Staged changes exist
    - Unstaged changes exist

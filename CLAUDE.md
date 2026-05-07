@@ -122,6 +122,16 @@ Loader exports: `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, 
 
 Monitor events: `tier_inferred`, `tier_approved`, `tier_breach`, `tier_promoted`, `validate_impl_skipped`.
 
+## Multi-Repo Specs (Vault Mode)
+
+`.workflow.yml spec_storage_mode: vault` enables vault-hosted specs that bind one or more code repos. Per-spec `config.yml repos[]` maps `name → path → role`. Loader exports `WF_REPO_NAMES` + `WF_REPO_PATHS`; helpers `wf_repo_path` / `wf_for_each_repo`. Exit 7 on bad path.
+
+Per-task `repo:` required when `repos[]` non-empty; `task-manager.sh validate` enforces membership. Hard rule: one task = one repo. Ground-rule prefix `repo:<name>:` resolves to that repo's `knowledge-base/`.
+
+`/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`, `/quick-ship` resolve `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and run git/gates/PR creation against that path. `/validate-impl` emits per-repo diff sections for Odium. Gates may declare `applies_to_repos: [<name>,…]` to scope.
+
+Monitor events: `repo_bound`, `repo_missing`, `gate_repo_switch`.
+
 ## Bug-Fix Flow (/fix)
 
 Standalone command for production bugs/regressions. Skips `/explore` and `/propose` entirely. Artifact: `specs/fixes/<slug>/fix.md` (frontmatter `type: fix`, sections: Repro, Root Cause, Fix Plan, Regression Test).
