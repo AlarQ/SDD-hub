@@ -47,7 +47,7 @@ All variables unset on any failure path (no partial state).
 | 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, unresolved agent id, or missing/invalid `tier` | `ERROR: per-spec config missing: ...` / `tier required (small\|medium\|large)` etc. | Run `/config <feature>` or `/explore <feature>`; fix gate/agent/tier in `specs/<f>/config.yml`. |
 | 5 | `yq` timeout (5s) or JSON extraction failure | `ERROR: <file>: yq timeout` | Retry; investigate filesystem/`yq` perf. |
 | 6 | `yq` not installed, or unknown loader argument | `ERROR: yq not installed` | `brew install yq`. |
-| 7 | per-spec `repos[]` entry has missing/invalid path, escapes via `..`, points at non-directory, or target is not a git work tree | `ERROR: <spec.yml>: repos[i] (<name>) ...` | Fix `path:` in `specs/<f>/config.yml`; ensure repo cloned and is a git work tree. |
+| 7 | per-spec `repos[]` entry has missing/invalid path (missing, `..` escape, non-directory, not a git work tree); **or** task `ground_rules` references a `repo:<name>:` prefix whose `<name>` is not in `repos[]` | `ERROR: <spec.yml>: repos[i] (<name>) ...` / `ERROR: <spec.yml>: ground_rules reference unknown repo names ...` | Fix `path:` in `specs/<f>/config.yml`; or fix the offending task `ground_rules` entry / add the missing repo binding. |
 
 Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `gates.yml` modifications) without failing.
 
