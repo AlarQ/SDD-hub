@@ -56,10 +56,17 @@ repo: <name>           # required only if WF_SPEC_STORAGE_MODE=vault — must be
 In vault mode (`WF_SPEC_STORAGE_MODE=vault` from Step 0's `wf_load_config`), refuse if `repo:` is missing. Fixes are spec-less, so `wf_load_config --spec` does not apply — resolve against `default_repos[]` from `.workflow.yml`:
 
 ```bash
-WF_TASK_REPO_PATH="$(yq -r ".default_repos[] | select(.name == \"$repo\") | .path" "$WF_CONFIG_FILE" | head -1)"
+# Validate name shape *before* feeding into yq to avoid expression injection.
+[[ "$repo" =~ ^[a-z0-9][a-z0-9_-]{0,31}$ ]] || { echo "ERROR: repo '$repo' invalid (expected ^[a-z0-9][a-z0-9_-]{0,31}$)" >&2; exit 1; }
+# strenv() keeps the value out of the yq expression (no interpolation).
+WF_TASK_REPO_PATH="$(repo="$repo" yq -r '.default_repos[] | select(.name == strenv(repo)) | .path' "$WF_CONFIG_FILE" | head -1)"
 [[ -z "$WF_TASK_REPO_PATH" || "$WF_TASK_REPO_PATH" == "null" ]] && { echo "ERROR: repo '$repo' not in .workflow.yml default_repos[]" >&2; exit 1; }
 WF_TASK_REPO_PATH="${WF_TASK_REPO_PATH/#\~/$HOME}"
-git -C "$WF_TASK_REPO_PATH" rev-parse --show-toplevel >/dev/null || { echo "ERROR: $WF_TASK_REPO_PATH is not a git work tree" >&2; exit 1; }
+toplevel="$(git -C "$WF_TASK_REPO_PATH" rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: $WF_TASK_REPO_PATH is not a git work tree" >&2; exit 1; }
+# Strict-equality: reject subdirectories of a different repo (typo guard).
+[[ "$(cd "$WF_TASK_REPO_PATH" && pwd -P)" == "$(cd "$toplevel" && pwd -P)" ]] || { echo "ERROR: $WF_TASK_REPO_PATH is inside repo $toplevel, not the toplevel" >&2; exit 1; }
+bash "$HOME/.claude/scripts/monitor.sh" log_event "fixes/$slug" gate_repo_switch "" \
+  "$(printf '{"repo":"%s","path":"%s"}' "$repo" "$WF_TASK_REPO_PATH")" >/dev/null 2>&1 || true
 ```
 
 All git ops, regression-test execution, lint, and ship steps below run inside `WF_TASK_REPO_PATH` (use `git -C "$WF_TASK_REPO_PATH" …`). Single-repo mode: `WF_TASK_REPO_PATH="$WF_REPO_ROOT"`.

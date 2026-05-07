@@ -17,8 +17,10 @@ After `wf_load_config --spec <feature>`:
 # Assumes: wf_load_config --spec "$ARGUMENTS" already ran (this shell)
 
 if [[ -n "${WF_REPO_NAMES:-}" ]]; then
-  # Parse `repo:` from task frontmatter (yq is already a hard dep).
-  task_repo="$(yq -r '.repo // ""' "$task_file" 2>/dev/null)"
+  # Parse `repo:` from task frontmatter ONLY — never the markdown body.
+  # Extract first `---`-delimited block, then run yq against that text.
+  task_repo="$(awk '/^---[[:space:]]*$/{c++; next} c==1' "$task_file" 2>/dev/null \
+                | yq -r '.repo // ""' 2>/dev/null)"
   if [[ -z "$task_repo" || "$task_repo" == "null" ]]; then
     echo "ERROR: task $task_file missing required 'repo:' field (multi-repo spec)" >&2
     exit 1

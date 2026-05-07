@@ -185,6 +185,16 @@ read_frontmatter() {
 resolve_ground_rule_path() {
   local prefixed_path="$1"
   local project_kb="${_WF_TM_REPO_ROOT}/knowledge-base"
+  # Vault mode: reject bare `project:` and unprefixed paths — no project KB
+  # exists next to a vault-hosted spec. Tasks must use `general:` or `repo:<n>:`.
+  if [[ "${WF_SPEC_STORAGE_MODE:-repo}" == "vault" ]]; then
+    case "$prefixed_path" in
+      general:*|repo:*) ;;
+      *)
+        echo "ERROR: vault mode rejects ground_rule '$prefixed_path' — use 'general:' or 'repo:<name>:' prefix" >&2
+        return 7 ;;
+    esac
+  fi
   case "$prefixed_path" in
     general:*) echo "$GENERAL_KB_BASE/${prefixed_path#general:}" ;;
     project:*) echo "$project_kb/${prefixed_path#project:}" ;;
@@ -196,19 +206,27 @@ resolve_ground_rule_path() {
         repo_root="$(wf_repo_path "$repo_name" 2>/dev/null || true)"
       fi
       if [[ -z "$repo_root" ]]; then
-        # Best-effort: search WF_REPO_NAMES / WF_REPO_PATHS directly
+        # Best-effort: search WF_REPO_NAMES / WF_REPO_PATHS directly. Build
+        # parallel arrays once and assert lengths match (mismatch = corrupted
+        # env from out-of-band edits — fail loud rather than silently misalign).
         if [[ -n "${WF_REPO_NAMES:-}" && -n "${WF_REPO_PATHS:-}" ]]; then
-          local _i=0 _n
-          while IFS= read -r _n; do
-            if [[ "$_n" == "$repo_name" ]]; then
-              repo_root="$(printf '%s\n' "$WF_REPO_PATHS" | sed -n "$((_i+1))p")"
-              break
+          local -a _names=() _paths=()
+          local _n _p
+          while IFS= read -r _n; do [[ -n "$_n" ]] && _names+=("$_n"); done <<<"$WF_REPO_NAMES"
+          while IFS= read -r _p; do [[ -n "$_p" ]] && _paths+=("$_p"); done <<<"$WF_REPO_PATHS"
+          if [[ "${#_names[@]}" -ne "${#_paths[@]}" ]]; then
+            echo "ERROR: WF_REPO_NAMES/WF_REPO_PATHS length mismatch (${#_names[@]} vs ${#_paths[@]})" >&2
+            return 7
+          fi
+          local _i
+          for _i in "${!_names[@]}"; do
+            if [[ "${_names[$_i]}" == "$repo_name" ]]; then
+              repo_root="${_paths[$_i]}"; break
             fi
-            _i=$((_i + 1))
-          done <<<"$WF_REPO_NAMES"
+          done
         fi
       fi
-      [[ -n "$repo_root" ]] || { echo "ERROR: unresolved repo:$repo_name (not in WF_REPO_NAMES)" >&2; return 1; }
+      [[ -n "$repo_root" ]] || { echo "ERROR: unresolved repo:$repo_name (not in WF_REPO_NAMES)" >&2; return 7; }
       echo "$repo_root/knowledge-base/$rel"
       ;;
     *)         echo "$project_kb/$prefixed_path" ;;

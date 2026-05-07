@@ -353,8 +353,15 @@ wf_load_config() {
       [[ -d "$abs_path" ]] || {
         wf__err "$spec_cfg: repos[$i] ($name) not a directory: $abs_path"; wf__unset_partials; return 7
       }
-      git -C "$abs_path" rev-parse --show-toplevel >/dev/null 2>&1 || {
+      local _toplevel
+      _toplevel="$(git -C "$abs_path" rev-parse --show-toplevel 2>/dev/null)" || {
         wf__err "$spec_cfg: repos[$i] ($name) not a git repo: $abs_path"; wf__unset_partials; return 7
+      }
+      # Strict-equality: reject pointing at a subdirectory of a different repo.
+      _toplevel="$(realpath_safe "$_toplevel" 2>/dev/null)" || _toplevel=""
+      [[ "$abs_path" == "$_toplevel" ]] || {
+        wf__err "$spec_cfg: repos[$i] ($name) path is inside repo $_toplevel, not the toplevel: $abs_path"
+        wf__unset_partials; return 7
       }
       # Duplicate-name check
       if grep -Fxq -- "$name" <<<"$names_acc" 2>/dev/null; then
