@@ -29,7 +29,7 @@ Design test strategies that prevent waste and gaps:
 ## Critical Rules
 
 1. **Directional, not prescriptive** — Output test themes and responsibilities, NOT specific assertion code or exact test signatures
-2. **Every test has exactly one owner** — If two tasks could test the same thing, assign it to one and explicitly exclude it from the other
+2. **Every test has one primary owner** — Tests for a vertical slice live with that slice's task. Do not split scenarios across tasks to balance coverage — assign the whole scenario cluster to the implementing task. If two tasks could test the same thing, assign it to one and explicitly exclude it from the other.
 3. **Integration tests are first-class** — They get assigned to specific tasks, not left as afterthoughts
 4. **Spec-driven coverage** — Every BDD scenario in spec.md must map to exactly one task's test responsibility
 5. **Existing tests are inputs** — When reviewing during /implement, account for what completed tasks already tested
@@ -106,7 +106,7 @@ List of fixtures/helpers already created by completed tasks that this task shoul
 1. Read all BDD scenarios from spec.md — these are the coverage requirements
 2. Read design.md module boundaries — these define integration seams
 3. Read each task's scope and test_cases — these are the initial allocations
-4. Assign each scenario to exactly one task based on which task implements the relevant code
+4. Assign each scenario cluster to the task that implements its behavior; do not fragment a feature's scenarios across tasks for symmetry
 5. Identify integration seams between modules owned by different tasks
 6. Assign integration tests to the later task (it has more context about both sides)
 7. Identify shared test fixtures and assign creation to the earliest task that needs them

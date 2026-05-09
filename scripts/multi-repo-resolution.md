@@ -2,6 +2,10 @@
 
 Canonical snippet for resolving a task's bound repo path under `spec_storage_mode: vault`. Linked from `/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`, `/quick-ship`.
 
+## Vault-CWD invocation
+
+`wf_load_config --spec <feature>` may also be invoked from a master-brain vault directory that has no `.workflow.yml` of its own but holds `specs/<feature>/config.yml`. The loader then derives `WF_REPO_ROOT` from the spec's `repos[]` (role=`primary` first, else `repos[0]`) and exports `WF_VAULT_ROOT=$PWD`. Multi-repo task resolution below is unchanged — `WF_REPO_NAMES` / `WF_REPO_PATHS` still come from the same `repos[]`. See `config-loader.contract.md` for full semantics.
+
 ## When this applies
 
 After `wf_load_config --spec <feature>`:

@@ -34,6 +34,7 @@ Idempotent: re-sourcing is a no-op unless `WF_RELOAD=1`.
 | `WF_SPEC_STORAGE_MODE` | enum | always | `repo` (default) \| `vault`. `vault` = specs live outside any code repo (e.g. master-brain Obsidian) and bind code repos via per-spec `repos[]`. |
 | `WF_REPO_NAMES` | newline-sep names | `--spec` only, when `repos[]` declared | Logical repo names from per-spec `config.yml repos[]`. Parallel to `WF_REPO_PATHS`. Empty when spec declares none. |
 | `WF_REPO_PATHS` | newline-sep abs paths | `--spec` only, when `repos[]` declared | Absolute repo paths matching `WF_REPO_NAMES` (same index). Each verified to be a git work tree at load time. |
+| `WF_VAULT_ROOT` | abs path | only when invoked from a vault dir with no `.workflow.yml` | CWD that held `specs/<feature>/config.yml`. Set when loader fell back to vault discovery — `WF_REPO_ROOT` then points at the chosen `repos[]` entry (role=`primary`, else first). Absent in normal repo-CWD invocations. |
 
 All variables unset on any failure path (no partial state).
 
@@ -42,14 +43,24 @@ All variables unset on any failure path (no partial state).
 | Code | Condition | User message | Recovery |
 |---|---|---|---|
 | 0 | success | — | — |
-| 2 | `.workflow.yml` missing, malformed, or has invalid `spec_storage`/`gate_pool`/`agent_pool`/`validate_scope` | `ERROR: .workflow.yml ...` | Run `/bootstrap`; or fix path/scope value. |
+| 2 | `.workflow.yml` missing (and no vault fallback applies — i.e. no `--spec` passed, or no `$PWD/specs/<feature>/config.yml` to anchor on), malformed, or has invalid `spec_storage`/`gate_pool`/`agent_pool`/`validate_scope` | `ERROR: .workflow.yml ...` | Run `/bootstrap`; or fix path/scope value; or invoke from a dir that holds `specs/<feature>/config.yml` (vault mode). |
 | 3 | `gates.yml` malformed or has duplicate gate IDs | `ERROR: <pool>: malformed` / `duplicate gate ids: ...` | Fix `knowledge-base/gates.yml`. |
 | 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, unresolved agent id, or missing/invalid `tier` | `ERROR: per-spec config missing: ...` / `tier required (small\|medium\|large)` etc. | Run `/config <feature>` or `/explore <feature>`; fix gate/agent/tier in `specs/<f>/config.yml`. |
 | 5 | `yq` timeout (5s) or JSON extraction failure | `ERROR: <file>: yq timeout` | Retry; investigate filesystem/`yq` perf. |
 | 6 | `yq` not installed, or unknown loader argument | `ERROR: yq not installed` | `brew install yq`. |
 | 7 | per-spec `repos[]` entry has missing/invalid path (missing, `..` escape, non-directory, not a git work tree, **or path is a subdirectory of a different repo's toplevel**); **or** task `ground_rules` references a `repo:<name>:` prefix whose `<name>` is not in `repos[]`; **or** a task `ground_rule` uses bare `project:`/unprefixed path under `spec_storage_mode: vault` (rejected by `task-manager.sh resolve_ground_rule_path`) | `ERROR: <spec.yml>: repos[i] (<name>) ...` / `ERROR: <spec.yml>: ground_rules reference unknown repo names ...` / `ERROR: vault mode rejects ground_rule ...` | Fix `path:` in `specs/<f>/config.yml`; fix the offending task `ground_rules` entry / add the missing repo binding; or convert bare `project:` rules to `repo:<name>:`. Same exit code is also returned by `task-manager.sh` (`resolve_ground_rule_path`) for symmetry. |
 
-Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `gates.yml` modifications) without failing.
+Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `gates.yml` modifications, or chosen-repo `spec_storage` lying outside `WF_VAULT_ROOT` under vault-CWD invocation) without failing.
+
+## Vault-CWD invocation
+
+When `wf_load_config --spec <feature>` runs in a directory with no `.workflow.yml` but with `specs/<feature>/config.yml`:
+
+1. Loader probes `$PWD/specs/<feature>/config.yml` via `find_vault_spec_config`.
+2. Reads `repos[]` from that file. Picks the entry with `role: primary` if any, else `repos[0]`.
+3. Sets `WF_VAULT_ROOT=$PWD`, treats the chosen repo as `WF_REPO_ROOT`, and continues with that repo's `.workflow.yml`.
+4. Exit codes during fallback: 2 (no `--spec`, or no vault config), 4 (vault config malformed / empty `repos[]`), 5 (yq timeout), 6 (yq missing), 7 (chosen repo path missing/unresolvable/no `.workflow.yml`).
+5. Repo-CWD invocations (walk-up succeeds) are unaffected; `WF_VAULT_ROOT` stays unset.
 
 ## CLI mode
 
