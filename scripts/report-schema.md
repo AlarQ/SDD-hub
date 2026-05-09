@@ -33,11 +33,25 @@ findings: []               # see Finding schema below
   lines: "<start>-<end>"
   code_snippet: <quoted text>
   fix_proposal: <concrete patch>
+  rationale: <optional — why this is flagged: root cause / principle violated>
+  impact: <optional — concrete consequence if shipped unfixed>
+  references: <optional list — KB rule paths, CWE ids, doc URLs>
+  confidence: <optional, llm only — high | medium | low>
   review_status: pending | accepted | rejected | noted
   source: tool | llm
   review_notes: <optional, set on reject>
   rule_added: <optional bool, set when a reject spawns a project-KB rule>
 ```
+
+### Field semantics
+
+- `description` — *what* is wrong (the observation).
+- `rationale` — *why* it is wrong (root cause, principle violated, KB rule logic). Optional but expected on `source: llm` findings.
+- `impact` — *what breaks* if shipped unfixed (concrete, scoped — not generic warnings). Expected on `source: llm` findings.
+- `references` — pointer list users can jump to: KB rule path (e.g. `general:security/general.md`), CWE id (e.g. `CWE-89`), or doc URL.
+- `confidence` — LLM-source self-assessment of how certain the finding is. Guides reject heuristics in review.
+
+Tool-source findings (shellcheck, lint) MAY omit `rationale` / `impact` / `confidence`. LLM-source findings SHOULD populate `rationale` and `impact`.
 
 ### Enums
 

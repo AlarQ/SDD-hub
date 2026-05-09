@@ -72,9 +72,15 @@ findings:
   lines: "10-25"
   code_snippet: relevant code excerpt
   fix_proposal: Concrete suggestion with code example
+  rationale: Why this is wrong — root cause / principle violated
+  impact: Concrete consequence if shipped unfixed
+  references: ["<KB rule path or doc URL>"]
+  confidence: high | medium | low
   review_status: pending
   source: llm
 ```
+
+Populate `rationale` and `impact` on every finding. Cite KB rule paths or external docs in `references` when applicable.
 
 Only output findings in this format when instructed to act as a PR review gate. For all other uses, follow the review comment format below.
 

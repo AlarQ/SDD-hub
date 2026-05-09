@@ -141,9 +141,15 @@ Emit findings as a YAML list matching this schema. This is the contract `/review
   code_snippet: |
     exact excerpt from the spec file
   fix_proposal: Concrete suggested edit to the spec (not the code)
+  rationale: Why this is a coherence problem — what assumption breaks
+  impact: Concrete downstream cost (implementation ambiguity, test gaps, rework)
+  references: ["<spec section, ADR id, or KB rule path>"]
+  confidence: high | medium | low
   review_status: pending
   source: llm
 ```
+
+Populate `rationale` and `impact` on every finding.
 
 ### Worked example — `contract`
 
