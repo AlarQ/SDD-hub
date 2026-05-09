@@ -21,11 +21,11 @@ If `WF_SPEC_AGENTS_PROPOSE` is non-empty, it lists the agent IDs to spawn during
 
 `WF_SPEC_TIER` controls which artifacts get written:
 
-| Tier | spec.md | design.md | test-strategy.md | tasks/ | Architect/Backend/UX/UI/AI/TestStrategist agents |
-|------|---------|-----------|------------------|--------|--------------------------------------------------|
-| `small`  | skip | skip | skip | yes  | skip all |
-| `medium` | yes  | skip | skip | yes  | skip Software Architect, Backend Architect, UX/UI, AI Engineer, Test Strategist |
-| `large`  | yes  | yes  | yes  | yes  | full set per default keyword logic |
+| Tier | spec.md | design.md | test-strategy.md | tasks/ | Architect/Backend/UX/UI/AI/TestStrategist agents | Mermaid diagrams |
+|------|---------|-----------|------------------|--------|--------------------------------------------------|------------------|
+| `small`  | skip | skip | skip | yes  | skip all | none |
+| `medium` | yes  | skip | skip | yes  | skip Software Architect, Backend Architect, UX/UI, AI Engineer, Test Strategist | spec.md user-flow `sequenceDiagram` (advisory) |
+| `large`  | yes  | yes  | yes  | yes  | full set per default keyword logic | spec.md user-flow + design.md architecture (required), state/ER/sequence (when applicable) |
 
 Branch on `WF_SPEC_TIER` at the top of the generation loop. For sections "skipped" do NOT spawn the corresponding agent and do NOT write the file.
 
@@ -73,6 +73,9 @@ If the agent errors or times out, proceed with spec.md generation without securi
 - Incorporate security agent findings as BDD scenarios for auth, input validation, and data handling
 - Add a `## Security Scenarios` section with Given/When/Then for each threat mitigation
 
+##### User Flow Diagram (medium + large tiers)
+After `## Security Scenarios`, add a `## User Flow` section containing one Mermaid `sequenceDiagram` block synthesized from the primary happy-path BDD scenario. Actor = end user; participants = the user-visible system surfaces named in spec.md (UI, API, store, external services). Every participant label MUST be a term defined elsewhere in spec.md. Style conventions per `docs/workflow-diagram.md` (solid arrows for direct flow, dashed `-->>` for async/return). Skip on `small`.
+
 ### specs/$ARGUMENTS/design.md
 
 #### Agent-Assisted Architecture & Design Review
@@ -105,16 +108,22 @@ If multiple conditions are met, spawn all matching agents concurrently (they are
 1. **Trade-off analysis** — for each major decision: decision name, options considered, chosen option, what is gained, what is given up
 2. **ADRs** — one Architecture Decision Record per significant decision, using the ADR template
 3. **Risk flags** — severity, description, and mitigation for each architectural concern
+4. **Architecture diagram** — one Mermaid `graph TB` showing modules/layers and dependency direction; subgraph clusters per logical group; `-->` for direct calls, `-.->` for async/event. Required on large tier.
+5. **State diagram** — Mermaid `stateDiagram-v2` for any entity with a non-trivial lifecycle (≥3 states). Include only when ADRs reference state transitions.
 
 **Backend Architect** must return:
 1. **Database schema** — tables/collections, relationships, indexes, migration strategy
 2. **API contracts** — endpoints, request/response shapes, error codes
 3. **Service boundaries** — module decomposition, dependency direction, data flow
+4. **ER diagram** — Mermaid `erDiagram` for any schema-touching design; include cardinality and key fields. Required when schema is in scope.
+5. **Sequence diagram** — Mermaid `sequenceDiagram` for multi-service request flows or async pipelines. Required when ≥2 services interact.
 
 **UX Architect** must return:
 1. **Component hierarchy** — tree of components, props/state ownership
 2. **Layout framework** — grid system, responsive breakpoints, CSS architecture
 3. **Design-system integration** — which existing tokens/components to reuse, what's new
+4. **Component-tree diagram** — Mermaid `graph TD` of component hierarchy with state-ownership annotations on edges.
+5. **User-flow diagram** — Mermaid `sequenceDiagram` with the user as actor and UI/system as participants, covering the primary user journey.
 
 **UI Designer** must return:
 1. **Component specs** — states (default, hover, active, disabled, error), variations
@@ -139,6 +148,15 @@ Incorporate all agent outputs directly into design.md:
 - Include AI Engineer model/pipeline design in a `## AI/ML Architecture` section (if spawned)
 - Module boundaries, dependency direction, data flow
 - Reference `knowledge-base/languages/` for language-specific patterns
+
+##### Embedding Mermaid Diagrams in design.md (large tier)
+Embed every Mermaid block emitted by an agent verbatim under the section that holds the corresponding text:
+- Software Architect's architecture `graph TB` → new `## Architecture Overview` section at the top of design.md (before ADRs).
+- Software Architect's `stateDiagram-v2` → adjacent to the ADR that motivates it.
+- Backend Architect's `erDiagram` and `sequenceDiagram` → inside the `## Backend Design` section, next to the schema and API contracts they describe.
+- UX Architect's component-tree `graph TD` and user-flow `sequenceDiagram` → inside the `## Frontend Architecture` section.
+
+Style: follow `docs/workflow-diagram.md` (solid arrows direct, dashed async/human, subgraph clusters). Every node/entity label MUST correspond to a term defined in spec.md or design.md prose — orphan nodes are flagged by `/validate-spec`.
 
 ### specs/$ARGUMENTS/tasks/NNN-{task-name}.md
 

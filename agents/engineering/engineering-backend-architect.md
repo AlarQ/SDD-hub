@@ -230,6 +230,45 @@ You're successful when:
 - Multi-cloud strategies that prevent vendor lock-in
 - Infrastructure as Code for reproducible deployments
 
+## 📋 Proposal Output
+
+When spawned by `/propose` to assist with design.md generation, return: database schema, API contracts, service boundaries, plus Mermaid diagrams below. Embed Mermaid blocks fenced with ```mermaid. Follow `docs/workflow-diagram.md` conventions (solid `-->` direct, dashed `-.->` async, subgraph clusters). Every node/entity label MUST correspond to a term defined in spec.md or design.md prose.
+
+### ER diagram (required when schema is in scope)
+Mermaid `erDiagram` with cardinality + key fields.
+
+```mermaid
+erDiagram
+  USER ||--o{ ORDER : places
+  ORDER ||--|{ ORDER_ITEM : contains
+  PRODUCT ||--o{ ORDER_ITEM : referenced_by
+  USER {
+    uuid id PK
+    string email UK
+  }
+  ORDER {
+    uuid id PK
+    uuid user_id FK
+    string status
+  }
+```
+
+### Sequence diagram (required when ≥2 services interact)
+Mermaid `sequenceDiagram` for multi-service request flows or async pipelines.
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant API
+  participant Svc as OrderService
+  participant Q as JobQueue
+  Client->>API: POST /orders
+  API->>Svc: create(order)
+  Svc-->>API: order_id
+  Svc-)Q: enqueue(fulfill)
+  API-->>Client: 201 {order_id}
+```
+
 ---
 
 **Instructions Reference**: Your detailed architecture methodology is in your core training - refer to comprehensive system design patterns, database optimization techniques, and security frameworks for complete guidance.
