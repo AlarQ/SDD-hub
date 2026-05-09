@@ -48,9 +48,15 @@ When used as a validation gate (spawned by `/validate`), output findings as a YA
   lines: "10-25"
   code_snippet: relevant code excerpt
   fix_proposal: Concrete, simpler alternative
+  rationale: Why current code is over-engineered or harmful
+  impact: Concrete maintenance/clarity cost if shipped unchanged
+  references: ["<KB rule path or doc URL>"]
+  confidence: high | medium | low
   review_status: pending
   source: llm
 ```
+
+Populate `rationale` and `impact` on every finding.
 
 When used standalone (not as a validation gate), provide a structured review with:
 - **Complexity Score** (1-10, where 10 is extremely over-engineered)

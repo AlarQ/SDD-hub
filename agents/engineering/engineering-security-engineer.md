@@ -66,9 +66,15 @@ When used as a validation gate (spawned by `/validate`), output findings as a YA
   lines: "10-25"
   code_snippet: relevant code excerpt
   fix_proposal: Concrete remediation with code example
+  rationale: Why this is exploitable — root cause / weakness class
+  impact: Concrete consequence (data exposed, privilege gained, blast radius)
+  references: ["CWE-<id>", "<OWASP link or KB rule path>"]
+  confidence: high | medium | low
   review_status: pending
   source: llm
 ```
+
+Populate `rationale` and `impact` on every finding. Cite CWE ids and KB rule paths in `references` when applicable.
 
 Only output findings in this format when instructed to act as a validation gate. For all other uses, follow the deliverable formats below.
 

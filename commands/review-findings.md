@@ -31,10 +31,27 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    f. Track which files each group touches (needed for file exclusivity in step 4).
 4. Present **one group at a time**. Show a progress header: "Group 1 of G (N total findings)".
    For each group:
-   - List all findings in the group: for each, show severity, title, gate (source report), description, code snippet, and fix proposal. Visually separate findings within the group but present them as one review unit.
+   - List all findings in the group as structured cards. Visually separate findings within the group (horizontal rule between cards) but present them as one review unit. Card format per finding:
+
+     ```
+     [<severity>] <title>  (gate: <gate>, source: <tool|llm>[, confidence: <high|medium|low>])
+     File: <file>:<lines>
+
+     What:    <description>
+     Why:     <rationale OR "(not provided — pick Elaborate for deeper analysis)">
+     Impact:  <impact OR "(not provided)">
+     Code:
+       <code_snippet>
+     Fix:
+       <fix_proposal>
+     References: <comma-joined references>   # omit line entirely if empty
+     ```
+
+     Finding schema (including `rationale`, `impact`, `references`, `confidence`) lives in `~/.claude/scripts/report-schema.md`.
    - If the group has multiple findings, show a brief note: "These N findings target the same code region in `<file>` and are grouped for a single decision."
-   - Invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol.md`) with one question per group: **"Accept or reject this group?"** options: `Accept all`, `Reject all`. Do NOT offer partial accept within a group — the fixes are interrelated. Do NOT render the prompt as a plain markdown question.
+   - Invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol.md`) with one question per group: **"Accept, reject, or elaborate this group?"** options: `Accept all`, `Reject all`, `Elaborate`. Do NOT offer partial accept within a group — the fixes are interrelated. Do NOT render the prompt as a plain markdown question.
    - **Stop and wait for the tool result before continuing to the next group.**
+   - If Elaborate: spawn a foreground sub-agent (Agent tool, `subagent_type: "general-purpose"`, `model: "sonnet"`) with the full group findings YAML and target file paths. Sub-agent prompt MUST request: read each cited file around the line range; for each finding produce (1) deeper rationale — root cause + principle violated, (2) concrete impact — what breaks, who notices, (3) one alternative fix worth considering, (4) any KB rule / CWE / doc references found. Return a markdown report; do NOT modify files. Print the report to the user verbatim, then re-invoke `AskUserQuestion` for the same group with options `Accept all` / `Reject all` (Elaborate is single-use per group to keep flow bounded).
    - If Accept:
      - Spawn a sub-agent (using the Agent tool with `run_in_background: true` and `model: "sonnet"`) to apply all fixes in this group. The `model: "sonnet"` parameter is mandatory — do not omit it and do not use a different model. Sub-agent instructions:
        1. Re-read the target file before editing.

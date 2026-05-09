@@ -48,9 +48,15 @@ When used as a validation gate (spawned by `/validate`), output findings as a YA
   lines: "10-25"
   code_snippet: relevant code excerpt
   fix_proposal: Concrete fix preserving architectural integrity
+  rationale: Why this violates architectural principle (coupling, boundary, layering)
+  impact: Concrete consequence (maintainability, scalability, future change cost)
+  references: ["<ADR path or KB rule path>"]
+  confidence: high | medium | low
   review_status: pending
   source: llm
 ```
+
+Populate `rationale` and `impact` on every finding.
 
 Only output findings in this format when instructed to act as a validation gate. For all other uses, follow the deliverable formats below.
 
