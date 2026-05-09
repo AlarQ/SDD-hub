@@ -106,11 +106,11 @@ See `specs/configurable-workflow/design.md` for full ADR detail and schema defin
 
 Specs are tiered to right-size flow ceremony. Tier is inferred at `/explore` step 0 by `engineering-config-inferencer` and approved by the user; written to `specs/<feature>/config.yml` as `tier:`.
 
-| Tier | Threshold (defaults) | Flow shape |
-|------|----------------------|------------|
-| `small`  | ≤5 tasks, ≤10 files | `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. |
-| `medium` | ≤10 tasks, ≤30 files | `/explore` → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
-| `large`  | unbounded            | Full unchanged flow. |
+| Tier | Target tasks | Ceiling tasks | Ceiling files | Flow shape |
+|------|--------------|---------------|---------------|------------|
+| `small`  | 2–4         | 5             | 10            | `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. |
+| `medium` | 4–7         | 10            | 30            | `/explore` → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
+| `large`  | 7–12 typical | unbounded    | unbounded     | Full unchanged flow. |
 
 Defaults live in `.workflow.yml` under `tiers:`. Per-spec override via `tier_ceiling:` in `specs/<feature>/config.yml`.
 

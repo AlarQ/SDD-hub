@@ -148,19 +148,19 @@ Before generating task files, spawn the `Senior Project Manager` agent (`project
 - The design.md content (with all embedded agent outputs)
 - The project's `CLAUDE.md`
 
-Instruct the agent with this directive: "Analyze the spec and design, then produce a task breakdown: ordered list of implementation tasks with acceptance criteria, dependency relationships, and estimated file counts. Flag any tasks that exceed 20 files or that have unclear scope. Stay true to the spec — do not add scope."
+Instruct the agent with this directive: "Analyze the spec and design, then produce a vertical-slice task breakdown. Target task count per tier: small=2–4, medium=4–7, large=7–12. Group related work; only split when files >20, deploys are independent, or work is parallelizable across devs. Each task must justify why it isn't merged with a neighbor. Flag any spec where you cannot stay within the target without losing reviewability. Stay true to the spec — do not add scope."
 
 ##### PM Agent Output Contract
 The agent must return:
-1. **Task list** — ordered tasks with: name, description, acceptance criteria, dependencies, estimated file count
+1. **Task list** — ordered tasks with: name, description, acceptance criteria, dependencies, estimated file count, **rationale (why this task isn't merged with a neighbor)**
 2. **Dependency graph** — which tasks block which
-3. **Scope flags** — any tasks that risk scope creep or exceed the 20-file limit
+3. **Scope flags** — any tasks that risk scope creep, exceed the 20-file limit, or breach the tier task-count target
 
 If the agent errors or times out, proceed with task generation using your own analysis and note: *"Senior PM analysis unavailable — task breakdown generated without PM review."*
 
 ##### Using PM Output for Task Files
 Use the PM agent's task breakdown as input for generating the final task files:
-- Split implementation into small tasks following the PM's ordering and grouping
+- Group implementation into vertical-slice tasks per PM ordering — do not further fragment what the PM grouped
 - Each task's `ground_rules` field lists the specific knowledge-base files that apply using the prefix convention — this becomes the single source of truth for `/implement` and `/validate`
 - Include Security Engineer's security ground rules on relevant tasks
 - Set `status: blocked` with `blocked_by` IDs for tasks with dependencies (per PM dependency graph)
@@ -194,6 +194,7 @@ After saving test-strategy.md, update each task file's `test_cases` field:
 
 ## Constraints
 - Max 20 files per task
+- Target task count per tier (see PM agent): small=2–4, medium=4–7, large=7–12. Exceeding tier ceiling triggers tier breach via `tier-check.sh`.
 - Each task references applicable rules in the `ground_rules` field (per `knowledge-base-rules.md`)
 - Each task includes natural-language test cases (human defines names, AI implements bodies later)
 - Tasks ordered by dependency (`blocked_by` fields)
