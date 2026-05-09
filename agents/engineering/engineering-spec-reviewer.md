@@ -106,6 +106,15 @@ Verify every `gates:` entry and `agents.<phase>:` name resolves to a real gate/a
 - Every referenced function, type, module, CLI flag → `Grep -n` in the repo to verify it exists (or is explicitly called out as new).
 - Every config key (e.g. `spec_storage`, `gates`, `agents`) → `Grep` existing scripts to surface consumer contradictions (e.g. key is renamed but a script still reads the old name).
 
+### 9a. Mermaid diagram audit
+Read `specs/<feature>/config.yml` and capture `tier:`. Then for each Mermaid block (fenced ```mermaid) inside `spec.md` and `design.md`:
+- **Tier requirements.**
+  - `large` tier: `design.md` MUST contain at least one architecture `graph TB` block under `## Architecture Overview`. Missing → `severity: critical, subcategory: diagram-missing`. `spec.md` MUST contain a user-flow `sequenceDiagram` under `## User Flow`. Missing → `severity: high, subcategory: diagram-missing`. When the design references schema (any `erDiagram` candidate keywords: `table`, `schema`, `migration`), an `erDiagram` MUST be present → otherwise `severity: high, subcategory: diagram-missing`. When ≥2 services/components interact (multiple service participants in sequence prose), a `sequenceDiagram` MUST be present → `severity: high` if absent.
+  - `medium` tier: `spec.md` SHOULD contain a user-flow `sequenceDiagram`. Missing → `severity: medium, subcategory: diagram-missing` (advisory).
+  - `small` tier: skip this audit entirely.
+- **Orphan-node check (`diagram-stale`).** For every node label / participant / entity name in each Mermaid block, `Grep` the parent file (and the sibling spec.md/design.md) for the same term in prose. Labels with no prose match → `severity: medium, subcategory: diagram-stale`.
+- **Syntax sanity (`diagram-syntax-invalid`).** Verify each block opens with a recognised diagram type (`graph`, `flowchart`, `sequenceDiagram`, `stateDiagram-v2`, `erDiagram`, `classDiagram`) on its first non-empty line. Unrecognised header or empty body → `severity: high, subcategory: diagram-syntax-invalid`. Note: this is a structural smoke check, not a full Mermaid parse.
+
 ### 10. Severity triage
 - `critical` — spec-level issue that guarantees broken implementation (contract missing on a cross-task boundary; FR with no scenario at all; reuse target that does not exist).
 - `high` — wrong result very likely (undefined error path on a user-visible command; scenario orphan on a security-tagged FR).
@@ -122,7 +131,7 @@ Sort findings by severity (critical → info), then by file path. Output as a si
 |-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `contract`        | `interface-ambiguity`, `response-shape-undefined`, `ownership-unclear`, `versioning-unspecified`                                                      |
 | `logic-gap`       | `edge-case-missing`, `failure-path-unspecified`, `precondition-undefined`, `postcondition-undefined`, `contradictory-branches`                        |
-| `missing-piece`   | `fr-without-scenario`, `scenario-without-task`, `task-without-test`, `adr-untraced`, `term-undefined`, `ground-rule-referenced-undefined`, `shared-fixture-unassigned` |
+| `missing-piece`   | `fr-without-scenario`, `scenario-without-task`, `task-without-test`, `adr-untraced`, `term-undefined`, `ground-rule-referenced-undefined`, `shared-fixture-unassigned`, `diagram-missing`, `diagram-stale`, `diagram-syntax-invalid` |
 | `repo-misalignment` | `reuse-target-missing`, `path-unresolved`, `import-nonexistent`, `function-not-grepable`, `pattern-contradicts-existing`, `ground-rule-file-missing`  |
 
 ## 📋 Validation Gate Output (YAML schema)

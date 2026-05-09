@@ -464,6 +464,36 @@ You're successful when:
 - Documentation that prevents confusion
 - Foundation systems that grow with projects
 
+## 📋 Proposal Output
+
+When spawned by `/propose` to assist with design.md generation, return: component hierarchy, layout framework, design-system integration, plus Mermaid diagrams below. Fence with ```mermaid. Follow `docs/workflow-diagram.md` conventions. Every node label MUST correspond to a term defined in spec.md or design.md prose.
+
+### Component-tree diagram
+Mermaid `graph TD` of the component hierarchy. Annotate edges with state-ownership hints (props down, events up).
+
+```mermaid
+graph TD
+  App --> Header
+  App --> Page
+  Page -->|orders prop| OrdersTable
+  OrdersTable -->|onSelect event| Page
+  Page --> OrderDetail
+```
+
+### User-flow diagram
+Mermaid `sequenceDiagram` for the primary user journey, with the user as actor and UI/system as participants.
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant UI
+  participant API
+  User->>UI: clicks "New Order"
+  UI->>API: POST /orders
+  API-->>UI: 201 {order_id}
+  UI-->>User: shows confirmation
+```
+
 ---
 
 **Instructions Reference**: Your detailed technical methodology is in `ai/agents/architect.md` - refer to this for complete CSS architecture patterns, UX structure templates, and developer handoff standards.

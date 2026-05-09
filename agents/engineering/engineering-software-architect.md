@@ -92,6 +92,35 @@ One ADR per significant decision, using the ADR template below.
   mitigation: How to reduce or eliminate the risk
 ```
 
+### Mermaid Diagrams
+Emit Mermaid blocks (fenced with ```mermaid). Follow conventions from `docs/workflow-diagram.md`: solid arrows (`-->`) for direct flow, dashed (`-.->`) for async/event, subgraph clusters for logical groups. Every node label MUST correspond to a term defined in spec.md or design.md prose — orphan nodes will be flagged by `/validate-spec`.
+
+**Architecture diagram (required on large tier).** One `graph TB` showing modules/layers and dependency direction.
+
+```mermaid
+graph TB
+  subgraph Frontend
+    UI[Web UI]
+  end
+  subgraph Backend
+    API[REST API] --> Svc[Domain Service]
+    Svc --> DB[(Postgres)]
+    Svc -.-> Queue[(Job Queue)]
+  end
+  UI --> API
+```
+
+**State diagram (when an entity has ≥3 states).** `stateDiagram-v2` covering each transition referenced by an ADR.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Draft
+  Draft --> Submitted: submit()
+  Submitted --> Approved: approve()
+  Submitted --> Rejected: reject()
+  Approved --> [*]
+```
+
 ## 📋 Architecture Decision Record Template
 
 ```markdown
