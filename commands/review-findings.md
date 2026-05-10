@@ -28,8 +28,18 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    c. **Pass 2 — Same-file category match:** For still-ungrouped findings in the same file that share an identical `category` value, merge them into one group.
    d. Remaining ungrouped findings each become a singleton group.
    e. Sort groups by: highest severity within the group (critical > high > medium > low), then file path alphabetically.
-   f. Track which files each group touches (needed for file exclusivity in step 4).
-4. Present **one group at a time**. Show a progress header: "Group 1 of G (N total findings)".
+   f. Track which files each group touches (needed for file exclusivity in step 5).
+4. **Snippet hydration** — before rendering any card, walk every actionable finding and ensure `code_snippet` has content:
+   - If `code_snippet` is non-empty (after trimming whitespace), keep agent-provided text as-is.
+   - Else if `file` and `lines` are both present:
+     - Parse `lines` as `<start>-<end>` (single int → start=end).
+     - Read `file` with `offset=<start>` and `limit=min(<end>-<start>+1, 40)`.
+     - In vault/multi-repo mode, resolve relative `file` against the owning task's `WF_TASK_REPO_PATH` first (per `~/.claude/scripts/multi-repo-resolution.md`).
+     - Use the read content as `code_snippet`. If the original range exceeded 40 lines, append a final line `… (truncated, <N> more lines)` where N = `<end>-<start>+1 - 40`.
+     - On Read error (file missing, path outside repo): set `code_snippet` to `(snippet unavailable: <reason>)`.
+   - Else: set `code_snippet` to `(no file:lines on finding)`.
+   - This is render-time only — do NOT write hydrated snippets back to the report YAML.
+5. Present **one group at a time**. Show a progress header: "Group 1 of G (N total findings)".
    For each group:
    - List all findings in the group as structured cards. Visually separate findings within the group (horizontal rule between cards) but present them as one review unit. Card format per finding:
 
@@ -63,10 +73,10 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    - If Reject: invoke `AskUserQuestion` again with two questions in one call — (a) free-text "Reason for rejecting this group?" (open-ended), and (b) "Add reject reasoning as project KB rule?" with options `Yes`/`No`. Use answers to set review_notes on ALL findings in the group; review_status → "rejected".
    - If the KB-rule answer was `Yes`: create/update the relevant file in the **project** knowledge-base (per `knowledge-base-rules.md`) and update `knowledge-base/_index.md`, set rule_added: true on the relevant finding(s).
    - After processing, show running tally: "X accepted, Y rejected so far (Z fixes in progress)"
-5. After all groups have been reviewed, wait for any in-flight fix sub-agents to complete. Report: "All N fix sub-agents completed." If any sub-agent errored, report which group/file failed and ask the user whether to retry or skip that fix (set review_status back to "pending" if retry, or "rejected" if skip).
-6. Set review_status to "noted" on all informational findings
-7. Display informational summary — compact list: title, file, and one-line description for each
-8. Report summary: X groups accepted (N findings), Y groups rejected (M findings), Z noted (informational), W new rules added
+6. After all groups have been reviewed, wait for any in-flight fix sub-agents to complete. Report: "All N fix sub-agents completed." If any sub-agent errored, report which group/file failed and ask the user whether to retry or skip that fix (set review_status back to "pending" if retry, or "rejected" if skip).
+7. Set review_status to "noted" on all informational findings
+8. Display informational summary — compact list: title, file, and one-line description for each
+9. Report summary: X groups accepted (N findings), Y groups rejected (M findings), Z noted (informational), W new rules added
 
 ## Status Update
 
