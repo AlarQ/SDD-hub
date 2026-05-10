@@ -55,7 +55,7 @@ Print the reasoning + draft YAML as plain output (status, no prompt):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Then invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol.md`) with one question:
+Then **MUST** invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol.md`) with one question:
 - **question:** "Approve draft config?"
 - **options:**
   - `Approve` — save YAML as-is
@@ -63,15 +63,25 @@ Then invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol
   - `Manual` — enter config manually (or accept default template)
   - `Skip` — do not write config.yml now
 
-Use the user's selection (Approve/Edit/Manual/Skip) to drive step 0d.
+**Fail-closed:** if `AskUserQuestion` cannot be invoked or returns no selection, abort step 0 — do NOT write `config.yml`, do NOT fall through to a default path. Print: `Approval required — config.yml not written. Re-run /explore <feature>.` Then proceed to step 1 with no config written (matching the `Skip` outcome but with a louder message).
+
+Use the user's selection (Approve/Edit/Manual/Skip) to drive step 0d. Each write path in 0d MUST verify `AskUserQuestion` returned a selection before persisting bytes.
 
 ### 0d. Handle user response
 
 **A — Approve:** write the YAML block exactly as returned by the agent to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml` (create parent dirs if needed). Emit `config_approved` event (see 0e). Proceed to step 1.
 
-**E — Edit:** print the draft YAML in a fenced code block and tell the user: "Paste your edited version below." Wait for the user to provide the full edited YAML, then write it to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml`. Emit `config_approved` event (with edited YAML as payload). Proceed to step 1.
+**E — Edit:** print the draft YAML in a fenced code block and tell the user: "Paste your edited version below." Wait for the user to provide the full edited YAML. Then re-display the pasted YAML and **MUST** invoke a second `AskUserQuestion`:
+- **question:** "Confirm write of pasted YAML to config.yml?"
+- **options:** `Write` — persist as-is | `Cancel` — discard, do not write.
 
-**M — Manual entry / inferencer unavailable:** tell the user: "Enter your `config.yml` content below, or press Enter to write the default template." If the user provides content, write it. If the user presses Enter (empty input), copy `templates/spec-config.yml.template` to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml`. Emit `config_approved` event. Proceed to step 1.
+On `Write`: persist to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml` and emit `config_approved` event (with edited YAML as payload). On `Cancel` or missing selection: do NOT write, print "Edit cancelled — config.yml unchanged." and proceed to step 1.
+
+**M — Manual entry / inferencer unavailable:** tell the user: "Enter your `config.yml` content below, or press Enter to write the default template." Collect input. Then re-display the resolved content (user input or template) and **MUST** invoke a second `AskUserQuestion`:
+- **question:** "Confirm write of this YAML to config.yml?"
+- **options:** `Write` — persist | `Cancel` — discard, do not write.
+
+On `Write`: if user provided content, write it; if Enter (empty), copy `templates/spec-config.yml.template` to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml`. Emit `config_approved` event. On `Cancel` or missing selection: do NOT write, print "Manual entry cancelled — config.yml unchanged." and proceed to step 1.
 
 **S — Skip:** do not write `config.yml`. Note: *"config.yml skipped — run `/config $ARGUMENTS` later to configure gates and agents."* Do NOT emit any monitor events. Proceed to step 1.
 

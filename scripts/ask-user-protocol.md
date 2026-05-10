@@ -16,6 +16,10 @@ Routes user decisions through the structured picker UI so the user clicks/select
 6. **Status output stays plain.** Progress headers ("Group 3 of 12"), running tallies ("X accepted, Y rejected"), summaries, and config previews stay as regular markdown — only the *prompt that requires input* uses the tool.
 7. **Reject reasoning.** When a user picks Reject, follow up with a second AskUserQuestion: a free-text "reason" question, plus an enumerable "Add as project KB rule?" yes/no.
 
+## Fail-closed enforcement
+
+Config writes (`specs/<feature>/config.yml`) and `/validate` runs MUST be gated by `AskUserQuestion`. If the tool cannot be invoked or returns no selection, abort the operation — do NOT fall through to a default. Print an explicit "Approval required — aborted" message and exit non-zero.
+
 ## Skipping condition
 
 Do **not** route through AskUserQuestion when:

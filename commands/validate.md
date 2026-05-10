@@ -34,6 +34,56 @@ $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
 ```
 Default (no `applies_to_repos` field) = applies to all repos. This filter applies after the ceiling intersection.
 
+## Step 0.5 — Validation Set Approval (mandatory, fail-closed)
+
+Before any gate runs and before any agent is spawned, preview the resolved set and require explicit user approval.
+
+1. Compute the per-task effective set once for preview:
+   ```bash
+   source ~/.claude/scripts/gate-ceiling.sh
+   effective="$(wf_compute_effective_set "<task-file>")"
+   ```
+   Capture also: ceiling-skipped gates (in `WF_GATE_POOL`, language-applicable, but not in `WF_SPEC_GATES`), `applies_to`-skipped gates, `applies_to_repos`-skipped gates.
+
+2. Compute the post-tier-skip advisory agent list. Start from `WF_SPEC_AGENTS_VALIDATE`, drop any agent listed in `WF_TIER_AGENT_SKIP`, capture skipped agents with reason `tier_skip=<WF_SPEC_TIER>`. **What the user approves here is what runs** — the tier filter that previously sat in Phase 2 (line 80 below) moves to this step.
+
+3. Render the preview as plain status output:
+   ```
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     Validate — <feature> / <task-id>
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     Deterministic gates (effective set):
+       - <gate-id>  [<category>]
+       …
+     Skipped deterministic gates:
+       - <gate-id>  reason: <not-in-ceiling|applies_to|applies_to_repos>
+       …
+     Advisory agents (post-tier-skip):
+       - <agent-id>
+       …
+     Skipped advisory agents:
+       - <agent-id>  reason: tier_skip=<tier>
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ```
+
+4. **MUST** invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`):
+   - **question:** "Proceed with this validation set?"
+   - **options:**
+     - `Run all` — proceed with shown deterministic gates and advisory agents.
+     - `Skip advisory agents` — Phase 1 only; treat `WF_SPEC_AGENTS_VALIDATE` as empty for this run; emit `gate_skip` with `reason=user_skipped` per omitted agent.
+     - `Edit ceiling` — abort. Print: "Run `/config <feature>` to edit ceiling, then re-run `/validate <feature>`."
+     - `Cancel` — abort cleanly; do not change task status.
+
+5. **Fail-closed:** if `AskUserQuestion` cannot be invoked or returns no selection, abort. Do NOT default to `Run all`. Print: `Approval required — validation aborted. Re-run /validate <feature>.`
+
+6. On approval, emit a monitor event:
+   ```bash
+   $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" "validate_set_approved" "<task-id>" \
+     "$(printf '{"gates":%s,"agents":%s,"decision":"%s"}' "<gates-json>" "<agents-json>" "<run_all|skip_agents>")"
+   ```
+
+7. On `Run all` or `Skip advisory agents`, proceed to Phase 1 with the approved sets. Phase 2 already-applied tier filter is now a no-op (filtering already done here).
+
 ## Phase 1: Gate Ceiling Intersection (hard gates)
 
 For each task with `status: implemented`:
@@ -77,7 +127,7 @@ After computing the effective set above and before step 4 below, branch on `WF_V
 
 Spawn agents **in parallel** to analyze code against knowledge-base rules. Agent list comes from `WF_SPEC_AGENTS_VALIDATE` (space-separated IDs loaded in Step 0). If `WF_SPEC_AGENTS_VALIDATE` is empty, skip Phase 2 entirely (no advisory agents for this spec).
 
-**Tier-based skip:** Before spawning, filter the agent list against `WF_TIER_AGENT_SKIP` (space-separated). For each skipped agent, emit a `gate_skip` event with `{"agent":"<id>","reason":"tier_skip","tier":"<WF_SPEC_TIER>"}`. By default `small` tier skips `security`, `code-quality`, `architecture`, `compliance` — leaving lint + tests + any deterministic gates only. If the resulting list is empty after filtering, skip Phase 2 entirely.
+**Tier-based skip:** Already applied in Step 0.5 — the agent list at this point is the post-tier-skip approved set. Tier-skip `gate_skip` events were emitted there. If the approved list is empty (user picked `Skip advisory agents`, or all agents were tier-filtered, or `WF_SPEC_AGENTS_VALIDATE` was empty), skip Phase 2 entirely.
 
 Each spawned agent receives:
 - The task file path and changed files (from `estimated_files` or git diff)
