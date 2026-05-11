@@ -144,6 +144,7 @@ Usage: task-manager.sh <command> [args...]
 Commands:
   validate <task-file>           Validate task file structure and fields
   set-status <task-file> <status> Update task status (validates transition)
+  set-pr-url <task-file> <url>   Write pr_url to task frontmatter atomically
   unblock <tasks-directory>      Check blocked tasks, unblock if dependencies are done
   next <tasks-directory>         Get next eligible task (status: todo)
   create-followup <feature> <fr-id> <description>
@@ -366,6 +367,18 @@ cmd_set_status() {
   maybe_emit_spec_last_task_done "$file" "$new_status"
 }
 
+# Write pr_url to task frontmatter atomically. Used by /implement (draft PR open)
+# and /ship (fallback PR create). Validates basic URL shape; idempotent overwrite.
+cmd_set_pr_url() {
+  local file="${1:-}" url="${2:-}"
+  [ -z "$file" ] || [ -z "$url" ] && die "Usage: task-manager.sh set-pr-url <task-file> <url>"
+  [ -f "$file" ] || die "Task file not found: $file"
+  [[ "$url" =~ ^https?:// ]] || die "Invalid pr_url (must start with http:// or https://): $url"
+  cmd_validate "$file" > /dev/null
+  update_frontmatter "$file" ".pr_url = \"$url\""
+  echo "pr_url set: $url ($file)"
+}
+
 # Create a follow-up task auto-generated from a spec-audit accepted finding (T017).
 # Validates FR id against spec.md FR allowlist (security boundary — Odium may hallucinate).
 # Inherits ground_rules from spec.md "## Applicable Ground Rules" section.
@@ -498,6 +511,7 @@ cmd_init_fix() {
 case "${1:-help}" in
   validate)         shift; cmd_validate "$@" ;;
   set-status)       shift; cmd_set_status "$@" ;;
+  set-pr-url)       shift; cmd_set_pr_url "$@" ;;
   unblock)          shift; cmd_unblock "$@" ;;
   next)             shift; cmd_next "$@" ;;
   create-followup)  shift; cmd_create_followup "$@" ;;

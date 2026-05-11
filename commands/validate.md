@@ -10,6 +10,7 @@ Feature name: $ARGUMENTS
    - If no tasks have `status: implemented`, report and stop
    - If more than one task has `status: implemented`, report an error: "Multiple tasks are at `implemented` status — only one task should be in flight at a time. Check task state integrity."
    - Validate exactly one task
+3. **Draft-PR comment soft check** (non-blocking): if the task has a `pr_url` in frontmatter, list comments on the PR (`gh api repos/<owner/repo>/pulls/<num>/comments` + `…/issues/<num>/comments`) and count those without a `eyes` reaction by the current `gh api user`. If > 0, print a one-line warning: "PR has N unaddressed comments. Consider running `/pr-review $ARGUMENTS` before `/validate`." Proceed regardless — this is informational only.
 
 ## Step 0 — Load Spec Config
 

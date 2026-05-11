@@ -44,14 +44,27 @@ Resolve the task's bound repo per `~/.claude/scripts/multi-repo-resolution.md` �
 4. Review `git status` — warn about any sensitive files (.env, credentials, secrets)
 5. Stage and commit all changes using conventional commit format: `type(task-id): {task-title}` (`git -C "$WF_TASK_REPO_PATH" add -A && git -C "$WF_TASK_REPO_PATH" commit -m "…"`) — skip if working tree is clean and commits already exist
 6. Push the task branch: `git -C "$WF_TASK_REPO_PATH" push -u origin feat/$ARGUMENTS/{task-id}-{task-name}`
-7. Create PR targeting the feature branch (run from `$WF_TASK_REPO_PATH` so `gh` picks up the right remote):
-   ```
-   (cd "$WF_TASK_REPO_PATH" && gh pr create --base feat/$ARGUMENTS \
-     --title "type(task-id): {task-title}" \
-     --body "<summary of changes based on the diff>")
-   ```
+7. PR handling — `/implement` already opened a draft PR. Read the task's `pr_url` from frontmatter:
+   - **If `pr_url` exists and PR state is `OPEN` and `isDraft: true`**: mark it ready-for-review instead of creating a new one:
+     ```
+     (cd "$WF_TASK_REPO_PATH" && gh pr ready <pr_url>)
+     ```
+     Then refresh the PR body to include the final post-validation diff summary + `validation: pass`:
+     ```
+     (cd "$WF_TASK_REPO_PATH" && gh pr edit <pr_url> --body "<summary of changes>
+
+     validation: pass")
+     ```
+     Emit `~/.claude/scripts/monitor.sh log_event $ARGUMENTS pr_ready <task-id> '{"pr_url":"<url>"}'`.
+   - **If no `pr_url` in frontmatter** (e.g. `/implement` PR step failed, or legacy flow): create the PR ready-for-review:
+     ```
+     (cd "$WF_TASK_REPO_PATH" && gh pr create --base feat/$ARGUMENTS \
+       --title "type(task-id): {task-title}" \
+       --body "<summary of changes based on the diff>")
+     ```
+   - **If `pr_url` exists but state is `MERGED` or `CLOSED`**: refuse and say: "PR <url> is already <state>. Nothing to ship."
 8. Clear monitor context: `$HOME/.claude/scripts/monitor.sh clear_context` (non-fatal — proceed even if this fails; stale context is overwritten by the next `/implement`)
-9. Save the PR URL to the task file frontmatter as `pr_url`. The task file lives in the vault/spec dir, **not** the bound repo.
+9. Save the PR URL to the task file frontmatter via `~/.claude/scripts/task-manager.sh set-pr-url <task-file> <url>` (idempotent — overwrites existing value if the draft PR path above already wrote one). The task file lives in the vault/spec dir, **not** the bound repo.
 10. Persist the task-file change:
     - **Single-repo mode** (`WF_SPEC_STORAGE_MODE=repo`): `git add <task-file> && git commit -m "chore(task-id): add PR URL" && git push`
     - **Vault mode**: detect whether the vault dir is itself a git repo — `vault_repo="$(git -C "$WF_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"`. If non-empty, commit there: `git -C "$vault_repo" add "<task-file>" && git -C "$vault_repo" commit -m "chore(task-id): add PR URL" && git -C "$vault_repo" push`. If empty, print warning: "pr_url written to <task-file> but vault is not a git repo — persist manually." Do not silently skip.

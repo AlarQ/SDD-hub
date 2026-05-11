@@ -2,7 +2,7 @@ Fetch and respond to PR review comments, with agent-powered code review analysis
 
 Feature name: $ARGUMENTS
 
-**Note:** PR review fixes do NOT trigger re-validation. The PR reviewer is the safety net at this stage. Task status remains `done` — if a PR reviewer finds an issue, it is handled entirely within the PR, no task state change needed.
+**Note:** `/pr-review` runs against the **draft PR** opened by `/implement` (pre-validation human review loop) or against a ready PR opened by `/ship`. In both cases, task status is unchanged — comment resolution happens entirely on the PR. The loop is idempotent: comments already addressed (marked with a Claude-authored `eyes` reaction on the original comment) are skipped on re-runs.
 
 ## Prerequisites
 1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
@@ -49,15 +49,104 @@ If the agent errors or times out, report the failure to the user and proceed dir
 4. On reject: follow up with one `AskUserQuestion` call carrying two questions — (a) free-text "Reason?" and (b) "Promote to project KB rule?" `Yes`/`No`. Update KB only if Yes.
 5. After all agent findings are resolved, commit accepted fixes (if any) with message referencing the agent review
 
-## Phase 2: Human PR Comments
+## Phase 2: Human PR Comments — Classify & Address Loop
 
-1. Get current branch and PR number via `gh pr view --json number`
-   - If no PR exists for the current branch, try using the task's `pr_url` from frontmatter
-2. Fetch comments via `gh api repos/{owner}/{repo}/pulls/{number}/comments`
-3. For each unresolved comment:
-   - Read the referenced file and lines
-   - Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
-   - Generate a fix proposal with: description, code_snippet, status: pending
-4. For each proposal: print proposal details, then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Accept this proposal?" options: `Accept`, `Reject`. One tool call per proposal.
-5. On accept: apply fix, commit with reference to comment
-6. On reject: follow up with one `AskUserQuestion` call — free-text "Reason?" and `Yes`/`No` "Promote to project KB rule?". Update KB only if Yes.
+This phase reads PR comments, classifies each (`question | task | nit | already-addressed`), executes them, and posts threaded `[claude]` replies on the original comment thread. Addressed comments are marked with an `eyes` reaction (by the current `gh` user) so re-running `/pr-review` only picks up new comments.
+
+### 1. Resolve the PR
+
+- Get PR number: `gh pr view --json number,state,isDraft` from the task branch.
+- If not on a task branch, fall back to the task's `pr_url` frontmatter (per Prerequisites step 2).
+- Fail-fast checks (each fatal, with explicit message):
+  - `gh auth status` — if not authenticated, exit with "Run `gh auth login` first."
+  - PR state not `OPEN` → exit with "PR is <state>. Nothing to address."
+
+### 2. Fetch comments (review + issue)
+
+```bash
+PR=<number>
+OWNER_REPO=<owner/repo>  # gh repo view --json nameWithOwner --jq .nameWithOwner
+gh api "repos/$OWNER_REPO/pulls/$PR/comments" > /tmp/pr-review-comments.json
+gh api "repos/$OWNER_REPO/issues/$PR/comments" > /tmp/pr-issue-comments.json
+ME=$(gh api user --jq .login)
+```
+
+Review comments (`pulls/.../comments`) have `path`, `line`, `in_reply_to_id`. Issue comments (`issues/.../comments`) are PR-wide, no file/line.
+
+### 3. Filter already-addressed
+
+For each comment, check reactions:
+
+```bash
+# review comments
+gh api "repos/$OWNER_REPO/pulls/comments/<id>/reactions" --jq '.[] | select(.user.login == env.ME and .content == "eyes")'
+# issue comments
+gh api "repos/$OWNER_REPO/issues/comments/<id>/reactions" --jq '.[] | select(.user.login == env.ME and .content == "eyes")'
+```
+
+If a matching reaction exists → skip. Also skip comments whose `user.login == $ME` (don't reply to own threads) and comments whose body starts with `[claude]`.
+
+### 4. LLM-classify remaining comments
+
+Spawn one classification sub-agent (general-purpose) with:
+- The unaddressed comment list (id, body, file, line, hunk diff context)
+- The task file (scope, ground_rules)
+- The PR diff (`git -C "$WF_TASK_REPO_PATH" diff <base>...HEAD`)
+
+Agent output (YAML):
+```yaml
+- id: <comment_id>
+  kind: review | issue        # which API endpoint it came from
+  type: question | task | nit | already-addressed
+  summary: <one-line>
+  proposed_action: <answer text for questions | change description for tasks/nits | commit ref for already-addressed>
+```
+
+### 5. User confirmation
+
+Print the classification table. Then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — one tool call per comment with options `Apply as classified`, `Re-classify`, `Skip`. On `Re-classify`, follow up with options `question`, `task`, `nit`, `skip`.
+
+### 6. Execute per confirmed item
+
+Reply endpoint depends on `kind`:
+- `review` comments → threaded reply: `gh api repos/$OWNER_REPO/pulls/$PR/comments -f body="[claude] …" -F in_reply_to=<id>`
+- `issue` comments → top-level reply quoting original: `gh pr comment $PR --body "[claude] re: <short-quote>\n\n<reply body>"`
+
+Reaction endpoint also depends on `kind`:
+- `review` → `gh api repos/$OWNER_REPO/pulls/comments/<id>/reactions -f content=eyes`
+- `issue` → `gh api repos/$OWNER_REPO/issues/comments/<id>/reactions -f content=eyes`
+
+Actions:
+
+- **`question`**: compose an answer (LLM, grounded in code). Post threaded reply:
+  ```
+  [claude] <direct answer in 1-3 sentences>.
+  Source: <file:line> | spec section <id> | (none — design choice)
+  ```
+  React `eyes` on original. Emit `pr_comment_answered`.
+
+- **`task`**: apply code change (Edit/Write), stage, commit with message `pr-review: address comment <id>`, push to task branch. Then reply:
+  ```
+  [claude] addressed in <short-sha>.
+  What: <bullet list of changes>
+  How: <one-line technique / approach>
+  ```
+  React `eyes`. Emit `pr_comment_task_applied`.
+
+- **`nit`**: same path as `task` (apply + reply with sha) OR defer:
+  ```
+  [claude] nit acknowledged, deferred — <reason>.
+  ```
+  React `eyes`. Emit `pr_comment_task_applied` or `pr_comment_skipped`.
+
+- **`already-addressed`**: reply `[claude] already addressed in <short-sha>` (sha from `git log --oneline -S "<keyword>"` or user-provided). React `eyes`. Emit `pr_comment_skipped`.
+
+Use `~/.claude/scripts/monitor.sh log_event $ARGUMENTS <event> <task-id> '{"comment_id":"<id>","type":"<type>"}'` for each.
+
+### 7. Tail
+
+After loop:
+- If any remaining unaddressed comments (user chose `Skip` without acting) → print: "Some comments deferred. Re-run `/pr-review $ARGUMENTS` after addressing, or run `/validate $ARGUMENTS` to proceed regardless."
+- Else → print: "All comments addressed. Run `/validate $ARGUMENTS` next."
+
+Never auto-invoke the next command.

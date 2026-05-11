@@ -11,7 +11,7 @@ Visual map of the spec-driven development workflow: slash commands, agent spawns
 
 ## 1. Command Chain
 
-Each command runs only when the user invokes it. There is no auto-chaining between slash commands — every command terminates after its own work and prints the next command to run. The per-task sequence is `/implement` → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship`. Human gates appear at finding review, rule-candidate review, and PR merge. Side commands (`/spec-status`, `/continue-task`, `/pr-review`, etc.) are invokable anytime.
+Each command runs only when the user invokes it. There is no auto-chaining between slash commands — every command terminates after its own work and prints the next command to run. The per-task sequence is `/implement` (opens draft PR) → `/pr-review` (optional; loops until PR comments resolved) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks draft PR ready). Human gates appear at PR comment review (on GitHub), finding review, rule-candidate review, and PR merge. Side commands (`/spec-status`, `/continue-task`, etc.) are invokable anytime.
 
 After `/propose` finishes, the user runs `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` (also user-invoked) and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
 
@@ -39,12 +39,14 @@ graph LR
         PROP["/propose"]
         VSPEC_PRE["/validate-spec"]
         IMPL["/implement"]
+        DPR[draft PR opened<br/>human review on GitHub]
+        PRR["/pr-review<br/>(loop until comments resolved)"]
         TCHK{tier-check.sh}
         PROMO["/promote-tier"]
         VAL["/validate"]
         REV["/review-findings"]
         LEARN["/learn-from-reports"]
-        SHIP["/ship"]
+        SHIP["/ship<br/>(mark PR ready)"]
     end
 
     subgraph Audit["Implementation-completion audit"]
@@ -55,7 +57,6 @@ graph LR
     subgraph Side["Side commands"]
         CONT["/continue-task"]
         STAT["/spec-status"]
-        PRR["/pr-review"]
         QS["/quick-ship"]
         RES["/research"]
         WS["/workflow-summary"]
@@ -69,10 +70,14 @@ graph LR
     VSPEC_PRE -->|findings| REV
     VSPEC_PRE -->|pass| IMPL
     IMPL --> TCHK
-    TCHK -->|no breach| VAL
-    TCHK -.->|breach: Continue| VAL
+    TCHK -->|no breach| DPR
+    TCHK -.->|breach: Continue| DPR
     TCHK -.->|breach: Abort| PROMO
     PROMO -.-> PROP
+    DPR -.->|comments present| PRR
+    DPR -->|no comments| VAL
+    PRR -->|re-loop / new comments| PRR
+    PRR --> VAL
     VAL -->|findings| REV
     VAL -->|zero findings| LEARN
     VAL -.->|small: lint+tests only| LEARN
@@ -94,8 +99,8 @@ graph LR
     CONT -.-> REV
     CONT -.-> LEARN
     CONT -.-> SHIP
+    CONT -.-> PRR
     STAT -.-> Core
-    PRR -.-> SHIP
 ```
 
 ### `/fix` — bug-fix flow
@@ -402,7 +407,7 @@ Notes:
 ## Key Invariants
 
 - **Serial execution** — one task `in-progress` at a time
-- **Per-task sequence** — `/implement` → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship`, each invoked explicitly by the user
+- **Per-task sequence** — `/implement` (opens draft PR) → `/pr-review` (optional loop) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks PR ready), each invoked explicitly by the user
 - **All-gates** — all 5 validation gates must pass before `done`
 - **Dual KB** — general (`~/.claude/knowledge-base/`) + project (`knowledge-base/`), project overrides general
 - **One PR per task** — target is `feat/$FEATURE`, not `main`

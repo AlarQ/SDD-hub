@@ -108,9 +108,28 @@ This is a lightweight pre-flight check — `/validate` remains the authoritative
 
 13. Run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`
 
+## Open Draft PR (pre-validation human review)
+
+After status set to `implemented`, open a **draft PR** so the user can review the diff on GitHub before validation runs.
+
+1. Stage + commit any uncommitted work: `git -C "$WF_TASK_REPO_PATH" add -A && git -C "$WF_TASK_REPO_PATH" commit -m "type(task-id): {task-title}"` — skip if tree clean and commits already exist.
+2. Push task branch: `git -C "$WF_TASK_REPO_PATH" push -u origin feat/$ARGUMENTS/{task-id}-{task-name}`.
+3. Create the draft PR (run from `$WF_TASK_REPO_PATH` so `gh` picks the right remote):
+   ```
+   (cd "$WF_TASK_REPO_PATH" && gh pr create --draft --base feat/$ARGUMENTS \
+     --title "type(task-id): {task-title}" \
+     --body "<diff summary>
+
+   Pre-validation draft for human review. Comment on the PR, then run \`/pr-review $ARGUMENTS\` to address comments. Run \`/validate $ARGUMENTS\` when ready.")
+   ```
+4. Save the returned PR URL to the task file frontmatter via `~/.claude/scripts/task-manager.sh set-pr-url <task-file> <url>`. Then persist the task-file change (single-repo: commit in repo root and push; vault mode: commit in vault repo if it's a git repo, else warn — same persistence pattern as `/ship` step 10).
+5. Emit monitor event: `~/.claude/scripts/monitor.sh log_event $ARGUMENTS pr_opened_draft <task-id> '{"pr_url":"<url>"}'`.
+
+If PR creation fails (e.g. `gh auth` missing, no remote), report the failure and instruct the user to create the PR manually, then re-run nothing — `/pr-review` will pick up `pr_url` from frontmatter.
+
 IMPORTANT:
 - Do NOT start the next task automatically — serial execution, one task in flight at a time.
-- Do NOT auto-invoke `/validate`. Stop and instruct the user: "Task implemented. Run `/validate $ARGUMENTS` next."
+- Do NOT auto-invoke `/validate` or `/pr-review`. Stop and instruct the user: "Draft PR opened: <url>. Review on GitHub and comment, then run `/pr-review $ARGUMENTS` to address comments. Run `/validate $ARGUMENTS` when comments resolved (or skip `/pr-review` if no comments)."
 
 ## Spec-Done Detection
 

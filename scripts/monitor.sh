@@ -8,6 +8,14 @@ set -euo pipefail
 # Public sourcing API: log_event, start_phase, end_phase, set_context,
 #   read_context, clear_context, escape_json_string.
 # No external dependencies (uses printf for JSON, date for timestamps).
+#
+# Known event categories (non-exhaustive):
+#   task_transition, spec_last_task_done, gate_skip, tier_breach, tier_inferred,
+#   tier_approved, tier_promoted, validate_impl_skipped, validate_set_approved,
+#   config_inferred, config_approved, repo_bound, repo_missing, gate_repo_switch,
+#   fix_started, fix_root_cause, fix_shipped,
+#   pr_opened_draft, pr_comment_answered, pr_comment_task_applied,
+#   pr_comment_skipped, pr_ready.
 
 MONITOR_CONTEXT_FILE=".monitor-context"
 
