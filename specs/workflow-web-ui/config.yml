@@ -1,0 +1,9 @@
+tier: large
+tags: [frontend, leptos, wasm, ui, rust]
+gates: []
+agents:
+  explore: [engineering/software-architect]
+  propose: [engineering/software-architect]
+  implement: [code-quality-pragmatist]
+  validate: [engineering/security-engineer, code-quality-pragmatist]
+  pr-review: [engineering/code-reviewer]
