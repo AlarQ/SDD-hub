@@ -27,14 +27,14 @@ This project uses a custom spec-driven development workflow with validation gate
 ### Dual Knowledge Base
 Two knowledge bases work together:
 
-- **General KB** (`~/.claude/knowledge-base/`) — universal rules installed globally via `setup.sh`. Contains security, architecture, testing, and style rules that apply to all projects.
+- **General KB** (`$WF_GENERAL_KB/`) — universal rules. Path is configured per-repo via `general_kb_path` in `.workflow.yml` (required key, no default) and exported by `scripts/config-loader.sh`. Typically points at a master-brain / shared vault. Contains security, architecture, testing, and style rules that apply across all projects.
 - **Project KB** (`knowledge-base/`) — project-specific rules created via `/bootstrap`. Contains language files and conventions discovered via the feedback loop.
 
 Both are read by all commands. Project rules override general rules on the same topic.
 
 #### ground_rules Prefix Convention
 The `ground_rules` field on each task uses prefixes to reference rules from either KB:
-- `general:security/general.md` → resolves to `~/.claude/knowledge-base/security/general.md`
+- `general:security/general.md` → resolves to `$WF_GENERAL_KB/security/general.md`
 - `project:languages/rust.md` → resolves to `knowledge-base/languages/rust.md`
 - Unprefixed paths default to `project:` for backward compatibility
 
@@ -76,7 +76,7 @@ Agents run alongside deterministic tools. Agent findings are advisory; tool find
 - Human PR comments are handled separately after agent review
 
 ### Ground Rules
-- General rules live in `~/.claude/knowledge-base/` — universal across all projects
+- General rules live in `$WF_GENERAL_KB/` — universal across all projects
 - Project rules live in `knowledge-base/` — specific to this repository
 - Both must exist — commands refuse to run without either
 - Rejected validation findings may become new rules in project knowledge-base/

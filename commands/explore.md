@@ -1,7 +1,7 @@
 Explore and clarify requirements for a new feature or change.
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 
 ## Step 0 — Config Inference (runs before explore conversation)
 
@@ -115,7 +115,7 @@ The agent's YAML must include `tier: small|medium|large`. If the YAML lacks `tie
 If the agent picked `small` and the spec keywords include `auth`, `security`, `migration`, `api`, `schema`, or `crypto`, override to `medium` and note the override in reasoning. The user can override via `Edit` path.
 
 ## Steps
-1. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) to understand available ground rules
+1. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) to understand available ground rules
 2. Ask the user to describe the feature or change
 3. **Establish the user perspective first** — before diving into technical areas, clarify:
    - Who benefits from this feature? (user role, persona)

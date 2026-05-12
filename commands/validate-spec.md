@@ -10,7 +10,7 @@ Distinct from `/validate-impl` (post-implementation Odium audit of claimed-vs-ac
 
 ## Prerequisites
 
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. Verify `specs/$ARGUMENTS/` exists. If absent, report: "No spec directory at `specs/$ARGUMENTS/`. Run `/propose $ARGUMENTS` first." and stop.
 3. Load tier early — `bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && echo $WF_SPEC_TIER'`. If `WF_SPEC_TIER == small`, print: "Spec tier is `small` — `/validate-spec` skipped. Run `/implement $ARGUMENTS` next." and exit 0. No artifacts written.
 4. Verify `specs/$ARGUMENTS/spec.md` exists. If absent (and tier ≥ medium), report: "Spec bundle incomplete — `spec.md` missing." and stop.
@@ -21,7 +21,7 @@ Distinct from `/validate-impl` (post-implementation Odium audit of claimed-vs-ac
 Spawn the `Spec Reviewer` agent (`engineering-spec-reviewer`) using the Agent tool. The agent receives:
 
 - The feature path: `specs/$ARGUMENTS/`
-- General KB path: `~/.claude/knowledge-base/`
+- General KB path: `$WF_GENERAL_KB/`
 - Project KB path: `knowledge-base/`
 - The project's `CLAUDE.md`
 - The repository root for grep/glob verification of referenced paths and symbols

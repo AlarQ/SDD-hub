@@ -4,7 +4,7 @@ name: "beta"
 status: done
 blocked_by: []
 ground_rules:
-  - general:languages/shell.md
+  - general:languages/shell/_index.md
 ---
 
 Beta task.

@@ -1,4 +1,5 @@
 spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
 agent_pool: ~/.claude/agents
+general_kb_path: /tmp/fixture-general-kb
 validate_scope: per-task

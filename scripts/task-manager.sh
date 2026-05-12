@@ -13,13 +13,11 @@ VALID_STATUSES=("blocked" "todo" "in-progress" "implemented" "review" "done")
 REQUIRED_SCALAR_FIELDS=("id" "name" "status" "max_files")
 REQUIRED_ARRAY_FIELDS=("ground_rules" "test_cases" "blocked_by" "estimated_files")
 
-# Resolve general KB base path by detecting installation context
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "$SCRIPT_DIR" == "$HOME/.claude/scripts" ]]; then
-  GENERAL_KB_BASE="$HOME/.claude/knowledge-base"
-else
-  GENERAL_KB_BASE="knowledge-base/_general"
-fi
+# General KB base path is provided by config-loader via WF_GENERAL_KB env var
+# (sourced from `general_kb_path` in .workflow.yml). Resolved lazily in
+# resolve_ground_rule_path so commands that don't touch ground_rules don't fail
+# in repos that haven't been bootstrapped yet.
 
 # Source config-paths.sh if available (gives find_workflow_root, wf_resolve_root)
 _WF_TM_PATHS_LOADED=0
@@ -197,7 +195,13 @@ resolve_ground_rule_path() {
     esac
   fi
   case "$prefixed_path" in
-    general:*) echo "$GENERAL_KB_BASE/${prefixed_path#general:}" ;;
+    general:*)
+      if [[ -z "${WF_GENERAL_KB:-}" ]]; then
+        echo "ERROR: WF_GENERAL_KB not set — source config-loader.sh and run wf_load_config first (or set general_kb_path in .workflow.yml)" >&2
+        return 7
+      fi
+      echo "$WF_GENERAL_KB/${prefixed_path#general:}"
+      ;;
     project:*) echo "$project_kb/${prefixed_path#project:}" ;;
     repo:*)
       # repo:<name>:<rel-path> — resolves under that bound repo's knowledge-base/

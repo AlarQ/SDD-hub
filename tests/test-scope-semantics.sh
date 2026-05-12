@@ -57,7 +57,7 @@ EOF
 id: "001"
 status: implemented
 ground_rules:
-  - general:languages/shell.md
+  - general:languages/shell/_index.md
 ---
 EOF
   cat > "$TMPDIR_T/specs/demo/tasks/002-b.md" <<'EOF'
@@ -65,7 +65,7 @@ EOF
 id: "002"
 status: implemented
 ground_rules:
-  - general:languages/shell.md
+  - general:languages/shell/_index.md
   - general:architecture/general.md
 ---
 EOF

@@ -1,6 +1,6 @@
 # Shell — Project-Specific Rules (scripts/)
 
-General Shell rules live in `general:languages/shell.md`. These rules are specific to scripts in this repo.
+General Shell rules live in `general:languages/shell/_index.md`. These rules are specific to scripts in this repo.
 
 ## Task State Machine
 

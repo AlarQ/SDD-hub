@@ -5,7 +5,7 @@ Feature name: $ARGUMENTS
 > Terminology: see `~/.claude/scripts/workflow-glossary.md` for canonical definitions of **ceiling**, **effective-set**, **spec-union**. Do not use bare "union" for ceiling/effective-set.
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks with `status: implemented`
    - If no tasks have `status: implemented`, report and stop
    - If more than one task has `status: implemented`, report an error: "Multiple tasks are at `implemented` status — only one task should be in flight at a time. Check task state integrity."

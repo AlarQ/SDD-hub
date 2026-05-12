@@ -3,7 +3,7 @@ Implement the next task for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. **Spec coherence gate** — read `specs/$ARGUMENTS/reports/spec-review.yaml`. Refuse to proceed unless the file exists and has `status: pass`. If missing or `status: findings|error`, stop and instruct: "Spec coherence gate not passed. Run `/validate-spec $ARGUMENTS` and resolve any findings before starting implementation."
 3. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
    - If no eligible task found, report which tasks are blocked and by which task IDs

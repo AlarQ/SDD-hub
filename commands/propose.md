@@ -3,7 +3,7 @@ Generate specification, design, and tasks for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 
 ## Step 0 — Load Spec Config
 
@@ -41,7 +41,7 @@ If `WF_REPO_NAMES` is non-empty (loaded by Step 0 via `wf_load_config --spec`):
 
 ## Steps
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context
-2. Read both knowledge base indexes (per `~/.claude/knowledge-base-rules.md`) — identify all applicable rules from both
+2. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) — identify all applicable rules from both
 3. Read the applicable rule files from both knowledge bases
 
 ## Generate Artifacts

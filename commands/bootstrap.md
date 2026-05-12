@@ -3,7 +3,7 @@ Bootstrap the project-specific knowledge-base and workflow config for a new proj
 Accepts optional flags as `$ARGUMENTS`: `--force` to overwrite existing `.workflow.yml`, `--repair` to fill only missing fields.
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` — check general KB prerequisite only (project KB doesn't exist yet, this command creates it)
+1. Read and follow `$WF_GENERAL_KB/_rules.md` — check general KB prerequisite only (project KB doesn't exist yet, this command creates it)
 
 ## Step A0 — Pick storage mode (vault vs repo)
 
@@ -50,17 +50,17 @@ Persist the chosen mode in memory for Step A as `STORAGE_MODE` (`repo` or `vault
 If `STORAGE_MODE=vault`: skip Step B entirely. The vault directory does not host a project KB; each bound repo keeps its own `knowledge-base/` (created by running `/bootstrap` inside that repo). Print: "Vault mode — skipping project KB. Run `/bootstrap` inside each bound repo to create its `knowledge-base/`."
 
 1. Check if `knowledge-base/` already exists — if yes, skip to Step B6 (do not overwrite).
-2. Read `~/.claude/knowledge-base/_index.md`. Summarize to the user which categories and topics are already covered by the general KB (security, architecture, testing, style, documentation, code-review, any language files). Keep this list in context for all subsequent steps — do not create project rules that duplicate these topics.
+2. Read `$WF_GENERAL_KB/_index.md`. Summarize to the user which categories and topics are already covered by the general KB (security, architecture, testing, style, documentation, code-review, any language files). Keep this list in context for all subsequent steps — do not create project rules that duplicate these topics.
 3. Create the directory structure:
    - `knowledge-base/_index.md`
    - `knowledge-base/languages/`
    - `knowledge-base/conventions/`
 4. Ask the user which languages this project uses
-5. Create language files (no frontmatter) for each selected language. For languages already covered by a general KB file (e.g. `~/.claude/knowledge-base/languages/rust.md`), only add rules that are project-specific — do not re-state rules already present in the general KB file. Then add executable gate entries (one per validation command) to `knowledge-base/gates.yml` with `id`, `command`, `applies_to: [<language>]`, `category`, and `blocking: true`. `gates.yml` is the canonical gate registry.
+5. Create language files (no frontmatter) for each selected language. For languages already covered by a general KB file (e.g. `$WF_GENERAL_KB/languages/rust.md`), only add rules that are project-specific — do not re-state rules already present in the general KB file. Then add executable gate entries (one per validation command) to `knowledge-base/gates.yml` with `id`, `command`, `applies_to: [<language>]`, `category`, and `blocking: true`. `gates.yml` is the canonical gate registry.
 6. Generate `_index.md` listing all created files with descriptions
 7. Report what was created
 
-The general knowledge base (security, architecture, testing, style rules) is installed globally at `~/.claude/knowledge-base/` by `setup.sh` and applies to all projects automatically. This command creates only project-specific rules:
+The general knowledge base (security, architecture, testing, style rules) is installed globally at `$WF_GENERAL_KB/` by `setup.sh` and applies to all projects automatically. This command creates only project-specific rules:
 
 - `languages/` — language-specific patterns and rules (executable gates live in `knowledge-base/gates.yml`)
 - `conventions/` — project-specific conventions discovered over time (via `/review-findings` feedback loop)

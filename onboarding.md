@@ -567,10 +567,11 @@ Two knowledge bases work together:
 ├── documentation/general.md
 ├── code-review/general.md
 └── languages/
-    ├── rust.md
-    ├── typescript.md
-    ├── nextjs.md
-    └── scala.md
+    ├── rust/{_index.md, …topic files}
+    ├── typescript/{_index.md, type-safety.md, patterns.md, react-query.md, anti-patterns.md}
+    ├── nextjs/{_index.md, server-vs-client.md, data-fetching.md, app-router.md, anti-patterns.md}
+    ├── scala/{_index.md, idioms.md, error-handling.md, …}
+    └── shell/{_index.md, tooling.md, module-api.md}
 
 knowledge-base/                  # Project KB (per-repo)
 ├── _index.md

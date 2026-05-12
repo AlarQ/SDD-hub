@@ -35,7 +35,7 @@ blocked → todo → in-progress → implemented → review → done
 - `done` = validated and all findings resolved; needs `/ship`, then merge PR before next task
 
 ### Dual Knowledge Base
-- **General KB** (`~/.claude/knowledge-base/`) — universal rules (security, architecture, testing, style) installed via `setup.sh`
+- **General KB** (`$WF_GENERAL_KB/`) — universal rules (security, architecture, testing, style) installed via `setup.sh`
 - **Project KB** (`knowledge-base/`) — project-specific rules (languages, conventions) created via `/bootstrap`
 - Both are read by all commands; project rules override general rules on same topic
 - `ground_rules` prefix convention: `general:security/general.md`, `project:languages/rust.md`

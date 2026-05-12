@@ -2,9 +2,9 @@ Capture an ad-hoc rule from the current conversation into the general knowledge 
 
 ## Purpose
 
-Lets the user crystallize an insight that emerged organically — from a code review, a cross-repo pattern, a PR discussion, files just read, a correction the user just made — into a durable rule in the **general KB** (`~/.claude/knowledge-base/`). Fills the gap left by `/review-findings` and `/learn-from-reports` (project KB only) and `/promote-rules` (requires existing project KB rule). This is the **second command permitted to write to the general KB** (alongside `/promote-rules`).
+Lets the user crystallize an insight that emerged organically — from a code review, a cross-repo pattern, a PR discussion, files just read, a correction the user just made — into a durable rule in the **general KB** (`$WF_GENERAL_KB/`). Fills the gap left by `/review-findings` and `/learn-from-reports` (project KB only) and `/promote-rules` (requires existing project KB rule). This is the **second command permitted to write to the general KB** (alongside `/promote-rules`).
 
-> **Durability note:** Changes to `~/.claude/knowledge-base/` are local to this machine. Running `setup.sh --force` from the dev-workflow repo will overwrite them. To make a captured rule permanent, open a PR in the dev-workflow repo adding it to its `knowledge-base/` directory.
+> **Durability note:** Changes to `$WF_GENERAL_KB/` are local to this machine. Running `setup.sh --force` from the dev-workflow repo will overwrite them. To make a captured rule permanent, open a PR in the dev-workflow repo adding it to its `knowledge-base/` directory.
 
 ## Invocation
 
@@ -16,17 +16,17 @@ Lets the user crystallize an insight that emerged organically — from a code re
 
 ## Prerequisites
 
-1. Read and follow `~/.claude/knowledge-base-rules.md` for general KB prerequisites.
-2. Read `~/.claude/knowledge-base/_index.md` to understand existing coverage, categories, and file layout. Do **not** read the project KB — this command is general-only.
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for general KB prerequisites.
+2. Read `$WF_GENERAL_KB/_index.md` to understand existing coverage, categories, and file layout. Do **not** read the project KB — this command is general-only.
 
 ## Steps
 
 ### Step 0 — Prereq check
 
-Verify `~/.claude/knowledge-base/` exists (directory present, `_index.md` readable). If not, print:
+Verify `$WF_GENERAL_KB/` exists (directory present, `_index.md` readable). If not, print:
 
 ```
-General knowledge base not found at ~/.claude/knowledge-base/.
+General knowledge base not found at $WF_GENERAL_KB/.
 Run `setup.sh` from the dev-workflow repo first.
 ```
 
@@ -52,7 +52,7 @@ Draft a candidate with:
 
 ### Step 2 — Dedup scan
 
-Read `~/.claude/knowledge-base/_index.md`. For categories plausibly related to the candidate (security, architecture, code-review, languages/`<lang>`, testing, style, documentation, or any new one), read the matching files and semantically compare existing sections to the candidate.
+Read `$WF_GENERAL_KB/_index.md`. For categories plausibly related to the candidate (security, architecture, code-review, languages/`<lang>`, testing, style, documentation, or any new one), read the matching files and semantically compare existing sections to the candidate.
 
 If one or more near-matches surface, invoke `AskUserQuestion` once with options:
 - `Merge into <existing-section>` — append candidate bullets to the existing section in place
@@ -91,11 +91,11 @@ On Accept:
 
 a. **File.** If the target file exists, read it first, then append `## <Section>` plus the bullets. If the file does not exist:
    - Create parent directories as needed (`mkdir -p` via Bash)
-   - Scaffold the file starting with `# <Topic>` header (match existing general KB style — see `~/.claude/knowledge-base/security/general.md` or `~/.claude/knowledge-base/languages/rust/error-handling.md` for shape)
+   - Scaffold the file starting with `# <Topic>` header (match existing general KB style — see `$WF_GENERAL_KB/security/general.md` or `$WF_GENERAL_KB/languages/rust/error-handling.md` for shape)
    - Then append the rule section
    - **No frontmatter.** General KB files are plain markdown.
 
-b. **Index.** Update `~/.claude/knowledge-base/_index.md` — preserve the existing table format. Add a new row `| <category>/<file>.md | <Category Title> | <one-line description> |` for new files, or leave existing rows untouched when appending to an existing file. If the description for an existing file is now stale because the appended section materially expands its scope, update the description in place.
+b. **Index.** Update `$WF_GENERAL_KB/_index.md` — preserve the existing table format. Add a new row `| <category>/<file>.md | <Category Title> | <one-line description> |` for new files, or leave existing rows untouched when appending to an existing file. If the description for an existing file is now stale because the appended section materially expands its scope, update the description in place.
 
 c. **No project KB writes.** This command never touches `knowledge-base/` (project) regardless of cwd.
 
@@ -108,7 +108,7 @@ Section: ## <Section>
 Bullets: N
 
 Run /capture-rule again to add another, or continue your work.
-Remember: changes live in ~/.claude/knowledge-base/ only on this machine.
+Remember: changes live in $WF_GENERAL_KB/ only on this machine.
 Open a PR in the dev-workflow repo to make it permanent.
 ```
 

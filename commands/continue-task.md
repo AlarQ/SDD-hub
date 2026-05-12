@@ -3,7 +3,7 @@ Resume work on the current in-progress task for a feature.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. Read tasks from `specs/$ARGUMENTS/tasks/` — find tasks in an active state, checking in this priority order:
    - `status: in-progress`
    - `status: implemented`

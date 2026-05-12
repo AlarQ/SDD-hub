@@ -3,7 +3,7 @@ Ship a completed task: commit, push, and create a PR into the feature branch.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. Read tasks from `specs/$ARGUMENTS/tasks/` — find all tasks with `status: done`
    - Filter to tasks that do NOT yet have a PR (no `pr_url` in frontmatter)
    - If no unshipped `done` tasks exist, report and stop

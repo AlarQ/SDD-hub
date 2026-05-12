@@ -5,7 +5,7 @@ Feature name: $ARGUMENTS (strip any `--regenerate` flag before treating as the f
 > **Direct YAML edits to `specs/<feature>/config.yml` are discouraged.** Route all config changes through this command — it validates IDs against the current registries before writing, the same reason task frontmatter changes go through `task-manager.sh` rather than direct edits.
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. Parse `$ARGUMENTS`: split on whitespace. The last token is `--regenerate` if present (set `MODE=regenerate`), otherwise `MODE=edit`. The remaining tokens are the feature name. If no feature name remains after stripping the flag, stop: "Usage: `/config <feature>` or `/config <feature> --regenerate`."
 3. Source the config loader:
    ```bash

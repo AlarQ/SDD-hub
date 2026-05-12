@@ -7,7 +7,7 @@ Feature name: $ARGUMENTS
 Cross-finding pattern mining that complements `/review-findings` step 4 (inline rule creation on reject). This command runs after `/review-findings` completes — or after `/validate` produces zero findings — and before reports are deleted. It surfaces rule candidates the user did not flag in-flow: repeated categories, clustered LLM findings, rejection reasoning worth codifying, and accepted fixes describing a generalizable convention. Accepted candidates become new project knowledge-base rules so the same class of finding does not recur in future tasks.
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules.
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules.
 2. Read `knowledge-base/_index.md` (project KB) to understand existing rule coverage before proposing new rules.
 
 ## Steps

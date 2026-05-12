@@ -3,7 +3,7 @@ Walk through validation findings interactively.
 Feature name: $ARGUMENTS
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 
 ## Step 0 — Load Spec Config
 

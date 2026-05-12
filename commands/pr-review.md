@@ -5,11 +5,11 @@ Feature name: $ARGUMENTS
 **Note:** `/pr-review` runs against the **draft PR** opened by `/implement` (pre-validation human review loop) or against a ready PR opened by `/ship`. In both cases, task status is unchanged — comment resolution happens entirely on the PR. The loop is idempotent: comments already addressed (marked with a Claude-authored `eyes` reaction on the original comment) are skipped on re-runs.
 
 ## Prerequisites
-1. Read and follow `~/.claude/knowledge-base-rules.md` for knowledge base prerequisites and resolution rules
+1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. Identify the task: extract task ID from the current branch name (`feat/$ARGUMENTS/{task-id}-{task-name}`) and read the matching task file from `specs/$ARGUMENTS/tasks/`
    - If not on a task branch, check if `$ARGUMENTS` was provided and look for `done` tasks with a `pr_url` — use the most recently shipped one
    - If no task can be identified, refuse and say: "Cannot determine which task this PR belongs to. Run from a task branch or provide the feature name."
-3. Read the task's `ground_rules`, resolving prefixes per `~/.claude/knowledge-base-rules.md`
+3. Read the task's `ground_rules`, resolving prefixes per `$WF_GENERAL_KB/_rules.md`
 
 ## Step 0 — Load Spec Config
 

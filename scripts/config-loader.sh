@@ -19,6 +19,7 @@ wf__warn() { echo "WARN: $*"  >&2; }
 
 wf__unset_partials() {
   unset WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL \
+        WF_GENERAL_KB \
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
@@ -230,6 +231,31 @@ wf_load_config() {
     wf__unset_partials; return 2
   }
   WF_AGENT_POOL="$agent_pool_abs"
+
+  # general_kb_path — REQUIRED. No backward-compat default. Path is absolute and
+  # may live outside repo (e.g. master-brain vault), so allowed-root check is skipped.
+  local gkb_raw gkb_abs
+  gkb_raw="$(wf__json_get "$cfg_json" '.general_kb_path' '')" || {
+    wf__err "$WF_CONFIG_FILE: general_kb_path extraction failed"; wf__unset_partials; return 5
+  }
+  if [[ -z "$gkb_raw" ]]; then
+    wf__err "$WF_CONFIG_FILE: general_kb_path is required (no default). Add: general_kb_path: <abs-path-to-general-knowledge-base>"
+    wf__unset_partials; return 2
+  fi
+  if [[ "$gkb_raw" == *".."* ]]; then
+    wf__err "$WF_CONFIG_FILE: general_kb_path has '..' segment: $gkb_raw"
+    wf__unset_partials; return 2
+  fi
+  gkb_abs="$(wf__resolve_path "$gkb_raw" "$root")"
+  gkb_abs="$(realpath_safe "$gkb_abs" 2>/dev/null)" || {
+    wf__err "$WF_CONFIG_FILE: general_kb_path unresolvable: $gkb_raw"
+    wf__unset_partials; return 2
+  }
+  [[ -d "$gkb_abs" ]] || {
+    wf__err "$WF_CONFIG_FILE: general_kb_path not a directory: $gkb_abs"
+    wf__unset_partials; return 2
+  }
+  WF_GENERAL_KB="$gkb_abs"
 
   scope="$(wf__json_get "$cfg_json" '.validate_scope' 'per-task')" || {
     wf__err "$WF_CONFIG_FILE: validate_scope extraction failed"; wf__unset_partials; return 5
@@ -466,7 +492,7 @@ wf_load_config() {
 
   WF_CONFIG_LOADED=1
   export WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL \
-         WF_AGENT_POOL WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_STORAGE_MODE
+         WF_AGENT_POOL WF_GENERAL_KB WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_STORAGE_MODE
   [[ -n "${WF_VAULT_ROOT:-}" ]] && export WF_VAULT_ROOT
   return 0
 }
@@ -558,6 +584,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
       # Use eval-based set-check for bash 3.2 compat ([[ -v ]] requires bash 4.2+)
       _wf_allowed_vars=(
         WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL WF_AGENT_POOL
+        WF_GENERAL_KB
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT

@@ -2,6 +2,7 @@ spec_storage_mode: vault
 spec_storage: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/specs
 gate_pool: knowledge-base/gates.yml
 agent_pool: ~/.claude/agents
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/general-knowledge-base
 validate_scope: per-task
 
 tiers:

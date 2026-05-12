@@ -70,12 +70,12 @@ Elm-like architecture with file-system watching for live reload:
 
 Two-layer knowledge base architecture:
 
-- **General KB** — lives in this repo at `knowledge-base/`. Contains universal rules: security, architecture, testing, style.
+- **General KB** — lives at the path configured by `general_kb_path` in each repo's `.workflow.yml`, exported as `$WF_GENERAL_KB` by `scripts/config-loader.sh`. Recommended location: a master-brain / Obsidian vault (e.g. `~/Desktop/projects/master-brain/general-knowledge-base/`). Contains universal rules: security, architecture, testing, style. Key is **required** — loader exits 2 if missing.
 - **Project KB** — created per-project by `/bootstrap` at `knowledge-base/`. Contains project-specific rules: language files and conventions discovered via `/review-findings`.
 
 All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB.
 
-Task `ground_rules` use prefix convention: `general:security/general.md`, `project:languages/rust.md`. Unprefixed defaults to `project:`.
+Task `ground_rules` use prefix convention: `general:security/general.md` (resolves under `$WF_GENERAL_KB`), `project:languages/rust.md`, `repo:<name>:` (vault/multi-repo). Unprefixed defaults to `project:` (rejected in vault mode).
 
 ## Configurable Workflow
 

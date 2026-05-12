@@ -22,6 +22,7 @@ Idempotent: re-sourcing is a no-op unless `WF_RELOAD=1`.
 | `WF_SPEC_STORAGE` | abs path | always | Resolved `spec_storage` dir (default `specs/`). |
 | `WF_GATE_POOL` | abs path | always | Resolved `gate_pool` file (default `knowledge-base/gates.yml`). |
 | `WF_AGENT_POOL` | abs path | always | Resolved `agent_pool` dir (default `~/.claude/agents`). |
+| `WF_GENERAL_KB` | abs path | always | Resolved `general_kb_path` dir — host of the general (cross-repo) knowledge base. **Required**: no default, missing/empty key → exit 2. Path may live outside `WF_REPO_ROOT` (e.g. inside a master-brain Obsidian vault). `general:` ground-rule prefix resolves under this dir. |
 | `WF_VALIDATE_SCOPE` | enum | always | `per-task` \| `per-spec` \| `both`. Per-spec override wins. |
 | `WF_SPEC_CONFIG_FILE` | abs path | `--spec` only | `$WF_SPEC_STORAGE/<feature>/config.yml`. |
 | `WF_SPEC_GATES` | newline-sep IDs | `--spec` only | Spec ceiling: gate IDs from `config.yml gates:`. May be empty. |
@@ -43,7 +44,7 @@ All variables unset on any failure path (no partial state).
 | Code | Condition | User message | Recovery |
 |---|---|---|---|
 | 0 | success | — | — |
-| 2 | `.workflow.yml` missing (and no vault fallback applies — i.e. no `--spec` passed, or no `$PWD/specs/<feature>/config.yml` to anchor on), malformed, or has invalid `spec_storage`/`gate_pool`/`agent_pool`/`validate_scope` | `ERROR: .workflow.yml ...` | Run `/bootstrap`; or fix path/scope value; or invoke from a dir that holds `specs/<feature>/config.yml` (vault mode). |
+| 2 | `.workflow.yml` missing (and no vault fallback applies — i.e. no `--spec` passed, or no `$PWD/specs/<feature>/config.yml` to anchor on), malformed, or has invalid `spec_storage`/`gate_pool`/`agent_pool`/`general_kb_path`/`validate_scope`. `general_kb_path` is **required** — missing/empty value also returns 2. | `ERROR: .workflow.yml ...` / `ERROR: ... general_kb_path is required ...` | Run `/bootstrap`; or fix path/scope value; add `general_kb_path: <abs-path>`; or invoke from a dir that holds `specs/<feature>/config.yml` (vault mode). |
 | 3 | `gates.yml` malformed or has duplicate gate IDs | `ERROR: <pool>: malformed` / `duplicate gate ids: ...` | Fix `knowledge-base/gates.yml`. |
 | 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, unresolved agent id, or missing/invalid `tier` | `ERROR: per-spec config missing: ...` / `tier required (small\|medium\|large)` etc. | Run `/config <feature>` or `/explore <feature>`; fix gate/agent/tier in `specs/<f>/config.yml`. |
 | 5 | `yq` timeout (5s) or JSON extraction failure | `ERROR: <file>: yq timeout` | Retry; investigate filesystem/`yq` perf. |

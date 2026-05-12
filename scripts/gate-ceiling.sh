@@ -35,7 +35,7 @@ wf_gc_task_languages() {
     /^ground_rules:/ { in_gr=1; next }
     in_gr && /^[a-zA-Z_]+:/ { in_gr=0 }
     in_gr && /languages\// {
-      sub(/.*languages\//, ""); sub(/\.md.*/, "");
+      sub(/.*languages\//, ""); sub(/\/.*/, ""); sub(/\.md.*/, "");
       print
     }
   ' "$task_md" | sort -u
