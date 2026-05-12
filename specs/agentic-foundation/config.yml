@@ -1,0 +1,39 @@
+tier: large
+
+tags:
+  - workflow-refactor
+  - agent-architecture
+  - cross-platform
+
+repos:
+  - name: dev-workflow
+    path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo
+    role: primary
+
+validate_scope: per-task
+
+gates:
+  - shellcheck
+  - markdown-lint
+  - bash-tests
+  - yaml-lint
+
+agents:
+  explore:
+    - design-ux-researcher
+    - engineering-security-engineer
+    - engineering-software-architect
+  propose:
+    - engineering-software-architect
+    - engineering-test-strategist
+    - product-senior-project-manager
+  implement:
+    - engineering-code-quality-pragmatist
+    - engineering-ultrathink-debugger
+  validate:
+    - engineering-security-engineer
+    - engineering-code-quality-pragmatist
+    - engineering-software-architect
+    - engineering-claude-md-compliance-checker
+  pr-review:
+    - engineering-code-reviewer

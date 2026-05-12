@@ -19,7 +19,7 @@ When the last task in a spec transitions to `done`, `task-manager.sh` emits a `s
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
-`/explore` step 0 sets `WF_SPEC_TIER` (`small | medium | large`). Tier forks the flow: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl`; `medium` skips `/validate-spec`; `large` is the unchanged full flow. `/implement` step 0 runs `tier-check.sh`; on breach (exit 9) the user picks `Continue` (proceed) or `Abort` → `/promote-tier` → re-runs `/propose` at the next tier (preserved `done`/`implemented` tasks remain).
+`/explore` step 0 sets `WF_SPEC_TIER` (`small | medium | large`). Tier forks the flow: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl` (emits `validate_impl_skipped`); `medium` skips `/validate-spec` but runs full per-task gates and `/validate-impl`; `large` is the unchanged full flow. `/implement` step 0 runs `tier-check.sh`; on breach (exit 9) the user picks `Continue` (proceed) or `Abort` → `/promote-tier` → re-runs `/propose` at the next tier (preserved `done`/`implemented` tasks remain).
 
 ```mermaid
 graph LR
@@ -81,7 +81,7 @@ graph LR
     VAL -->|findings| REV
     VAL -->|zero findings| LEARN
     VAL -.->|small: lint+tests only| LEARN
-    VAL -.->|scope=per-spec: skip| LEARN
+    VAL -.->|scope=per-spec: zero-gates pass report| LEARN
     REV -->|re-validate| VAL
     REV -->|skip| LEARN
     LEARN --> SHIP
@@ -92,6 +92,7 @@ graph LR
     ODIUM --> VIMPL
     VIMPL -->|verdict=complete| Core
     VIMPL -.->|verdict=reopen| REV
+    VIMPL -.->|--reaudit re-entry after prior spec_audit_done| VIMPL
     REV -.->|accept missing/partial FR<br/>create-followup| IMPL
 
     CONT -.-> IMPL
@@ -154,33 +155,20 @@ stateDiagram-v2
 graph TD
     V["/validate"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_V[stop]
-    CFG0 -->|loaded| CEIL["Phase 1: WF_SPEC_GATES ∩ gates.yml applicable gates"]
+    CFG0 -->|loaded| APPR{Step 0.5: user approves gate set}
+    APPR -->|cancel| STOP_V
+    APPR -->|approve| SCOPE{validate_scope}
+    SCOPE -->|per-spec| PASS[write zero-gates pass report]
+    SCOPE -->|per-task / both| CEIL["Phase 1: WF_SPEC_GATES ∩ gates.yml applicable ∩ applies_to_repos"]
     CEIL -->|skipped gates| SKIP[gate_skip event]
-    CEIL -->|effective gates| AGT["Phase 2: agents from WF_SPEC_AGENTS_VALIDATE"]
+    CEIL -->|effective gates| AGT["Phase 2: agents from WF_SPEC_AGENTS_VALIDATE (config-driven, may be empty)"]
 
-    AGT --> G1[security gate]
-    AGT --> G2[code-quality gate]
-    AGT --> G3[architecture gate]
-    AGT --> G4[compliance gate]
-    AGT --> G5[testing gate]
+    AGT --> GATES["effective gate set<br/>(e.g. security, code-quality,<br/>architecture, compliance, testing)"]
+    GATES --> AGENTS["matched agents per gate<br/>(e.g. Security Engineer, CQP,<br/>Software Architect, CMC)"]
+    AGENTS --> REPORTS[reports/NNN-&lt;gate&gt;.yaml]
 
-    G1 --> A1[Security Engineer + semgrep]
-    G2 --> A2[code-quality-pragmatist + linters]
-    G3 --> A3[Software Architect]
-    G4 --> A4[claude-md-compliance-checker]
-    G5 --> A5[language test/coverage tools]
-
-    A1 --> R1[reports/NNN-security.yaml]
-    A2 --> R2[reports/NNN-code-quality.yaml]
-    A3 --> R3[reports/NNN-architecture.yaml]
-    A4 --> R4[reports/NNN-compliance.yaml]
-    A5 --> R5[reports/NNN-testing.yaml]
-
-    R1 --> AGG{All gates pass?}
-    R2 --> AGG
-    R3 --> AGG
-    R4 --> AGG
-    R5 --> AGG
+    REPORTS --> AGG{All configured gates pass?}
+    PASS --> AGG
     AGG -->|yes| DONE[task: done]
     AGG -->|any findings| REVIEW[task: review]
 ```
@@ -210,7 +198,7 @@ graph TB
     end
 
     subgraph KB["Knowledge Base"]
-        GKB[~/.claude/knowledge-base/ general]
+        GKB["$WF_GENERAL_KB (general)"]
         PKB[knowledge-base/ project]
     end
 
@@ -237,10 +225,10 @@ graph TB
     CONV --> EX["/explore"]
     EX --> PRD
     PRD --> PP["/propose"]
-    PP --> SPEC
-    PP --> DESIGN
-    PP --> TS
     PP --> TASKS
+    PP -.->|medium / large| SPEC
+    PP -.->|large only| DESIGN
+    PP -.->|large only| TS
 
     TASKS --> IM["/implement"]
     GKB -.-> IM
@@ -278,19 +266,19 @@ Step 0 runs before any perspective questions: the `config-inferencer` agent draf
 
 ```mermaid
 graph LR
-    EX["/explore"] --> S0{Step 0: config-inferencer}
-    S0 --> CI[config-inferencer agent]
+    EX["/explore"] --> S0{Step 0: engineering-config-inferencer}
+    S0 --> CI[engineering-config-inferencer]
     CI --> SUMMARY[one-screen summary\ngates + agents-per-phase]
     SUMMARY -.->|approve| WRITE[write config.yml\nemit config_inferred + config_approved]
     SUMMARY -.->|edit| CFG["/config override"]
     CFG --> WRITE
     WRITE --> PERSP[perspective questions]
-    PERSP -.->|after perspective Qs| UXR[UX Researcher]
-    PERSP -.->|after security Q| SE[Security Engineer]
-    PERSP -.->|backend kw| BA[Backend Architect]
-    PERSP -.->|ui kw| UXA[UX Architect]
-    PERSP -.->|scope| SA[Software Architect]
-    PERSP -.->|feedback kw| FS[Feedback Synthesizer]
+    PERSP -.->|after perspective Qs| UXR[design-ux-researcher]
+    PERSP -.->|after security Q| SE[engineering-security-engineer]
+    PERSP -.->|backend kw| BA[engineering-backend-architect]
+    PERSP -.->|ui kw| UXA[design-ux-architect]
+    PERSP -.->|scope| SA[engineering-software-architect]
+    PERSP -.->|feedback kw| FS[product-feedback-synthesizer]
     S0 -.->|inferencer timeout| MANUAL[manual entry prompt]
 ```
 
@@ -300,14 +288,13 @@ graph LR
 graph LR
     PR["/propose"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_PR[stop]
-    CFG0 -->|loaded| SE[Security Engineer]
-    CFG0 -->|loaded| SA[Software Architect]
-    CFG0 -->|loaded| SPM[Senior Project Manager]
-    CFG0 -->|loaded| TSG[Test Strategist]
-    PR -.->|backend kw| BA[Backend Architect]
-    PR -.->|ui kw| UXA[UX Architect]
-    PR -.->|ui kw| UID[UI Designer]
-    PR -.->|ai kw| AIE[AI Engineer]
+    CFG0 -->|loaded| SE[engineering-security-engineer]
+    CFG0 -->|loaded| SA[engineering-software-architect]
+    CFG0 -->|loaded| SPM[project-manager-senior]
+    PR -.->|backend kw| BA[engineering-backend-architect]
+    PR -.->|ui kw| UXA[design-ux-architect]
+    PR -.->|ui kw| UID[design-ui-designer]
+    PR -.->|ai kw| AIE[engineering-ai-engineer]
 ```
 
 ### 5c. `/implement` — task execution
@@ -316,9 +303,9 @@ graph LR
 graph LR
     IM["/implement"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_IM[stop]
-    CFG0 -->|loaded| CQP[code-quality-pragmatist]
-    IM -.->|if test-strategy.md exists| TSG[Test Strategist]
-    IM -.->|on error / test fail| UD[Ultrathink Debugger]
+    IM -.->|post-impl, if in WF_SPEC_AGENTS_IMPLEMENT| CQP[code-quality-pragmatist]
+    IM -.->|if test-strategy.md exists| TSG[engineering-test-strategist]
+    IM -.->|on error / test fail| UD[ultrathink-debugger]
     IM -->|step 6a: after branch creation| SNAP[.monitor-context-snapshot]
 ```
 
@@ -329,9 +316,9 @@ graph LR
     VA["/validate"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_VA[stop]
     CFG0 -->|loaded| CEIL["WF_SPEC_GATES ∩ gates.yml ceiling"]
-    CEIL -->|WF_SPEC_AGENTS_VALIDATE| SE[Security Engineer]
+    CEIL -->|WF_SPEC_AGENTS_VALIDATE| SE[engineering-security-engineer]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| CQP[code-quality-pragmatist]
-    CEIL -->|WF_SPEC_AGENTS_VALIDATE| SA[Software Architect]
+    CEIL -->|WF_SPEC_AGENTS_VALIDATE| SA[engineering-software-architect]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| CMC[claude-md-compliance-checker]
 ```
 
@@ -341,21 +328,21 @@ graph LR
 graph LR
     PRR["/pr-review"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_PRR[stop]
-    CFG0 -->|loaded| CR[Code Reviewer]
+    CFG0 -->|loaded| CR[engineering-code-reviewer]
 ```
 
 ### 5f. `/validate-spec` — pre-implementation spec coherence
 
 ```mermaid
 graph LR
-    VSPEC["/validate-spec"] --> SR[Spec Reviewer]
+    VSPEC["/validate-spec"] --> SR[engineering-spec-reviewer]
 ```
 
 ### 5g. `/validate-impl` — implementation-completion audit
 
 ```mermaid
 graph LR
-    VIMPL["/validate-impl"] --> ODIUM[Odium]
+    VIMPL["/validate-impl"] --> ODIUM[odium]
 ```
 
 ### 5h. `/review-findings` — finding triage
@@ -389,18 +376,18 @@ Hooks fire on tool events, orthogonal to commands. Block or monitor every tool c
 graph LR
     TOOL[Bash tool call] --> PRE[PreToolUse]
     STOP_EVT[Claude stop] --> STOPH[Stop]
-    POST_EVT[any tool call] -.-> POST[PostToolUse<br/>unwired]
+    POST_EVT[any tool call] --> POST[PostToolUse]
 
     PRE --> H1[block-git-hook-bypass<br/>blocks --no-verify / --no-gpg-sign]
     STOPH --> H2[block-dismissive-language<br/>blocks bypass / pre-existing phrases]
-    STOPH --> H3[findings-persistence + auto-handoff<br/>prompt hook in settings.json]
-    POST -.-> H4[monitor-tool-calls<br/>installed but not wired]
+    STOPH --> H3[findings-persistence + auto-handoff<br/>inline Stop prompt in settings.json<br/>not a shell script]
+    POST --> H4[monitor-tool-calls<br/>logs context_read / agent_invocation / tool_call]
 ```
 
 Notes:
 - `scripts/monitor.sh` writes `specs/$FEATURE/.monitor.jsonl` via direct invocation from `/implement`, not a hook.
-- `templates/settings.json` wires only `PreToolUse` (Bash) and `Stop`.
-- `hooks/monitor-tool-calls.sh` is installed by `setup.sh` as a `PostToolUse` hook but not wired in `templates/settings.json` — pending task tracked in `specs/monitoring-enhancement/prd.md`. When wired, it logs `context_read`, `agent_invocation`, and `tool_call` events to `.monitor.jsonl` automatically.
+- `templates/settings.json` wires `PreToolUse` (Bash), `PostToolUse` (all tools), and `Stop`.
+- `hooks/monitor-tool-calls.sh` runs as `PostToolUse` and logs `context_read`, `agent_invocation`, and `tool_call` events to `.monitor.jsonl`.
 
 ---
 
@@ -408,8 +395,8 @@ Notes:
 
 - **Serial execution** — one task `in-progress` at a time
 - **Per-task sequence** — `/implement` (opens draft PR) → `/pr-review` (optional loop) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks PR ready), each invoked explicitly by the user
-- **All-gates** — all 5 validation gates must pass before `done`
-- **Dual KB** — general (`~/.claude/knowledge-base/`) + project (`knowledge-base/`), project overrides general
+- **All-gates** — all configured validation gates (from `WF_SPEC_AGENTS_VALIDATE` ∩ ceiling) must pass before `done`
+- **Dual KB** — general (`$WF_GENERAL_KB`) + project (`knowledge-base/`), project overrides general
 - **One PR per task** — target is `feat/$FEATURE`, not `main`
 - **Ground rules prefix** — `general:...` / `project:...` / `repo:<name>:...` (vault mode) / unprefixed defaults to project
 - **Multi-repo (vault mode)** — `spec_storage_mode: vault` + per-spec `repos[]`. One task = one repo (`repo:` field). Each command resolves `WF_TASK_REPO_PATH` and runs git/gates inside it. PR opens in that repo's remote only.
