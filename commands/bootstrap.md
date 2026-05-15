@@ -1,74 +1,119 @@
-Bootstrap the project-specific knowledge-base and workflow config for a new project.
+Bootstrap workflow config and/or the project knowledge-base. Two distinct
+modes — a vault is set up **once**; each target code repo is set up **once**.
 
-Accepts optional flags as `$ARGUMENTS`: `--force` to overwrite existing `.workflow.yml`, `--repair` to fill only missing fields.
+Accepts optional flags as `$ARGUMENTS`: `--force` to overwrite an existing
+`.workflow.yml`, `--repair` to fill only missing fields.
 
 ## Prerequisites
-1. Read and follow `$WF_GENERAL_KB/_rules.md` — check general KB prerequisite only (project KB doesn't exist yet, this command creates it)
+1. Read and follow `$WF_GENERAL_KB/_rules.md` — general KB prerequisite only
+   (project KB may not exist yet; repo-gate-init creates it).
 
-## Step A0 — Pick storage mode (vault vs repo)
+## Step A0 — Pick mode
 
-Before writing `.workflow.yml`, ask via `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`):
+Ask via `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`):
 
-- **question:** "Where do specs live for this project?"
+- **question:** "What are you bootstrapping?"
 - **options:**
-  - `repo` — specs/ live in this git repo (single-repo flow, default)
-  - `vault` — specs/ live in this directory (e.g. master-brain Obsidian vault) and bind one or more external git repos for code
+  - `vault-init` — this directory is the master-brain vault that will hold
+    all specs. Write a thin-pointer `.workflow.yml` only. **No** gates.yml or
+    knowledge-base/ is created here — those live in the target code repos.
+  - `repo-gate-init` — this directory is a target code repo bound by a vault
+    spec. Create its `knowledge-base/` + `gates.yml`. Do **not** write a
+    `.workflow.yml` (the vault owns it).
+  - `repo` — standalone single-repo project (specs live in-repo, repo mode).
+    Write `.workflow.yml` **and** `knowledge-base/` + `gates.yml`.
 
-If the user picks `vault`:
-1. Confirm `pwd` is **not** a git work tree (vault mode is incompatible with running from inside a code repo). If it is, refuse: "Vault mode requires running from a non-repo directory. cd to your vault and re-run `/bootstrap`."
-2. Loop with `AskUserQuestion` to collect repo bindings — for each: `name` (kebab-case), `path` (absolute or `~`-prefixed), `role` (free text, e.g. `frontend`, `backend`, `ops`). Stop the loop when the user picks `Done`.
-3. For each entry: verify `path` resolves to a git work tree (`git -C "<path>" rev-parse --show-toplevel`). Refuse the entry on failure.
-4. Hold the bindings to write into `.workflow.yml` `default_repos:` in Step A.
-5. Emit `repo_bound` per accepted entry:
+Branch on the answer: `vault-init` → Step V only. `repo-gate-init` → Step R
+only. `repo` → Step A then Step B then Step C (legacy single-repo flow).
+
+## Step V — Vault init (thin pointer)
+
+1. Refuse if `pwd` is a git work tree: "Vault mode requires a non-repo
+   directory. cd to your vault and re-run `/bootstrap`." (`git rev-parse
+   --show-toplevel` succeeding inside `pwd` = refuse.)
+2. Loop with `AskUserQuestion` to collect default repo bindings — for each:
+   `name` (kebab-case `^[a-z0-9][a-z0-9_-]{0,31}$`), `path` (absolute or
+   `~`-prefixed), `role` (free text; one `primary` selects default git/PR
+   context). Stop when the user picks `Done`. Verify each `path` resolves to a
+   git work tree (`git -C "<path>" rev-parse --show-toplevel`); refuse the
+   entry on failure. These are optional — an empty list is allowed.
+3. `.workflow.yml` existence handling: same idempotent / `--force` / `--repair`
+   symlink-safe rules as Step A (steps A1–A3 below apply identically).
+4. Write `.workflow.yml` from `~/.claude/templates/workflow.yml.template` as a
+   **thin pointer** — touch only `.workflow.yml`. Set:
+   - `spec_storage_mode: vault`
+   - `spec_storage: projects/{project}/specs` (the `{project}` token is
+     substituted per-spec from `--project` / per-spec `config.yml project:`)
+   - `general_kb_path: <abs path to the general knowledge base>` (required)
+   - `validate_scope:` and `tiers:` as desired (defaults fine)
+   - `default_repos:` from the bindings collected in V2 (omit if none)
+   Do **not** write `gate_pool`, do **not** create `knowledge-base/` or
+   `gates.yml` in the vault.
+5. Emit `repo_bound` per accepted binding:
    ```bash
    bash "$HOME/.claude/scripts/monitor.sh" log_event "_bootstrap" repo_bound "" \
      "$(printf '{"repo":"%s","path":"%s","role":"%s"}' "$name" "$path" "$role")"
    ```
+6. Report: "Vault initialized. gates.yml + knowledge-base/ are NOT created
+   here. Run `/bootstrap` (repo-gate-init) once inside each target code repo."
 
-Persist the chosen mode in memory for Step A as `STORAGE_MODE` (`repo` or `vault`).
+## Step R — Repo gate init (target code repo)
 
-## Step A — Write `.workflow.yml`
+Run inside a target code repo bound by a vault spec. Creates the repo's gate
+registry + project KB. Does **not** write `.workflow.yml`.
+
+1. Confirm `pwd` is a git work tree. If not, refuse: "repo-gate-init must run
+   inside the target git repo."
+   - Defensive guard: if a `.workflow.yml` is found walking up from `pwd` and it
+     declares `spec_storage_mode: vault`, refuse: "this is the vault root, not a
+     target code repo — run repo-gate-init inside the bound code repo instead."
+     (Prevents `gates.yml`/`knowledge-base/` from ever landing in the vault.)
+2. Create the project knowledge-base (same as Step B steps 1–7 below) and the
+   gate registry (same as Step C below), in this repo.
+3. Do **not** create or modify `.workflow.yml` here — the vault owns workflow
+   config; gates/KB resolve per-task from this repo via the spec's `repos[]`.
+4. Report: "Repo gate-init complete: knowledge-base/ + gates.yml created. Add
+   project gates before running `/explore` from the vault."
+
+## Step A — Write `.workflow.yml` (repo mode only)
 
 1. Check if `.workflow.yml` already exists at repo root.
-   - If it **exists** and no `--force` / `--repair` flag: print current contents and stop this section (idempotent — no rewrite).
-   - If it **exists** and `--repair`: verify `.workflow.yml` is not a symlink (`[[ ! -L .workflow.yml ]]`); if it is, refuse with the same error as above. Then read current fields; only write fields that are missing (never overwrite present values); go to A4.
+   - If it **exists** and no `--force` / `--repair`: print current contents and
+     stop this section (idempotent).
+   - If it **exists** and `--repair`: verify `.workflow.yml` is not a symlink
+     (`[[ ! -L .workflow.yml ]]`); if it is, refuse. Then read current fields;
+     write only missing fields (never overwrite present values); go to A4.
    - If it **exists** and `--force`: go to A2.
    - If it **does not exist**: go to A3.
-
-2. (`--force` path) Resolve `.workflow.yml` target path with `realpath --no-symlinks`. If the resolved path differs from `$(pwd)/.workflow.yml` (symlink detected), refuse and exit non-zero: "ERROR: .workflow.yml target is a symlink — refusing to overwrite."
-   Show a `diff` between the existing file and `~/.claude/templates/workflow.yml.template`. Ask for single-key confirmation before overwriting.
-
-3. (fresh path) Verify `$(pwd)/.workflow.yml` is not a symlink (`[[ ! -L .workflow.yml ]]`). If it is, refuse: same error as above.
-
-4. Write `.workflow.yml` from `~/.claude/templates/workflow.yml.template`. Touch **only** `.workflow.yml` — no other files.
-   - If `STORAGE_MODE=vault`: set `spec_storage_mode: vault` and `default_repos:` to the bindings collected in A0. Otherwise leave both fields commented (defaults to `repo`).
-
-5. Report: "Wrote .workflow.yml" (or "Updated .workflow.yml" for --force/--repair).
+2. (`--force`) Resolve target with `realpath --no-symlinks`. If it differs from
+   `$(pwd)/.workflow.yml` (symlink), refuse: "ERROR: .workflow.yml target is a
+   symlink — refusing to overwrite." Show a `diff` against the template. Ask
+   single-key confirmation before overwriting.
+3. (fresh) Verify `$(pwd)/.workflow.yml` is not a symlink; if it is, refuse.
+4. Write `.workflow.yml` from `~/.claude/templates/workflow.yml.template`.
+   Touch only `.workflow.yml`. Leave `spec_storage_mode` commented (defaults
+   to `repo`). Set a valid `general_kb_path` (required key).
+5. Report: "Wrote .workflow.yml" (or "Updated" for --force/--repair).
 
 ## Step B — Write project knowledge-base
 
-If `STORAGE_MODE=vault`: skip Step B entirely. The vault directory does not host a project KB; each bound repo keeps its own `knowledge-base/` (created by running `/bootstrap` inside that repo). Print: "Vault mode — skipping project KB. Run `/bootstrap` inside each bound repo to create its `knowledge-base/`."
+1. If `knowledge-base/` already exists — skip to B6 (do not overwrite).
+2. Read `$WF_GENERAL_KB/_index.md`. Summarize covered categories/topics to the
+   user; do not create project rules that duplicate them.
+3. Create: `knowledge-base/_index.md`, `knowledge-base/languages/`,
+   `knowledge-base/conventions/`.
+4. Ask which languages this project uses.
+5. Create language files (no frontmatter) per selected language — only
+   project-specific rules beyond the general KB. Add executable gate entries
+   (one per validation command) to `knowledge-base/gates.yml` with `id`,
+   `command`, `applies_to: [<language>]`, `category`, `blocking: true`.
+6. Generate `_index.md` listing all created files with descriptions.
+7. Report what was created.
 
-1. Check if `knowledge-base/` already exists — if yes, skip to Step B6 (do not overwrite).
-2. Read `$WF_GENERAL_KB/_index.md`. Summarize to the user which categories and topics are already covered by the general KB (security, architecture, testing, style, documentation, code-review, any language files). Keep this list in context for all subsequent steps — do not create project rules that duplicate these topics.
-3. Create the directory structure:
-   - `knowledge-base/_index.md`
-   - `knowledge-base/languages/`
-   - `knowledge-base/conventions/`
-4. Ask the user which languages this project uses
-5. Create language files (no frontmatter) for each selected language. For languages already covered by a general KB file (e.g. `$WF_GENERAL_KB/languages/rust.md`), only add rules that are project-specific — do not re-state rules already present in the general KB file. Then add executable gate entries (one per validation command) to `knowledge-base/gates.yml` with `id`, `command`, `applies_to: [<language>]`, `category`, and `blocking: true`. `gates.yml` is the canonical gate registry.
-6. Generate `_index.md` listing all created files with descriptions
-7. Report what was created
-
-The general knowledge base (security, architecture, testing, style rules) is installed globally at `$WF_GENERAL_KB/` by `setup.sh` and applies to all projects automatically. This command creates only project-specific rules:
-
-- `languages/` — language-specific patterns and rules (executable gates live in `knowledge-base/gates.yml`)
-- `conventions/` — project-specific conventions discovered over time (via `/review-findings` feedback loop)
-
-Target: ~5-10 rules per file. Rules should be specific and actionable — each rule should be something a validation gate can check against.
+Target: ~5-10 rules per file. Each rule should be something a gate can check.
 
 ## Step C — Write gate registry
 
-1. Check if `knowledge-base/gates.yml` already exists — if yes, skip (idempotent).
+1. If `knowledge-base/gates.yml` already exists — skip (idempotent).
 2. Write `knowledge-base/gates.yml` from `~/.claude/templates/gates.yml.template`.
-3. Report: "Wrote knowledge-base/gates.yml — add project gates before running /explore."
+3. Report: "Wrote knowledge-base/gates.yml — add project gates before /explore."

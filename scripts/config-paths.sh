@@ -29,9 +29,8 @@ find_workflow_root() {
 
 # find_vault_spec_config <feature> [start_dir]
 #   Probe for vault-hosted per-spec config at `<start>/specs/<feature>/config.yml`.
-#   Used by config-loader.sh when no `.workflow.yml` is found via walk-up — i.e.
-#   when commands run from a master-brain vault dir that itself carries no
-#   `.workflow.yml` but holds spec definitions that bind external code repos.
+#   Standalone helper (no longer on the loader hot path: vault-init now always
+#   writes a vault-root `.workflow.yml`, so the loader resolves via walk-up).
 #   Prints absolute path on stdout. Returns 0 on success, 1 otherwise.
 find_vault_spec_config() {
   local feature="${1:-}" start="${2:-$PWD}"
@@ -79,9 +78,9 @@ realpath_safe() {
   local home_real repo_real=""
   home_real="$(realpath -- "$HOME" 2>/dev/null)" || home_real="$HOME"
   repo_real="$(find_workflow_root "$PWD" 2>/dev/null || true)"
-  # Fallback: under vault-CWD invocation the loader sets WF_REPO_ROOT to the
-  # chosen bound repo even though PWD itself has no `.workflow.yml`. Honor it
-  # so symlink-escape checks treat paths inside that repo as in-bounds.
+  # Fallback: honor a loader-exported WF_REPO_ROOT when walk-up from PWD finds
+  # nothing (e.g. probing a path before the workflow root is on the walk path)
+  # so symlink-escape checks treat paths inside that root as in-bounds.
   [[ -z "$repo_real" && -n "${WF_REPO_ROOT:-}" ]] && repo_real="$WF_REPO_ROOT"
 
   # Walk each ancestor of the *input* path and reject if any ancestor is a

@@ -50,6 +50,7 @@ mk_repo_with_spec() {
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
+general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 validate_scope: per-task
 EOF
@@ -57,6 +58,7 @@ EOF
   # Minimal spec config with rust-clippy + shellcheck ceiling
   cat > "$repo/specs/$feature/config.yml" <<EOF
 tags: [test]
+tier: small
 gates:
   - rust-clippy
   - shellcheck
@@ -78,6 +80,7 @@ t_missing_spec_config_exit4() {
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
+general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
   cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
@@ -133,10 +136,12 @@ t_ceiling_intersection_semgrep_any_tag() {
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
+general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
   cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
   cat > "$repo/specs/demo/config.yml" <<EOF
+tier: small
 gates:
   - rust-clippy
   - semgrep-security
@@ -161,10 +166,12 @@ t_gate_outside_ceiling_excluded() {
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
+general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
   cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
   cat > "$repo/specs/demo/config.yml" <<EOF
+tier: small
 gates:
   - rust-clippy
 agents: {}
@@ -283,10 +290,12 @@ t_unknown_agent_id_exit4() {
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
+general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
   cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
   cat > "$repo/specs/demo/config.yml" <<EOF
+tier: small
 gates:
   - rust-clippy
 agents:

@@ -5,6 +5,10 @@
 # spec_storage: specs/
 #   Path (relative to repo root or absolute) where specs/ live. Must resolve
 #   under $HOME or the repo root; no symlink ancestors; no '..' segments.
+#   May contain the literal token `{project}` (vault mode) — substituted with
+#   the per-spec project segment, e.g. `projects/{project}/specs`. The project
+#   name comes from per-spec config.yml `project:` or `--project` on first
+#   /explore. Loader exits 4 if `{project}` is present but unresolved.
 
 # gate_pool: knowledge-base/gates.yml
 #   Location of the canonical gate registry.
@@ -38,3 +42,20 @@
 #   spec_storage_mode=vault. Each entry: { name: <id>, path: <abs|~>, role: <free> }.
 #   Used as the default for repos[] on new specs; per-spec config.yml may
 #   override or extend.
+
+# --- Vault thin-pointer example (master-brain holds specs; no gates/KB here) ---
+# A vault .workflow.yml owns ONLY workflow settings + general_kb_path. It has
+# NO gate_pool / knowledge-base/ — gates and project-KB live in each target
+# code repo and resolve per-task from the spec's repos[]. Run `/bootstrap`
+# (repo-gate-init) once inside each target repo to create its gates.yml + KB.
+#
+# spec_storage_mode: vault
+# spec_storage: projects/{project}/specs
+# general_kb_path: <YOUR_GENERAL_KB_PATH>   # e.g. ~/Desktop/projects/master-brain/general-knowledge-base
+# validate_scope: per-task
+# tiers:
+#   small:  { tasks: 5,  files: 10, agent_skip: [security, code-quality, architecture, compliance] }
+#   medium: { tasks: 10, files: 30, agent_skip: [] }
+#   large:  { tasks: null, files: null, agent_skip: [] }   # null = unbounded
+# default_repos:
+#   - { name: app, path: ~/Desktop/projects/app, role: primary }

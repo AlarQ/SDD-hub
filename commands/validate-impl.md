@@ -20,7 +20,7 @@ Feature name: $ARGUMENTS
 ## Step 0 — Load Spec Config
 
 ```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$ARGUMENTS"' && \
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$ARGUMENTS"' --require-spec && \
   printf "WF_SPEC_GATES=%s\nWF_VALIDATE_SCOPE=%s\nWF_GATE_POOL=%s\n" \
   "$WF_SPEC_GATES" "$WF_VALIDATE_SCOPE" "${WF_GATE_POOL:-}"'
 ```
@@ -72,14 +72,14 @@ Helper semantics (see `scripts/validate-impl.sh`, which delegates ceiling/effect
 
 When `WF_REPO_NAMES` is non-empty, Steps 2–3 fan out **per repo** instead of using a single `merge-base main feat/$ARGUMENTS..HEAD` range:
 
-- Spec-union (Step 2) is computed once for the spec, then each gate runs **once per repo** that has at least one task assigned (filter tasks by `repo:` field). Diff range per repo: `git -C "$(wf_repo_path <name>)" diff $(git -C "$(wf_repo_path <name>)" merge-base main feat/$ARGUMENTS)..HEAD`. Gate output is labeled with the repo name in `gate_log`.
+- Spec-union (Step 2) is computed once for the spec, then each gate runs **once per repo** that has at least one task assigned (filter tasks by `repo:` field). Diff range per repo: `git -C "$(wf_repo_path <name>)" diff $(git -C "$(wf_repo_path <name>)" merge-base main feat/$ARGUMENTS)..HEAD`. In vault mode set `WF_TASK_GATE_POOL="$(wf_repo_path <name>)/knowledge-base/gates.yml"` before each repo's `wf_vi_run_union_gates` call (`WF_GATE_POOL` is empty in vault mode). Gate output is labeled with the repo name in `gate_log`.
 - The Odium prompt (Step 3) embeds **per-repo diff sections**, each labeled `### Repo: <name> (<path>)` followed by that repo's diff. Tasks are grouped by repo in the task list. Ground-rule resolution preserves `repo:<name>:` prefixes.
 - A gate failure in any repo forces `verdict=reopen` (same as single-repo case). The `extra_evidence` log includes which repo failed.
 
 ## Step 3 — Build Odium Wrapper Prompt
 
 ```bash
-spec_dir="$(bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$ARGUMENTS"' && echo "$WF_SPEC_STORAGE/'"$ARGUMENTS"'"')"
+spec_dir="$(bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$ARGUMENTS"' --require-spec && echo "$WF_SPEC_STORAGE/'"$ARGUMENTS"'"')"
 prompt_file="$(mktemp)"
 wf_vi_build_prompt "$ARGUMENTS" "$spec_dir" "${extra_evidence:-}" > "$prompt_file"
 ```

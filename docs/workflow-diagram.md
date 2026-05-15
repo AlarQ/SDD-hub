@@ -25,12 +25,15 @@ Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and 
 graph LR
     subgraph Setup["One-time setup"]
         BOOT["/bootstrap"]
-        STORAGE{spec_storage_mode}
-        REPO_MODE["repo<br/>specs in repo"]
-        VAULT_MODE["vault<br/>specs in vault<br/>+ default_repos[]"]
+        STORAGE{mode?}
+        REPO_MODE["repo<br/>.workflow.yml + knowledge-base/ + gates.yml in repo"]
+        VAULT_INIT["vault-init<br/>thin-pointer .workflow.yml only<br/>spec_storage projects/{project}/specs<br/>+ default_repos[] · NO gates/KB"]
+        REPO_GATE["repo-gate-init (per target repo)<br/>knowledge-base/ + gates.yml<br/>NO .workflow.yml"]
         BOOT --> STORAGE
         STORAGE -->|repo| REPO_MODE
-        STORAGE -->|vault| VAULT_MODE
+        STORAGE -->|vault-init| VAULT_INIT
+        STORAGE -->|repo-gate-init| REPO_GATE
+        VAULT_INIT -.->|once per target repo| REPO_GATE
     end
 
     subgraph Core["Core spec-driven flow"]
@@ -198,8 +201,8 @@ graph TB
     end
 
     subgraph KB["Knowledge Base"]
-        GKB["$WF_GENERAL_KB (general)"]
-        PKB[knowledge-base/ project]
+        GKB["$WF_GENERAL_KB (general · from vault .workflow.yml)"]
+        PKB["knowledge-base/ project (per bound repo; empty WF_PROJECT_KB in vault)"]
     end
 
     subgraph Git
@@ -209,11 +212,15 @@ graph TB
     end
 
     subgraph MultiRepo["Vault mode (spec_storage_mode=vault)"]
-        REPOS[config.yml repos[]]
+        THIN["vault .workflow.yml (thin pointer)<br/>spec_storage projects/{project}/specs"]
+        REPOS["config.yml repos[] + project:"]
         TASK_REPO[task.repo: name]
         WTRP[WF_TASK_REPO_PATH]
+        WTGP["WF_TASK_GATE_POOL<br/>= repo/knowledge-base/gates.yml"]
+        THIN --> REPOS
         REPOS --> TASK_REPO
         TASK_REPO --> WTRP
+        WTRP --> WTGP
     end
 
     subgraph Monitor
@@ -398,8 +405,8 @@ Notes:
 - **All-gates** — all configured validation gates (from `WF_SPEC_AGENTS_VALIDATE` ∩ ceiling) must pass before `done`
 - **Dual KB** — general (`$WF_GENERAL_KB`) + project (`knowledge-base/`), project overrides general
 - **One PR per task** — target is `feat/$FEATURE`, not `main`
-- **Ground rules prefix** — `general:...` / `project:...` / `repo:<name>:...` (vault mode) / unprefixed defaults to project
-- **Multi-repo (vault mode)** — `spec_storage_mode: vault` + per-spec `repos[]`. One task = one repo (`repo:` field). Each command resolves `WF_TASK_REPO_PATH` and runs git/gates inside it. PR opens in that repo's remote only.
+- **Ground rules prefix** — `general:...` / `project:...` / `repo:<name>:...`. Vault single-repo: unprefixed/`project:` → the sole bound repo. Vault 2+ repos: bare rejected (exit 7), require `general:`/`repo:<name>:`.
+- **Vault mode** — `spec_storage_mode: vault` + thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only; no vault gates/KB). `spec_storage` uses `{project}` token. Per-spec `repos[]` bind code repos; gates/KB resolve per-task from the bound repo (`WF_TASK_REPO_PATH`, `WF_TASK_GATE_POOL`). One task = one repo. PR opens in that repo's remote only. `/bootstrap`: vault-init once + repo-gate-init per target repo.
 - **No YAML edits** — all status changes via `task-manager.sh`
 - **No bypass** — PreToolUse hook blocks `--no-verify` / `--no-gpg-sign`
 

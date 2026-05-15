@@ -2,9 +2,9 @@
 
 Canonical snippet for resolving a task's bound repo path under `spec_storage_mode: vault`. Linked from `/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`, `/quick-ship`.
 
-## Vault-CWD invocation
+## Vault invocation
 
-`wf_load_config --spec <feature>` may also be invoked from a master-brain vault directory that has no `.workflow.yml` of its own but holds `specs/<feature>/config.yml`. The loader then derives `WF_REPO_ROOT` from the spec's `repos[]` (role=`primary` first, else `repos[0]`) and exports `WF_VAULT_ROOT=$PWD`. Multi-repo task resolution below is unchanged — `WF_REPO_NAMES` / `WF_REPO_PATHS` still come from the same `repos[]`. See `config-loader.contract.md` for full semantics.
+Under `spec_storage_mode: vault`, the vault dir owns a thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only — no gates.yml, no knowledge-base/). The loader sets `WF_VAULT_ROOT=WF_REPO_ROOT=<vault>`, leaves `WF_GATE_POOL` / `WF_PROJECT_KB` empty, and binds `WF_REPO_NAMES` / `WF_REPO_PATHS` from the per-spec `config.yml repos[]`. Gates and project-KB therefore resolve **per task** from the bound repo (below). There is no "primary repo for config" — `role: primary` only selects the default git/PR context. See `config-loader.contract.md` for full semantics.
 
 ## When this applies
 
@@ -41,6 +41,17 @@ else
   WF_TASK_REPO_PATH="$WF_REPO_ROOT"
 fi
 export WF_TASK_REPO_PATH
+
+# Vault mode: gates + project-KB live in the bound repo, not the vault.
+# Resolve the per-task gate pool so gate-ceiling.sh / validate-impl.sh use it.
+if [[ "${WF_SPEC_STORAGE_MODE:-repo}" == "vault" ]]; then
+  WF_TASK_GATE_POOL="$WF_TASK_REPO_PATH/knowledge-base/gates.yml"
+  if [[ ! -f "$WF_TASK_GATE_POOL" ]]; then
+    echo "ERROR: bound repo missing knowledge-base/gates.yml: $WF_TASK_GATE_POOL (run /bootstrap repo-gate-init in that repo)" >&2
+    exit 1
+  fi
+  export WF_TASK_GATE_POOL
+fi
 ```
 
 ## Using `WF_TASK_REPO_PATH`

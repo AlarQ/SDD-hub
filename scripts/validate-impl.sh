@@ -53,7 +53,7 @@ wf_vi_build_prompt() {
   local fr_list task_list report_paths diff_range
   fr_list="$(wf_vi_parse_frs "$spec_md")" || return 1
   task_list="$(find "$tasks_dir" -maxdepth 1 -name '*.md' -print 2>/dev/null | sort)"
-  report_paths="$(find "$reports_dir" -maxdepth 2 -name '*.md' -o -name '*.yaml' 2>/dev/null | sort || true)"
+  report_paths="$(find "$reports_dir" -maxdepth 2 \( -name '*.md' -o -name '*.yaml' \) 2>/dev/null | sort || true)"
   diff_range="$(wf_vi_diff_range "$feature")" || return $?
 
   printf '# Spec Completion Audit — %s\n\n' "$feature"
@@ -129,7 +129,10 @@ wf_vi_set_spec_shipped() {
 wf_vi_run_union_gates() {
   local feature="$1" spec_dir="$2" log_file="$3"
   : > "$log_file"
-  local pool="${WF_GATE_POOL:?WF_GATE_POOL must be set}"
+  # Vault mode: caller (per scripts/multi-repo-resolution.md) sets
+  # WF_TASK_GATE_POOL to the bound repo's gates.yml before invoking; repo
+  # mode uses the single WF_GATE_POOL.
+  local pool="${WF_TASK_GATE_POOL:-${WF_GATE_POOL:?WF_TASK_GATE_POOL or WF_GATE_POOL must be set}}"
   local ceiling="${WF_SPEC_GATES:-}"
   local tasks_dir="$spec_dir/tasks"
   local langs union code_bearing

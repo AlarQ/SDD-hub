@@ -36,12 +36,13 @@ run_test() {
 mk_repo() {
   local repo="$TEST_TMPDIR/repo"
   mkdir -p "$repo/specs/demo/tasks" "$repo/knowledge-base" "$repo/agent_pool"
-  cp "$FIXTURES/workflow-vault.yml" "$repo/.workflow.yml"
-  # rewrite paths to live in-repo
+  mkdir -p "$repo/gkb"
+  # rewrite paths to live in-repo (repo mode; general_kb_path required)
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
 gate_pool: knowledge-base/gates.yml
 agent_pool: agent_pool
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
 validate_scope: per-task
 EOF
   cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
@@ -306,46 +307,51 @@ test_loader_spec_gates_shape_well_formed() {
          done <<<"$WF_SPEC_GATES" )
 }
 
-# --- vault-CWD fallback tests ---
+# --- vault mode tests (thin-pointer .workflow.yml in vault) ---
 
-# Build a vault dir + N code repos. Args: number of repos, primary index (-1 for none).
-# Echoes "<vault>|<repo0_path>|<repo1_path>|..." for the test to consume.
+# Build a vault dir (thin pointer) + N code repos (no .workflow.yml; each owns
+# knowledge-base/gates.yml). Args: n_repos, primary index (-1 none),
+# use_project_token (1 → spec_storage uses projects/{project}/specs).
+# Echoes "<vault>|<repo0>|<repo1>|...".
 mk_vault() {
-  local n_repos="${1:-1}" primary_idx="${2:--1}"
+  local n_repos="${1:-1}" primary_idx="${2:--1}" use_proj="${3:-0}"
   local vault="$TEST_TMPDIR/vault"
-  mkdir -p "$vault/specs/demo/tasks"
-  local vault_real; vault_real="$(realpath -- "$vault")"
+  mkdir -p "$vault/gkb"
+  local storage="specs"
+  if [[ "$use_proj" == "1" ]]; then
+    storage="projects/{project}/specs"
+    mkdir -p "$vault/projects/myproj/specs/demo/tasks"
+  else
+    mkdir -p "$vault/specs/demo/tasks"
+  fi
+  cat > "$vault/.workflow.yml" <<EOF
+spec_storage_mode: vault
+spec_storage: $storage
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+validate_scope: per-task
+EOF
 
   local repos_yaml="" i repo repo_real role_line
   for ((i = 0; i < n_repos; i++)); do
     local repo="$TEST_TMPDIR/repo$i"
-    mkdir -p "$repo/knowledge-base" "$repo/agent_pool"
+    mkdir -p "$repo/knowledge-base"
     repo_real="$(realpath -- "$repo")"
-    cat > "$repo/.workflow.yml" <<EOF
-spec_storage: $vault_real/specs
-gate_pool: knowledge-base/gates.yml
-agent_pool: agent_pool
-validate_scope: per-task
-spec_storage_mode: vault
-EOF
     cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
-    : > "$repo/agent_pool/code-quality-pragmatist.md"
     ( cd "$repo" && git init -q && git -c user.email=t@t -c user.name=t add -A \
         && git -c user.email=t@t -c user.name=t commit -q -m init ) >/dev/null 2>&1 || true
-
     role_line=""
     [[ "$primary_idx" == "$i" ]] && role_line="    role: primary"
     repos_yaml+="$(printf '  - name: repo%d\n    path: %s\n%s\n' "$i" "$repo_real" "$role_line")"
     repos_yaml+=$'\n'
   done
 
-  cat > "$vault/specs/demo/config.yml" <<EOF
+  local spec_dir="$vault/specs/demo"
+  [[ "$use_proj" == "1" ]] && spec_dir="$vault/projects/myproj/specs/demo"
+  cat > "$spec_dir/config.yml" <<EOF
 tier: small
+$( [[ "$use_proj" == "1" ]] && echo 'project: myproj' )
 gates:
   - rust-clippy
-agents:
-  validate:
-    - code-quality-pragmatist
 repos:
 $repos_yaml
 EOF
@@ -355,37 +361,96 @@ EOF
   printf '%s' "$out"
 }
 
-test_vault_cwd_with_spec_resolves_primary_repo() {
+# WF_REPO_ROOT is the VAULT (not a hijacked code repo); gate pool / project KB
+# empty; repos bound.
+test_vault_repo_root_is_vault() {
   require_yq || return 0
   local info vault r0 r1
   info="$(mk_vault 2 1)"
   IFS='|' read -r vault r0 r1 <<<"$info"
   ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo \
-      && [[ "$WF_REPO_ROOT" == "$(realpath -- "$r1")" ]] \
+      && [[ "$WF_REPO_ROOT" == "$(realpath -- "$vault")" ]] \
       && [[ "$WF_VAULT_ROOT" == "$(realpath -- "$vault")" ]] \
-      && [[ "$WF_SPEC_HAS_CONFIG" == "1" ]] )
+      && [[ -z "$WF_GATE_POOL" ]] && [[ -z "$WF_PROJECT_KB" ]] \
+      && [[ "$WF_SPEC_HAS_CONFIG" == "1" ]] \
+      && [[ "$WF_REPO_NAMES" == $'repo0\nrepo1' ]] )
 }
 
-test_vault_cwd_no_role_picks_first() {
+test_vault_no_role_still_vault_root() {
   require_yq || return 0
   local info vault r0 r1
   info="$(mk_vault 2 -1)"
   IFS='|' read -r vault r0 r1 <<<"$info"
   ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo \
-      && [[ "$WF_REPO_ROOT" == "$(realpath -- "$r0")" ]] )
+      && [[ "$WF_REPO_ROOT" == "$(realpath -- "$vault")" ]] )
 }
 
-test_vault_cwd_no_spec_arg_fails_2() {
+# No --spec + --require-spec under vault → exit 4 (no silent gate skip).
+test_vault_require_spec_no_feature_fails_4() {
   require_yq || return 0
   local info vault
   info="$(mk_vault 1 0)"
   IFS='|' read -r vault _ <<<"$info"
   local rc=0
-  ( cd "$vault" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
-  [[ "$rc" == "2" ]]
+  ( cd "$vault" && source "$LOADER" && wf_load_config --require-spec ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "4" ]]
 }
 
-test_vault_cwd_spec_config_missing_fails_2() {
+# {project} token resolved from --project (pre-config) and from existing dir.
+test_vault_project_token_resolves() {
+  require_yq || return 0
+  local info vault
+  info="$(mk_vault 1 0 1)"
+  IFS='|' read -r vault _ <<<"$info"
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo --project myproj \
+      && [[ "$WF_SPEC_PROJECT" == "myproj" ]] \
+      && [[ "$WF_SPEC_STORAGE" == "$(realpath -- "$vault")/projects/myproj/specs" ]] )
+}
+
+test_vault_project_token_unresolved_fails_4() {
+  require_yq || return 0
+  # {project} token but no --project and no spec → cannot resolve.
+  local vault="$TEST_TMPDIR/vault-np"
+  mkdir -p "$vault/gkb"
+  cat > "$vault/.workflow.yml" <<EOF
+spec_storage_mode: vault
+spec_storage: projects/{project}/specs
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+EOF
+  local rc=0
+  ( cd "$vault" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "4" ]]
+}
+
+# {project} path resolved but config.yml omits `project:` → exit 4 (fail-closed,
+# absent key not silently tolerated).
+test_vault_project_absent_mismatch_fails_4() {
+  require_yq || return 0
+  local info vault
+  info="$(mk_vault 1 0 1)"
+  IFS='|' read -r vault _ <<<"$info"
+  # Strip the `project: myproj` line mk_vault injected.
+  grep -v '^project:' "$vault/projects/myproj/specs/demo/config.yml" > "$vault/projects/myproj/specs/demo/c2" \
+    && mv "$vault/projects/myproj/specs/demo/c2" "$vault/projects/myproj/specs/demo/config.yml"
+  local rc=0
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo --project myproj ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "4" ]]
+}
+
+# spec gate id absent from every bound repo's gates.yml → exit 4 (union check).
+test_vault_unknown_gate_union_fails_4() {
+  require_yq || return 0
+  local info vault
+  info="$(mk_vault 1 0)"
+  IFS='|' read -r vault _ <<<"$info"
+  sed 's/- rust-clippy/- bogus-gate/' "$vault/specs/demo/config.yml" > "$vault/specs/demo/c2" \
+    && mv "$vault/specs/demo/c2" "$vault/specs/demo/config.yml"
+  local rc=0 err
+  err="$(cd "$vault" && source "$LOADER"; wf_load_config --spec demo 2>&1 1>/dev/null)" || rc=$?
+  [[ "$rc" == "4" ]] && grep -q "bogus-gate" <<<"$err"
+}
+
+test_vault_spec_config_missing_fails_2() {
   local empty="$TEST_TMPDIR/empty-vault"
   mkdir -p "$empty"
   local rc=0
@@ -393,10 +458,15 @@ test_vault_cwd_spec_config_missing_fails_2() {
   [[ "$rc" == "2" ]]
 }
 
-test_vault_cwd_repos_empty_fails_4() {
+test_vault_repos_empty_fails_4() {
   require_yq || return 0
   local vault="$TEST_TMPDIR/vault-empty"
-  mkdir -p "$vault/specs/demo"
+  mkdir -p "$vault/specs/demo" "$vault/gkb"
+  cat > "$vault/.workflow.yml" <<EOF
+spec_storage_mode: vault
+spec_storage: specs
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+EOF
   cat > "$vault/specs/demo/config.yml" <<EOF
 tier: small
 repos: []
@@ -406,10 +476,15 @@ EOF
   [[ "$rc" == "4" ]]
 }
 
-test_vault_cwd_repo_path_invalid_fails_7() {
+test_vault_repo_path_invalid_fails_7() {
   require_yq || return 0
   local vault="$TEST_TMPDIR/vault-bad"
-  mkdir -p "$vault/specs/demo"
+  mkdir -p "$vault/specs/demo" "$vault/gkb"
+  cat > "$vault/.workflow.yml" <<EOF
+spec_storage_mode: vault
+spec_storage: specs
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+EOF
   cat > "$vault/specs/demo/config.yml" <<EOF
 tier: small
 repos:
@@ -420,23 +495,6 @@ EOF
   local rc=0
   ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo ) >/dev/null 2>&1 || rc=$?
   [[ "$rc" == "7" ]]
-}
-
-test_vault_cwd_storage_mismatch_warns() {
-  require_yq || return 0
-  # Build vault + repo, but rewrite repo's spec_storage to point outside vault.
-  local info vault r0
-  info="$(mk_vault 1 0)"
-  IFS='|' read -r vault r0 <<<"$info"
-  local outside="$TEST_TMPDIR/outside-specs"
-  mkdir -p "$outside"
-  local outside_real; outside_real="$(realpath -- "$outside")"
-  sed -i.bak "s|spec_storage:.*|spec_storage: $outside_real|" "$r0/.workflow.yml"
-  # spec re-discovery via WF_SPEC_STORAGE will fail (no demo/config.yml there) — exit 4 is expected.
-  # But we only assert the WARN: line precedes the failure.
-  local err rc=0
-  err="$(cd "$vault" && source "$LOADER"; wf_load_config --spec demo 2>&1 1>/dev/null)" || rc=$?
-  grep -q "lies outside vault CWD" <<<"$err"
 }
 
 test_repo_cwd_unchanged_no_vault_root() {
@@ -471,13 +529,16 @@ run_test "validate_scope=disabled exits 2 and names enum in error" test_loader_v
 run_test "validate_scope documented in both templates" test_loader_validate_scope_templates_documented
 run_test "grep guard: no script has inline source of config-loader.sh" test_loader_no_script_has_inline_source_of_config_loader
 run_test "WF_SPEC_GATES shape: newline-sep, regex-valid, no leading/trailing NL" test_loader_spec_gates_shape_well_formed
-run_test "vault CWD with --spec resolves primary repo" test_vault_cwd_with_spec_resolves_primary_repo
-run_test "vault CWD with no role picks first repo"      test_vault_cwd_no_role_picks_first
-run_test "vault CWD without --spec fails exit 2"        test_vault_cwd_no_spec_arg_fails_2
-run_test "vault CWD with no specs/<f>/config.yml fails exit 2" test_vault_cwd_spec_config_missing_fails_2
-run_test "vault CWD with empty repos[] fails exit 4"    test_vault_cwd_repos_empty_fails_4
-run_test "vault CWD with bad repo path fails exit 7"    test_vault_cwd_repo_path_invalid_fails_7
-run_test "vault CWD warns when chosen repo spec_storage outside vault" test_vault_cwd_storage_mismatch_warns
+run_test "vault: WF_REPO_ROOT is the vault, gate pool/project KB empty" test_vault_repo_root_is_vault
+run_test "vault: no role still resolves vault root"     test_vault_no_role_still_vault_root
+run_test "vault: --require-spec without feature fails exit 4" test_vault_require_spec_no_feature_fails_4
+run_test "vault: {project} token resolves from --project" test_vault_project_token_resolves
+run_test "vault: {project} unresolved fails exit 4"     test_vault_project_token_unresolved_fails_4
+run_test "vault: {project} path but config.yml omits project: fails exit 4" test_vault_project_absent_mismatch_fails_4
+run_test "vault: unknown gate id (union) fails exit 4"  test_vault_unknown_gate_union_fails_4
+run_test "vault: no spec config.yml fails exit 2"       test_vault_spec_config_missing_fails_2
+run_test "vault: empty repos[] fails exit 4"            test_vault_repos_empty_fails_4
+run_test "vault: bad repo path fails exit 7"            test_vault_repo_path_invalid_fails_7
 run_test "repo CWD unchanged: WF_VAULT_ROOT unset"      test_repo_cwd_unchanged_no_vault_root
 
 echo ""

@@ -1,5 +1,6 @@
-spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
-agent_pool: ~/.claude/agents
+spec_storage_mode: vault
+spec_storage: projects/{project}/specs
 general_kb_path: /tmp/fixture-general-kb
 validate_scope: per-task
+default_repos:
+  - { name: app, path: /tmp/fixture-repo-app, role: primary }

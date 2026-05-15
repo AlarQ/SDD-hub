@@ -18,6 +18,7 @@ TEST_TMPDIR=""
 setup_fixture() {
   TEST_TMPDIR="$(mktemp -d)"
   export WF_REPO_ROOT="$TEST_TMPDIR"
+  export WF_GENERAL_KB="$REPO_ROOT/tests/fixtures"
   mkdir -p "$TEST_TMPDIR/specs/demo/tasks" "$TEST_TMPDIR/specs/demo/reports"
   printf 'spec_storage: specs/\n' > "$TEST_TMPDIR/.workflow.yml"
   cat > "$TEST_TMPDIR/specs/demo/spec.md" <<'EOF'

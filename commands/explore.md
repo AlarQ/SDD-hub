@@ -7,29 +7,49 @@ Explore and clarify requirements for a new feature or change.
 
 Run this step before asking the user any questions. It is non-blocking: failure routes to manual entry, never aborts explore.
 
-### 0a. Resolve spec storage
+### 0a. Resolve spec storage (+ project segment in vault mode)
 
-Source the config loader to get `WF_SPEC_STORAGE`:
+`$ARGUMENTS` is `<feature> [--project <proj>]`. Parse the feature name and the
+optional `--project` value.
+
+Source the config loader to resolve `WF_SPEC_STORAGE`. In vault mode the
+`spec_storage` may contain a `{project}` token that must be substituted before
+the spec dir exists, so pass `--project`:
 
 ```bash
 source ~/.claude/scripts/config-loader.sh
-# WF_SPEC_STORAGE is now set (default: specs/)
+wf_load_config --project "$proj"     # $proj empty if not given
 ```
 
-If sourcing fails (loader not found, exit non-zero), set `WF_SPEC_STORAGE=specs/` and continue.
+- If this exits **4** with a `{project}` / "no project resolved" message and no
+  `--project` was given, the vault `spec_storage` needs a project segment.
+  Invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`):
+  "Which project does this spec belong to?" — offer existing dir names under
+  the storage parent plus `Other`. Re-run `wf_load_config --project "$proj"`
+  with the answer. Carry `$proj` forward (it is written into `config.yml`
+  `project:` in step 0d and passed to every later loader call).
+- If sourcing fails for any other reason (loader not found, other non-zero),
+  set `WF_SPEC_STORAGE=specs/` and continue (non-blocking).
+
+Only **after** the loader call above returns successfully with a final
+`WF_SPEC_STORAGE` (i.e. after the `{project}` segment is resolved — including the
+exit-4 → `AskUserQuestion` → re-run loop), and **before** any later loader call
+that takes `--spec` (the loader rejects a non-existent `spec_storage` dir),
+create the spec dir: `mkdir -p "$WF_SPEC_STORAGE/<feature>"`. Do not mkdir while
+`{project}` is still unresolved — the path would be wrong.
 
 ### 0b. Spawn config-inferencer
 
 If `$ARGUMENTS` is non-empty (feature name provided), spawn the `Config Inferencer` agent (`engineering-config-inferencer`) using the Agent tool. Pass:
 - The feature name (`$ARGUMENTS`)
 - Any PRD or description already available at `$WF_SPEC_STORAGE/$ARGUMENTS/prd.md` (read if it exists; omit if not)
-- The full contents of `knowledge-base/gates.yml` (if it exists)
+- Gate registry contents: in repo mode, the full contents of `knowledge-base/gates.yml` (if it exists). In vault mode (`WF_SPEC_STORAGE_MODE=vault`, no `gates.yml` at the vault root) the concatenated contents of each `default_repos[]` repo's `knowledge-base/gates.yml`, labeled by repo name — never pass nothing, the inferencer needs the gate list to propose a ceiling.
 - A listing of all agent files under the configured `agent_pool` directory
 - The project's `CLAUDE.md`
 - `WF_SPEC_STORAGE_MODE` value (`repo` or `vault`)
-- When `WF_SPEC_STORAGE_MODE=vault`: the `default_repos[]` block from `.workflow.yml`. Path verification already ran in the loader (exit 7 on bad path) so the inferencer can trust the entries — it only decides which subset the spec needs.
+- When `WF_SPEC_STORAGE_MODE=vault`: the `default_repos[]` block from `.workflow.yml`, and the resolved `$proj` (project segment). Path verification already ran in the loader (exit 7 on bad path) so the inferencer can trust the entries — it only decides which subset the spec needs.
 
-Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block."
+Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block. In vault mode, seed `repos:` from `default_repos[]` (select the subset the spec needs) and emit `project: <proj>`."
 
 **On success:** emit `config_inferred` monitor event now (before showing the approval summary):
 ```bash
@@ -69,19 +89,25 @@ Use the user's selection (Approve/Edit/Manual/Skip) to drive step 0d. Each write
 
 ### 0d. Handle user response
 
-**A — Approve:** write the YAML block exactly as returned by the agent to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml` (create parent dirs if needed). Emit `config_approved` event (see 0e). Proceed to step 1.
+> Note: paths below use the parsed `<feature>` (not the raw `$ARGUMENTS`,
+> which may include `--project …`). In vault mode the written `config.yml`
+> MUST contain `project: <proj>` matching the resolved segment — the loader
+> exit-4's on mismatch against the discovered path. If the agent YAML omits
+> it, inject `project: <proj>` before writing.
+
+**A — Approve:** write the YAML block exactly as returned by the agent to `$WF_SPEC_STORAGE/<feature>/config.yml` (create parent dirs if needed). Emit `config_approved` event (see 0e). Proceed to step 1.
 
 **E — Edit:** print the draft YAML in a fenced code block and tell the user: "Paste your edited version below." Wait for the user to provide the full edited YAML. Then re-display the pasted YAML and **MUST** invoke a second `AskUserQuestion`:
 - **question:** "Confirm write of pasted YAML to config.yml?"
 - **options:** `Write` — persist as-is | `Cancel` — discard, do not write.
 
-On `Write`: persist to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml` and emit `config_approved` event (with edited YAML as payload). On `Cancel` or missing selection: do NOT write, print "Edit cancelled — config.yml unchanged." and proceed to step 1.
+On `Write`: persist to `$WF_SPEC_STORAGE/<feature>/config.yml` (parsed `<feature>`, never raw `$ARGUMENTS` — it may contain `--project …`) and emit `config_approved` event (with edited YAML as payload). On `Cancel` or missing selection: do NOT write, print "Edit cancelled — config.yml unchanged." and proceed to step 1.
 
 **M — Manual entry / inferencer unavailable:** tell the user: "Enter your `config.yml` content below, or press Enter to write the default template." Collect input. Then re-display the resolved content (user input or template) and **MUST** invoke a second `AskUserQuestion`:
 - **question:** "Confirm write of this YAML to config.yml?"
 - **options:** `Write` — persist | `Cancel` — discard, do not write.
 
-On `Write`: if user provided content, write it; if Enter (empty), copy `templates/spec-config.yml.template` to `$WF_SPEC_STORAGE/$ARGUMENTS/config.yml`. Emit `config_approved` event. On `Cancel` or missing selection: do NOT write, print "Manual entry cancelled — config.yml unchanged." and proceed to step 1.
+On `Write`: if user provided content, write it; if Enter (empty), copy `templates/spec-config.yml.template` to `$WF_SPEC_STORAGE/<feature>/config.yml` (parsed `<feature>`, never raw `$ARGUMENTS`). Emit `config_approved` event. On `Cancel` or missing selection: do NOT write, print "Manual entry cancelled — config.yml unchanged." and proceed to step 1.
 
 **S — Skip:** do not write `config.yml`. Note: *"config.yml skipped — run `/config $ARGUMENTS` later to configure gates and agents."* Do NOT emit any monitor events. Proceed to step 1.
 

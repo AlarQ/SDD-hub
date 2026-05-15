@@ -7,11 +7,11 @@ Feature name: $ARGUMENTS (strip any `--regenerate` flag before treating as the f
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 2. Parse `$ARGUMENTS`: split on whitespace. The last token is `--regenerate` if present (set `MODE=regenerate`), otherwise `MODE=edit`. The remaining tokens are the feature name. If no feature name remains after stripping the flag, stop: "Usage: `/config <feature>` or `/config <feature> --regenerate`."
-3. Source the config loader:
+3. Source the config loader with the parsed feature name. `--spec`/`--require-spec` are required: in vault mode this substitutes the `{project}` token in `WF_SPEC_STORAGE` (from the spec's `config.yml project:`) — without it the path would still contain the literal `{project}` and the step-4 existence check would resolve wrong. Substitute the parsed feature name for `<feature>` (the `--regenerate`-stripped token from step 2):
    ```bash
-   bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config && printf "WF_SPEC_STORAGE=%s\nWF_GATE_POOL=%s\nWF_AGENT_POOL=%s\n" "$WF_SPEC_STORAGE" "$WF_GATE_POOL" "$WF_AGENT_POOL"'
+   bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec <feature> --require-spec && printf "WF_SPEC_STORAGE=%s\nWF_GATE_POOL=%s\nWF_AGENT_POOL=%s\n" "$WF_SPEC_STORAGE" "${WF_GATE_POOL:-}" "$WF_AGENT_POOL"'
    ```
-   On non-zero exit: stop — print the loader error and halt.
+   On non-zero exit: stop — print the loader error and halt. (Note: `WF_GATE_POOL` is empty in vault mode — gate IDs validate against the per-repo union below, not this var.)
 4. Verify `$WF_SPEC_STORAGE/<feature>/config.yml` exists. If not: stop — "No config.yml found for '<feature>'. Run `/explore <feature>` to create one."
 
 ## ID Re-resolution (runs in both modes before any write)
@@ -22,11 +22,18 @@ After reading or receiving a config.yml, validate all referenced IDs against cur
 ```bash
 bash -c '
   source ~/.claude/scripts/config-loader.sh
-  wf_load_config
-  yq ".gates[].id" "$WF_GATE_POOL" 2>/dev/null
+  wf_load_config --spec <feature> --require-spec
+  if [[ "$WF_SPEC_STORAGE_MODE" == "vault" ]]; then
+    # No single pool: union the bound repos knowledge-base/gates.yml ids.
+    while IFS= read -r p; do
+      [[ -f "$p/knowledge-base/gates.yml" ]] && yq ".gates[].id" "$p/knowledge-base/gates.yml" 2>/dev/null
+    done <<< "$WF_REPO_PATHS"
+  else
+    yq ".gates[].id" "$WF_GATE_POOL" 2>/dev/null
+  fi
 '
 ```
-For each gate ID listed in the config's `gates:` array, check it appears in the gate pool output. Collect all missing IDs.
+For each gate ID listed in the config's `gates:` array, check it appears in the (unioned) gate pool output. Collect all missing IDs.
 
 **Agent ID validation:**
 For each phase in the config's `agents:` map, for each agent ID listed:
@@ -67,7 +74,7 @@ Edit the config to remove or replace these IDs, then re-run `/config <feature>`.
    - The feature name
    - Current `$WF_SPEC_STORAGE/<feature>/config.yml` contents (so the agent can use it as a baseline)
    - Any PRD available at `$WF_SPEC_STORAGE/<feature>/prd.md` (read if it exists; omit if not)
-   - Full contents of `$WF_GATE_POOL` (if it exists)
+   - Gate registry contents: in repo mode, the full contents of `$WF_GATE_POOL` (if it exists). In vault mode (`WF_SPEC_STORAGE_MODE=vault`, `WF_GATE_POOL` empty), the concatenated contents of each bound repo's `knowledge-base/gates.yml` (iterate `$WF_REPO_PATHS`, label each block by repo name) — never pass an empty pool, the inferencer needs the gate list to choose a ceiling.
    - Listing of all agent files under `$WF_AGENT_POOL`
    - The project's `CLAUDE.md`
 

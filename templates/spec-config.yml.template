@@ -2,6 +2,13 @@
 # Produced by /explore step 0 (config-inferencer) and edited via /config.
 # All fields optional; defaults shown.
 
+# project: <name>
+#   Vault mode only. The project segment this spec lives under when
+#   .workflow.yml spec_storage contains the `{project}` token
+#   (e.g. projects/{project}/specs). Must match ^[a-z0-9][a-z0-9_-]{0,31}$ and
+#   the directory the config was discovered under (loader exit 4 on mismatch).
+#   Written by /explore step 0 from the resolved --project value.
+
 # tags: []
 #   Free-form spec tags. Each matches ^[a-zA-Z0-9_-]{1,32}$.
 

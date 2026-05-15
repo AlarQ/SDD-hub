@@ -4,8 +4,10 @@
 # /validate-impl (spec-wide). Inputs come from env vars exported by config-loader.sh.
 #
 # Required env (caller must source config-loader.sh + wf_load_config first):
-#   WF_GATE_POOL    absolute path to gates.yml
-#   WF_SPEC_GATES   newline-separated ceiling gate IDs (spec eligible set)
+#   WF_GATE_POOL       absolute path to gates.yml (repo mode)
+#   WF_TASK_GATE_POOL  per-task bound-repo gates.yml (vault mode; overrides
+#                      WF_GATE_POOL). Resolve via scripts/multi-repo-resolution.md.
+#   WF_SPEC_GATES      newline-separated ceiling gate IDs (spec eligible set)
 #
 # Public helpers:
 #   wf_gc_task_languages <task_md>            -> language tags from one task
@@ -81,7 +83,10 @@ wf_gc__intersect() {
 # `empty_intersection_ok: true` AND the task is code-bearing (has language tags).
 wf_compute_effective_set() {
   local task_file="$1"
-  local pool="${WF_GATE_POOL:?WF_GATE_POOL must be set}"
+  # Vault mode: caller resolves the bound repo's gates.yml into
+  # WF_TASK_GATE_POOL (see scripts/multi-repo-resolution.md). Repo mode:
+  # WF_GATE_POOL from the single pool. One must be set.
+  local pool="${WF_TASK_GATE_POOL:-${WF_GATE_POOL:?WF_TASK_GATE_POOL or WF_GATE_POOL must be set}}"
   local ceiling="${WF_SPEC_GATES:-}"
   [[ -f "$task_file" ]] || { wf_gc__err "task file missing: $task_file"; return 1; }
   local langs eff allow code_bearing
@@ -100,7 +105,7 @@ wf_compute_effective_set() {
 # rc 3 on empty union AND code-bearing spec.
 wf_compute_union_set() {
   local spec_dir="$1"
-  local pool="${WF_GATE_POOL:?WF_GATE_POOL must be set}"
+  local pool="${WF_TASK_GATE_POOL:-${WF_GATE_POOL:?WF_TASK_GATE_POOL or WF_GATE_POOL must be set}}"
   local ceiling="${WF_SPEC_GATES:-}"
   local tasks_dir="$spec_dir/tasks"
   local langs union code_bearing

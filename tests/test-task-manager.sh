@@ -216,6 +216,48 @@ EOF
   [[ "$out" == *"circular_dependency"* ]]
 }
 
+# --- resolve_ground_rule_path (vault single/multi-repo) ---
+
+test_vault_single_repo_unprefixed_resolves_to_that_repo() {
+  local out
+  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES="app" WF_REPO_PATHS="/code/app" \
+         WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "style/general.md"')"
+  assert_eq "/code/app/knowledge-base/style/general.md" "$out" "single-repo unprefixed"
+}
+
+test_vault_single_repo_project_prefix_resolves() {
+  local out
+  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES="app" WF_REPO_PATHS="/code/app" \
+         WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "project:languages/ts.md"')"
+  assert_eq "/code/app/knowledge-base/languages/ts.md" "$out" "single-repo project:"
+}
+
+test_vault_general_prefix_always_resolves() {
+  local out
+  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES="app" WF_REPO_PATHS="/code/app" \
+         WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "general:security/general.md"')"
+  assert_eq "/gkb/security/general.md" "$out" "general:"
+}
+
+test_vault_multi_repo_unprefixed_rejected() {
+  local rc=0
+  ( WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES=$'a\nb' WF_REPO_PATHS=$'/x\n/y' \
+    WF_GENERAL_KB=/gkb bash -c \
+    'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "style/general.md"' ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == "7" ]]
+}
+
+test_vault_multi_repo_named_prefix_resolves() {
+  local out
+  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES=$'a\nb' WF_REPO_PATHS=$'/x\n/y' \
+         WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "repo:b:languages/go.md"')"
+  assert_eq "/y/knowledge-base/languages/go.md" "$out" "repo:<name>:"
+}
+
 echo "Running test-task-manager.sh tests..."
 echo ""
 run_test "validate accepts task file via absolute path from any dir" test_validate_absolute_path_works_from_any_dir
@@ -226,6 +268,11 @@ run_test "vault: tasks under WF_SPEC_STORAGE are accessible to next command" tes
 run_test "set-status works from a nested subdir with absolute task path" test_set_status_works_from_nested_subdir
 run_test "validate parses frontmatter with markdown HR in body" test_validate_frontmatter_with_markdown_hr_in_body
 run_test "status detects diamond-shaped dependency cycle (C2)" test_status_detects_diamond_cycle
+run_test "vault single-repo: unprefixed → sole repo KB" test_vault_single_repo_unprefixed_resolves_to_that_repo
+run_test "vault single-repo: project: → sole repo KB" test_vault_single_repo_project_prefix_resolves
+run_test "vault: general: always resolves" test_vault_general_prefix_always_resolves
+run_test "vault multi-repo: unprefixed rejected (exit 7)" test_vault_multi_repo_unprefixed_rejected
+run_test "vault multi-repo: repo:<name>: resolves" test_vault_multi_repo_named_prefix_resolves
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"

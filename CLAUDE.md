@@ -14,7 +14,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `skills/` — Reusable skill prompts (e.g. `bash-scripting/SKILL.md`). Installed to `~/.claude/skills/` by `setup.sh`.
 - `tests/` — Bash test suite for scripts (task-manager, config-loader, monitor, validate-impl, tier-check, etc.). Run individual tests directly: `bash tests/test-task-manager.sh`.
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Lives in this repo; not installed globally.
-- `knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules. Lives in this repo; not installed globally. Referenced by all workflow commands instead of duplicating KB instructions inline.
+- `scripts/knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules (incl. single-repo vault implicit default). Installed globally to `~/.claude/scripts/` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, create-followup, check-unvalidated, status). Requires `yq`. `create-followup <feature> <fr-id> <description>` auto-generates a `status: todo` task from a `/validate-impl` spec-audit accepted finding; FR id is validated against `spec.md` (fail-closed on unknown ids) and ground_rules are inherited from the spec's `## Applicable Ground Rules` section.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `scripts/monitor.sh` — Event logger for spec implementation monitoring; appends JSONL events to `specs/<feature>/.monitor.jsonl`
@@ -73,17 +73,17 @@ Elm-like architecture with file-system watching for live reload:
 Two-layer knowledge base architecture:
 
 - **General KB** — lives at the path configured by `general_kb_path` in each repo's `.workflow.yml`, exported as `$WF_GENERAL_KB` by `scripts/config-loader.sh`. Recommended location: a master-brain / Obsidian vault (e.g. `~/Desktop/projects/master-brain/general-knowledge-base/`). Contains universal rules: security, architecture, testing, style. Key is **required** — loader exits 2 if missing.
-- **Project KB** — created per-project by `/bootstrap` at `knowledge-base/`. Contains project-specific rules: language files and conventions discovered via `/review-findings`.
+- **Project KB** — created by `/bootstrap` at `knowledge-base/` inside each code repo (repo mode: `repo`; vault mode: `repo-gate-init`). Never in the vault. Contains project-specific rules: language files and conventions discovered via `/review-findings`.
 
-All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB.
+All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB. In vault mode `WF_PROJECT_KB`/`WF_GATE_POOL` are empty; project KB + gates resolve **per task** from the bound repo (`multi-repo-resolution.md`).
 
-Task `ground_rules` use prefix convention: `general:security/general.md` (resolves under `$WF_GENERAL_KB`), `project:languages/rust.md`, `repo:<name>:` (vault/multi-repo). Unprefixed defaults to `project:` (rejected in vault mode).
+Task `ground_rules` use prefix convention: `general:security/general.md` (resolves under `$WF_GENERAL_KB`), `project:languages/rust.md`, `repo:<name>:` (vault/multi-repo). Unprefixed defaults to `project:`. In vault mode: a **single** bound repo is the implicit default (unprefixed/`project:` resolve to it); **two+** bound repos require `general:` or `repo:<name>:` (bare rejected, exit 7).
 
 ## Configurable Workflow
 
 The configurable-workflow feature externalizes gate and agent selection into YAML config. Three files form the config layer:
 
-- **`.workflow.yml`** (repo root) — `spec_storage`, `gate_pool`, `agent_pool`, `validate_scope`. Required for any active invocation. Missing → loader exit 2; run `/bootstrap`.
+- **`.workflow.yml`** (repo root in repo mode; vault root in vault mode) — `spec_storage`, `gate_pool`, `agent_pool`, `validate_scope`. In vault mode it is a **thin pointer**: no `gate_pool` (absent/ignored — gates resolve per-task from each bound repo's `knowledge-base/gates.yml`), plus `spec_storage_mode: vault` + `default_repos:`. Required for any active invocation. Missing → loader exit 2; run `/bootstrap`.
 - **`knowledge-base/gates.yml`** (gate registry) — canonical list of deterministic gates with `id`, `command`, `applies_to`, `category`, `blocking`. Sole source of truth for executable gates.
 - **`specs/<feature>/config.yml`** (per-spec config) — `tags`, `gates` (the **ceiling**), and `agents` per phase. Written by `/explore` step 0 after inferencer approval. Required on all active processing paths; missing → exit 4.
 
@@ -126,9 +126,11 @@ Monitor events: `tier_inferred`, `tier_approved`, `tier_breach`, `tier_promoted`
 
 ## Multi-Repo Specs (Vault Mode)
 
-`.workflow.yml spec_storage_mode: vault` enables vault-hosted specs that bind one or more code repos. Per-spec `config.yml repos[]` maps `name → path → role`. Loader exports `WF_REPO_NAMES` + `WF_REPO_PATHS`; helpers `wf_repo_path` / `wf_for_each_repo`. Exit 7 on bad path.
+**Vault mode is the going-forward path** (all specs live in the master-brain vault). `.workflow.yml spec_storage_mode: vault` makes the vault `.workflow.yml` a **thin pointer**: it owns workflow settings + `general_kb_path` only — **no `gate_pool`, no `knowledge-base/` in the vault**. Each target code repo owns its own `knowledge-base/` + `gates.yml`, created once by `/bootstrap` repo-gate-init inside that repo (vault itself: `/bootstrap` vault-init, once). There is **no "primary repo for config"** — `role: primary` only selects default git/PR context.
 
-Per-task `repo:` required when `repos[]` non-empty; `task-manager.sh validate` enforces membership. Hard rule: one task = one repo. Ground-rule prefix `repo:<name>:` resolves to that repo's `knowledge-base/`.
+`spec_storage` uses a `{project}` token (e.g. `projects/{project}/specs`) → specs at `<vault>/projects/<proj>/specs/<feature>/`. Project segment comes from `--project` (first `/explore`) or per-spec `config.yml project:`; loader exports `WF_SPEC_PROJECT`, exit 4 on mismatch/unresolved. Per-spec `config.yml repos[]` maps `name → path → role`; loader exports `WF_REPO_NAMES`/`WF_REPO_PATHS` (empty `WF_GATE_POOL`/`WF_PROJECT_KB`); helpers `wf_repo_path`/`wf_for_each_repo`. Spec `gates:` validated against the **union** of bound repos' `gates.yml` (exit 4 unknown id). Gate/KB commands pass `--require-spec` (no-spec under vault → exit 4). Exit 7 on bad repo path.
+
+Per-task `repo:` required when `repos[]` has 2+ entries; optional for a single-repo spec. `task-manager.sh validate` enforces membership. Hard rule: one task = one repo. Ground-rule prefix `repo:<name>:` resolves to that repo's `knowledge-base/`; single-repo spec resolves bare `project:`/unprefixed to the sole repo. `multi-repo-resolution.md` also exports `WF_TASK_GATE_POOL` (bound repo's `gates.yml`) consumed by `gate-ceiling.sh`/`validate-impl.sh`.
 
 `/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`, `/quick-ship` resolve `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and run git/gates/PR creation against that path. `/validate-impl` emits per-repo diff sections for Odium. Gates may declare `applies_to_repos: [<name>,…]` to scope.
 

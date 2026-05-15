@@ -23,7 +23,8 @@ wf__unset_partials() {
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
+        WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT \
+        WF_PROJECT_KB WF_SPEC_PROJECT
   local v
   while IFS= read -r v; do [[ -n "$v" ]] && unset "$v"; done \
     < <(compgen -v | grep '^WF_SPEC_AGENTS_' || true)
@@ -63,11 +64,13 @@ wf__json_get() {
 }
 
 wf_load_config() {
-  local spec=""
+  local spec="" cli_project="" require_spec=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --spec)        spec="${2:-}"; shift 2 ;;
-      --no-defaults) shift ;;  # reserved; .workflow.yml is already required
+      --spec)         spec="${2:-}"; shift 2 ;;
+      --project)      cli_project="${2:-}"; shift 2 ;;
+      --require-spec) require_spec=1; shift ;;
+      --no-defaults)  shift ;;  # reserved; .workflow.yml is already required
       *) wf__err "wf_load_config: unknown arg: $1"; return 6 ;;
     esac
   done
@@ -113,62 +116,15 @@ wf_load_config() {
     printf '%s' "$path"
   }
 
-  local root vault_cfg=""
+  local root
   if ! root="$(find_workflow_root "$PWD" 2>/dev/null)"; then
-    # Vault-CWD fallback: when CWD has no `.workflow.yml` but holds
-    # `specs/<feature>/config.yml` (master-brain vault layout), derive
-    # WF_REPO_ROOT from one of the spec's `repos[]` entries.
-    if [[ -z "$spec" ]]; then
-      wf__err ".workflow.yml not found walking up from $PWD. Run /bootstrap to create it."
-      wf__unset_partials
-      return 2
-    fi
-    if ! vault_cfg="$(find_vault_spec_config "$spec" "$PWD" 2>/dev/null)"; then
-      wf__err ".workflow.yml not found walking up from $PWD, and no vault spec config at $PWD/specs/$spec/config.yml. Run /bootstrap or /explore $spec."
-      wf__unset_partials
-      return 2
-    fi
-    local vault_root vault_json vault_repos_count chosen_idx="" chosen_path="" chosen_role="" i_role i_path rc=0
-    vault_root="$(realpath -- "$PWD" 2>/dev/null)" || {
-      wf__err "vault root unresolvable: $PWD"; wf__unset_partials; return 2
-    }
-    vault_json="$(wf__yq_json "$vault_cfg")"; rc=$?
-    case "$rc" in
-      0) ;;
-      124) wf__err "$vault_cfg: yq timeout"; wf__unset_partials; return 5 ;;
-      90)  wf__unset_partials; return 6 ;;
-      *)   wf__err "$vault_cfg: malformed"; wf__unset_partials; return 4 ;;
-    esac
-    vault_repos_count="$(printf '%s' "$vault_json" | wf__timeout 5 yq e -r '(.repos // []) | length' - 2>/dev/null || echo 0)"
-    [[ "$vault_repos_count" =~ ^[0-9]+$ ]] || vault_repos_count=0
-    if [[ "$vault_repos_count" -eq 0 ]]; then
-      wf__err "$vault_cfg: repos[] required for vault-CWD invocation"
-      wf__unset_partials; return 4
-    fi
-    local vi
-    for ((vi = 0; vi < vault_repos_count; vi++)); do
-      i_role="$(printf '%s' "$vault_json" | wf__timeout 5 yq e -r ".repos[$vi].role // \"\"" - 2>/dev/null)"
-      if [[ "$i_role" == "primary" ]]; then chosen_idx="$vi"; chosen_role="primary"; break; fi
-    done
-    [[ -z "$chosen_idx" ]] && chosen_idx=0
-    i_path="$(printf '%s' "$vault_json" | wf__timeout 5 yq e -r ".repos[$chosen_idx].path // \"\"" - 2>/dev/null)"
-    [[ -n "$i_path" ]] || { wf__err "$vault_cfg: repos[$chosen_idx].path missing"; wf__unset_partials; return 7; }
-    [[ "$i_path" == *".."* ]] && { wf__err "$vault_cfg: repos[$chosen_idx].path has '..': $i_path"; wf__unset_partials; return 7; }
-    case "$i_path" in
-      "~"|"~/"*) chosen_path="${HOME}${i_path:1}" ;;
-      /*)        chosen_path="$i_path" ;;
-      *)         chosen_path="$vault_root/$i_path" ;;
-    esac
-    chosen_path="$(realpath -- "$chosen_path" 2>/dev/null)" || {
-      wf__err "$vault_cfg: repos[$chosen_idx] path unresolvable: $i_path"
-      wf__unset_partials; return 7
-    }
-    [[ -d "$chosen_path" && -f "$chosen_path/.workflow.yml" ]] || {
-      wf__err "$vault_cfg: repos[$chosen_idx] missing .workflow.yml: $chosen_path"
-      wf__unset_partials; return 7
-    }
-    WF_VAULT_ROOT="$vault_root"
-    root="$chosen_path"
+    # Vault is the going-forward path: bootstrap vault-init always writes the
+    # vault-root .workflow.yml thin pointer, so normal walk-up is the sole
+    # canonical entry. No no-walk-up fallback (it produced repo-mode behavior
+    # masquerading as vault mode by reading a code repo's .workflow.yml).
+    wf__err ".workflow.yml not found walking up from $PWD. Run /bootstrap to create it."
+    wf__unset_partials
+    return 2
   fi
   WF_REPO_ROOT="$root"
   WF_CONFIG_FILE="$root/.workflow.yml"
@@ -187,6 +143,33 @@ wf_load_config() {
     *)   wf__err "$WF_CONFIG_FILE: malformed YAML"; wf__unset_partials; return 2 ;;
   esac
 
+  # spec_storage_mode parsed EARLY: gate-pool resolution and {project}
+  # substitution both branch on it (must precede spec_storage + gate_pool).
+  local storage_mode
+  storage_mode="$(wf__json_get "$cfg_json" '.spec_storage_mode' 'repo')" || {
+    wf__err "$WF_CONFIG_FILE: spec_storage_mode extraction failed"; wf__unset_partials; return 5
+  }
+  case "$storage_mode" in
+    repo|vault) ;;
+    *) wf__err "$WF_CONFIG_FILE: spec_storage_mode invalid: '$storage_mode' (expected: repo, vault)"
+       wf__unset_partials; return 2 ;;
+  esac
+  WF_SPEC_STORAGE_MODE="$storage_mode"
+
+  # Vault discovered via normal walk-up (vault dir owns the .workflow.yml thin
+  # pointer): authoritative for workflow settings + general_kb only. Gates +
+  # project-KB resolve per-task from the bound repo:<name>.
+  if [[ "$storage_mode" == "vault" ]]; then
+    WF_VAULT_ROOT="$root"
+  fi
+
+  # Gate/KB-touching commands pass --require-spec. Under vault mode there is
+  # no ambient gate pool without a spec → fail loud (no silent gate skip).
+  if [[ "$require_spec" -eq 1 && "$storage_mode" == "vault" && -z "$spec" ]]; then
+    wf__err "vault mode requires <feature> (gate/KB resolution needs per-spec repos[])"
+    wf__unset_partials; return 4
+  fi
+
   local raw storage_abs gate_pool_abs agent_pool_abs scope
   raw="$(wf__json_get "$cfg_json" '.spec_storage' 'specs/')" || {
     wf__err "$WF_CONFIG_FILE: spec_storage extraction failed"; wf__unset_partials; return 5
@@ -194,6 +177,34 @@ wf_load_config() {
   if [[ "$raw" == *".."* ]]; then
     wf__err "$WF_CONFIG_FILE: spec_storage has '..' segment: $raw"
     wf__unset_partials; return 2
+  fi
+  # {project} token: resolve project segment from --project (pre-config.yml,
+  # e.g. first /explore) or, for --spec runs, from a unique existing spec dir.
+  if [[ "$raw" == *'{project}'* ]]; then
+    local proj="$cli_project"
+    if [[ -z "$proj" && -n "$spec" ]]; then
+      # Glob the storage pattern with {project}->* and pick the dir holding
+      # this spec's config.yml. Ambiguity → demand --project explicitly.
+      local glob_base="${raw//\{project\}/*}" cand match_count=0 hit=""
+      local glob_abs; glob_abs="$(wf__resolve_path "$glob_base" "$root")"
+      while IFS= read -r cand; do
+        [[ -f "$cand/$spec/config.yml" ]] || continue
+        match_count=$((match_count + 1)); hit="$cand"
+      done < <(compgen -G "$glob_abs" 2>/dev/null || true)
+      if [[ "$match_count" -eq 1 ]]; then
+        # Recover project name by diffing hit against the literal prefix.
+        local pre="${raw%%\{project\}*}"
+        local pre_abs; pre_abs="$(wf__resolve_path "$pre" "$root")"
+        proj="${hit#"$pre_abs"}"; proj="${proj%%/*}"
+      fi
+    fi
+    if [[ -z "$proj" ]]; then
+      wf__err "$WF_CONFIG_FILE: spec_storage uses {project} but no project resolved (pass --project <name>${spec:+ or ensure $spec exists under one project})"
+      wf__unset_partials; return 4
+    fi
+    validate_id "$proj" || { wf__err "invalid project id: $proj"; wf__unset_partials; return 4; }
+    WF_SPEC_PROJECT="$proj"
+    raw="${raw//\{project\}/$proj}"
   fi
   storage_abs="$(wf__resolve_path "$raw" "$root")"
   storage_abs="$(realpath_safe "$storage_abs" 2>/dev/null)" || {
@@ -206,21 +217,23 @@ wf_load_config() {
   }
   WF_SPEC_STORAGE="$storage_abs"
 
-  if [[ -n "${WF_VAULT_ROOT:-}" ]]; then
-    if [[ "$storage_abs" != "$WF_VAULT_ROOT" && "$storage_abs" != "$WF_VAULT_ROOT"/* ]]; then
-      wf__warn "chosen repo's spec_storage ($storage_abs) lies outside vault CWD ($WF_VAULT_ROOT); vault-found spec config may not be re-discoverable via spec_storage."
-    fi
+  # Vault mode: no single gate pool / project-KB. Gates + project-KB resolve
+  # per-task from the bound repo:<name> (see scripts/multi-repo-resolution.md).
+  if [[ "$storage_mode" == "vault" ]]; then
+    WF_GATE_POOL=""
+    WF_PROJECT_KB=""
+  else
+    raw="$(wf__json_get "$cfg_json" '.gate_pool' 'knowledge-base/gates.yml')" || {
+      wf__err "$WF_CONFIG_FILE: gate_pool extraction failed"; wf__unset_partials; return 5
+    }
+    gate_pool_abs="$(wf__resolve_pool_path "$raw" "$root" gate_pool)" || { wf__unset_partials; return 2; }
+    [[ -f "$gate_pool_abs" ]] || {
+      wf__err "$WF_CONFIG_FILE: gate_pool not a file: $gate_pool_abs"
+      wf__unset_partials; return 2
+    }
+    WF_GATE_POOL="$gate_pool_abs"
+    WF_PROJECT_KB="$root/knowledge-base"
   fi
-
-  raw="$(wf__json_get "$cfg_json" '.gate_pool' 'knowledge-base/gates.yml')" || {
-    wf__err "$WF_CONFIG_FILE: gate_pool extraction failed"; wf__unset_partials; return 5
-  }
-  gate_pool_abs="$(wf__resolve_pool_path "$raw" "$root" gate_pool)" || { wf__unset_partials; return 2; }
-  [[ -f "$gate_pool_abs" ]] || {
-    wf__err "$WF_CONFIG_FILE: gate_pool not a file: $gate_pool_abs"
-    wf__unset_partials; return 2
-  }
-  WF_GATE_POOL="$gate_pool_abs"
 
   raw="$(wf__json_get "$cfg_json" '.agent_pool' "$HOME/.claude/agents")" || {
     wf__err "$WF_CONFIG_FILE: agent_pool extraction failed"; wf__unset_partials; return 5
@@ -266,52 +279,44 @@ wf_load_config() {
   }
   WF_VALIDATE_SCOPE="$scope"
 
-  local storage_mode
-  storage_mode="$(wf__json_get "$cfg_json" '.spec_storage_mode' 'repo')" || {
-    wf__err "$WF_CONFIG_FILE: spec_storage_mode extraction failed"; wf__unset_partials; return 5
-  }
-  case "$storage_mode" in
-    repo|vault) ;;
-    *) wf__err "$WF_CONFIG_FILE: spec_storage_mode invalid: '$storage_mode' (expected: repo, vault)"
-       wf__unset_partials; return 2 ;;
-  esac
-  WF_SPEC_STORAGE_MODE="$storage_mode"
+  # gates.yml parse — repo mode only. Vault mode has no single pool; per-task
+  # repo gates.yml are validated lazily and unioned after repos[] is parsed.
+  local gates_json=""
+  if [[ "$storage_mode" != "vault" ]]; then
+    gates_json="$(wf__yq_json "$WF_GATE_POOL")"; rc=$?
+    case "$rc" in
+      0) ;;
+      124) wf__err "$WF_GATE_POOL: yq timeout"; wf__unset_partials; return 5 ;;
+      *)   wf__err "$WF_GATE_POOL: malformed"; wf__unset_partials; return 3 ;;
+    esac
 
-  # gates.yml parse
-  local gates_json
-  gates_json="$(wf__yq_json "$WF_GATE_POOL")"; rc=$?
-  case "$rc" in
-    0) ;;
-    124) wf__err "$WF_GATE_POOL: yq timeout"; wf__unset_partials; return 5 ;;
-    *)   wf__err "$WF_GATE_POOL: malformed"; wf__unset_partials; return 3 ;;
-  esac
+    local dup_ids
+    dup_ids="$(printf '%s' "$gates_json" | wf__timeout 5 yq e -r '.gates[].id' - 2>/dev/null | sort | uniq -d)"
+    if [[ -n "$dup_ids" ]]; then
+      wf__err "$WF_GATE_POOL: duplicate gate ids: $(echo "$dup_ids" | tr '\n' ' ')"
+      wf__unset_partials; return 3
+    fi
 
-  local dup_ids
-  dup_ids="$(printf '%s' "$gates_json" | wf__timeout 5 yq e -r '.gates[].id' - 2>/dev/null | sort | uniq -d)"
-  if [[ -n "$dup_ids" ]]; then
-    wf__err "$WF_GATE_POOL: duplicate gate ids: $(echo "$dup_ids" | tr '\n' ' ')"
-    wf__unset_partials; return 3
-  fi
-
-  if command -v git >/dev/null 2>&1 && git -C "$root" rev-parse >/dev/null 2>&1; then
-    if ! git -C "$root" diff --quiet -- "$WF_GATE_POOL" 2>/dev/null; then
-      wf__warn "$WF_GATE_POOL has uncommitted modifications"
-      # T3 — best-effort gate_pool_dirty event when an active monitor context
-      # exists. Loader must never fail on monitor unavailability; wrap so any
-      # error is swallowed. Skipped silently when no .monitor-context (e.g.
-      # outside a tracked /implement session).
-      {
-        local _gp_sha _ctx_file _ctx_feature=""
-        _gp_sha="$(git -C "$root" hash-object -- "$WF_GATE_POOL" 2>/dev/null || echo "unknown")"
-        _ctx_file="$root/.monitor-context"
-        if [[ -f "$_ctx_file" ]]; then
-          _ctx_feature="$(awk -F= '$1=="feature"{print $2; exit}' "$_ctx_file" 2>/dev/null)"
-        fi
-        if [[ -n "$_ctx_feature" && -f "$HOME/.claude/scripts/monitor.sh" ]]; then
-          bash "$HOME/.claude/scripts/monitor.sh" log_event "$_ctx_feature" gate_pool_dirty "" \
-            "$(printf '{"file":"%s","sha":"%s"}' "$WF_GATE_POOL" "$_gp_sha")" >/dev/null 2>&1 || true
-        fi
-      } 2>/dev/null || true
+    if command -v git >/dev/null 2>&1 && git -C "$root" rev-parse >/dev/null 2>&1; then
+      if ! git -C "$root" diff --quiet -- "$WF_GATE_POOL" 2>/dev/null; then
+        wf__warn "$WF_GATE_POOL has uncommitted modifications"
+        # T3 — best-effort gate_pool_dirty event when an active monitor context
+        # exists. Loader must never fail on monitor unavailability; wrap so any
+        # error is swallowed. Skipped silently when no .monitor-context (e.g.
+        # outside a tracked /implement session).
+        {
+          local _gp_sha _ctx_file _ctx_feature=""
+          _gp_sha="$(git -C "$root" hash-object -- "$WF_GATE_POOL" 2>/dev/null || echo "unknown")"
+          _ctx_file="$root/.monitor-context"
+          if [[ -f "$_ctx_file" ]]; then
+            _ctx_feature="$(awk -F= '$1=="feature"{print $2; exit}' "$_ctx_file" 2>/dev/null)"
+          fi
+          if [[ -n "$_ctx_feature" && -f "$HOME/.claude/scripts/monitor.sh" ]]; then
+            bash "$HOME/.claude/scripts/monitor.sh" log_event "$_ctx_feature" gate_pool_dirty "" \
+              "$(printf '{"file":"%s","sha":"%s"}' "$WF_GATE_POOL" "$_gp_sha")" >/dev/null 2>&1 || true
+          fi
+        } 2>/dev/null || true
+      fi
     fi
   fi
 
@@ -336,14 +341,22 @@ wf_load_config() {
     local known_ids gate_ids id bad=""
     known_ids="$(printf '%s' "$gates_json" | wf__timeout 5 yq e -r '.gates[].id' - 2>/dev/null || true)"
     gate_ids="$(printf '%s'  "$spec_json"  | wf__timeout 5 yq e -r '.gates[]?' - 2>/dev/null || true)"
+    # Syntax-check every spec gate id now. Membership check: repo mode against
+    # the single pool here; vault mode against the union of bound repos'
+    # gates.yml after repos[] is parsed (known_ids built below).
     while IFS= read -r id; do
       [[ -z "$id" ]] && continue
       validate_id "$id" || { wf__err "$spec_cfg: invalid gate id: $id"; wf__unset_partials; return 4; }
-      grep -Fxq -- "$id" <<<"$known_ids" || bad="$bad $id"
     done <<<"$gate_ids"
-    if [[ -n "$bad" ]]; then
-      wf__err "$spec_cfg: unknown gate ids:$bad"
-      wf__unset_partials; return 4
+    if [[ "$storage_mode" != "vault" ]]; then
+      while IFS= read -r id; do
+        [[ -z "$id" ]] && continue
+        grep -Fxq -- "$id" <<<"$known_ids" || bad="$bad $id"
+      done <<<"$gate_ids"
+      if [[ -n "$bad" ]]; then
+        wf__err "$spec_cfg: unknown gate ids:$bad"
+        wf__unset_partials; return 4
+      fi
     fi
     WF_SPEC_GATES="$gate_ids"
 
@@ -456,6 +469,43 @@ wf_load_config() {
     WF_REPO_NAMES="$names_acc"
     WF_REPO_PATHS="$paths_acc"
 
+    # Vault mode: validate spec gates[] against the UNION of bound repos'
+    # knowledge-base/gates.yml ids (fail-closed; no single pool exists).
+    if [[ "$storage_mode" == "vault" && -n "$WF_SPEC_GATES" ]]; then
+      local rp uni="" gj vbad="" gid
+      while IFS= read -r rp; do
+        [[ -n "$rp" ]] || continue
+        local rgp="$rp/knowledge-base/gates.yml"
+        [[ -f "$rgp" ]] || continue
+        gj="$(wf__yq_json "$rgp" 2>/dev/null)" || continue
+        uni+="$(printf '%s' "$gj" | wf__timeout 5 yq e -r '.gates[].id' - 2>/dev/null || true)"$'\n'
+      done <<<"$paths_acc"
+      while IFS= read -r gid; do
+        [[ -z "$gid" ]] && continue
+        grep -Fxq -- "$gid" <<<"$uni" || vbad="$vbad $gid"
+      done <<<"$WF_SPEC_GATES"
+      if [[ -n "$vbad" ]]; then
+        wf__err "$spec_cfg: gate ids not found in any bound repo's gates.yml:$vbad"
+        wf__unset_partials; return 4
+      fi
+    fi
+
+    # {project} consistency: when the spec path resolved a {project} segment,
+    # per-spec config.yml `project:` MUST be present and match it (fail-closed —
+    # an absent key is not silently tolerated).
+    if [[ -n "${WF_SPEC_PROJECT:-}" ]]; then
+      local cfg_proj
+      cfg_proj="$(wf__json_get "$spec_json" '.project' '')"
+      if [[ -z "$cfg_proj" ]]; then
+        wf__err "$spec_cfg: project: missing — required under {project} path (resolved '$WF_SPEC_PROJECT')"
+        wf__unset_partials; return 4
+      fi
+      if [[ "$cfg_proj" != "$WF_SPEC_PROJECT" ]]; then
+        wf__err "$spec_cfg: project '$cfg_proj' != resolved spec path project '$WF_SPEC_PROJECT'"
+        wf__unset_partials; return 4
+      fi
+    fi
+
     # Ground-rules cross-check: every `repo:<name>:` prefix in spec task
     # frontmatter must reference a name in WF_REPO_NAMES. Fail-closed here
     # (instead of letting commands silently skip an unresolved KB rule at gate
@@ -492,8 +542,10 @@ wf_load_config() {
 
   WF_CONFIG_LOADED=1
   export WF_CONFIG_LOADED WF_REPO_ROOT WF_SPEC_STORAGE WF_GATE_POOL \
-         WF_AGENT_POOL WF_GENERAL_KB WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_STORAGE_MODE
+         WF_AGENT_POOL WF_GENERAL_KB WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_STORAGE_MODE \
+         WF_PROJECT_KB
   [[ -n "${WF_VAULT_ROOT:-}" ]] && export WF_VAULT_ROOT
+  [[ -n "${WF_SPEC_PROJECT:-}" ]] && export WF_SPEC_PROJECT
   return 0
 }
 
@@ -588,6 +640,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
+        WF_PROJECT_KB WF_SPEC_PROJECT
       )
       for var in "${_wf_allowed_vars[@]}"; do
         eval "[[ \"\${${var}+x}\" ]]" 2>/dev/null || continue

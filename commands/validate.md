@@ -19,12 +19,12 @@ Before running any gate or spawning any agent, run (substituting the actual feat
 > See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This phase uses: `WF_SPEC_GATES`, `WF_SPEC_AGENTS_VALIDATE`, `WF_GATE_POOL`.
 
 ```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_GATES=%s\nWF_SPEC_AGENTS_VALIDATE=%s\nWF_GATE_POOL=%s\n" "$WF_SPEC_GATES" "${WF_SPEC_AGENTS_VALIDATE:-}" "${WF_GATE_POOL:-}"'
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS --require-spec && printf "WF_SPEC_GATES=%s\nWF_SPEC_AGENTS_VALIDATE=%s\nWF_GATE_POOL=%s\n" "$WF_SPEC_GATES" "${WF_SPEC_AGENTS_VALIDATE:-}" "${WF_GATE_POOL:-}"'
 ```
 
 ### Multi-repo task resolution
 
-Before Phase 1, resolve task repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH`. Every gate command in Phase 1 runs as `(cd "$WF_TASK_REPO_PATH" && <gate command>)`. Phase 2 advisory agents receive `WF_TASK_REPO_PATH` and a scoped diff (`git -C "$WF_TASK_REPO_PATH" diff feat/$ARGUMENTS...HEAD`) instead of repo-root diff.
+Before Phase 1, resolve task repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH` and, in vault mode, `WF_TASK_GATE_POOL` (the bound repo's `knowledge-base/gates.yml`; `WF_GATE_POOL` is empty in vault mode — `gate-ceiling.sh` uses `WF_TASK_GATE_POOL` when set). Every gate command in Phase 1 runs as `(cd "$WF_TASK_REPO_PATH" && <gate command>)`. Phase 2 advisory agents receive `WF_TASK_REPO_PATH` and a scoped diff (`git -C "$WF_TASK_REPO_PATH" diff feat/$ARGUMENTS...HEAD`) instead of repo-root diff.
 
 ### `applies_to_repos` filter
 
@@ -95,7 +95,7 @@ For each task with `status: implemented`:
    effective="$(wf_compute_effective_set "<task-file>")"; rc=$?
    ```
 
-   Semantics: extracts language tags from the task's `ground_rules` (paths matching `languages/<lang>.md`), reads `WF_GATE_POOL` (`gates.yml`), and returns `WF_SPEC_GATES` (ceiling) ∩ {gates whose `applies_to` matches a task tag or contains `any`} — sorted, unique.
+   Semantics: extracts language tags from the task's `ground_rules` (paths matching `languages/<lang>.md`), reads the gate pool, and returns `WF_SPEC_GATES` (ceiling) ∩ {gates whose `applies_to` matches a task tag or contains `any`} — sorted, unique. Gate pool source: `WF_TASK_GATE_POOL` when set (vault mode — the per-task bound repo's `knowledge-base/gates.yml`, resolved in "Multi-repo task resolution" above), else `WF_GATE_POOL` (repo mode). `gate-ceiling.sh` applies this precedence internally; in vault mode `WF_GATE_POOL` is empty and must not be relied on here.
 2. On rc 3 (empty effective set on code-bearing task without `empty_intersection_ok: true`) record the critical finding from step 5 below before continuing. On rc 90 abort with "yq required".
 3. **Effective set** is the value printed by the helper.
 

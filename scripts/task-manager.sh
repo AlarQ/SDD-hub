@@ -184,14 +184,30 @@ read_frontmatter() {
 resolve_ground_rule_path() {
   local prefixed_path="$1"
   local project_kb="${_WF_TM_REPO_ROOT}/knowledge-base"
-  # Vault mode: reject bare `project:` and unprefixed paths — no project KB
-  # exists next to a vault-hosted spec. Tasks must use `general:` or `repo:<n>:`.
+  # Vault mode: no project KB sits next to a vault-hosted spec.
+  #  - exactly ONE bound repo  → that repo is the implicit default; bare
+  #    `project:` / unprefixed rules resolve to its knowledge-base/.
+  #  - TWO+ bound repos         → ambiguous; require `general:` or `repo:<n>:`.
+  #  - ZERO bound repos         → nothing to resolve against; reject.
   if [[ "${WF_SPEC_STORAGE_MODE:-repo}" == "vault" ]]; then
+    local -a _vn=()
+    local _v
+    while IFS= read -r _v; do [[ -n "$_v" ]] && _vn+=("$_v"); done <<<"${WF_REPO_NAMES:-}"
     case "$prefixed_path" in
       general:*|repo:*) ;;
       *)
-        echo "ERROR: vault mode rejects ground_rule '$prefixed_path' — use 'general:' or 'repo:<name>:' prefix" >&2
-        return 7 ;;
+        if [[ "${#_vn[@]}" -eq 1 ]]; then
+          local _sp=""
+          while IFS= read -r _v; do [[ -n "$_v" ]] && { _sp="$_v"; break; }; done <<<"${WF_REPO_PATHS:-}"
+          [[ -n "$_sp" ]] || { echo "ERROR: vault single-repo default unresolved (WF_REPO_PATHS empty)" >&2; return 7; }
+          project_kb="$_sp/knowledge-base"
+        elif [[ "${#_vn[@]}" -ge 2 ]]; then
+          echo "ERROR: vault multi-repo rejects ground_rule '$prefixed_path' — use 'general:' or 'repo:<name>:' prefix" >&2
+          return 7
+        else
+          echo "ERROR: vault mode rejects ground_rule '$prefixed_path' — no bound repos[] (use 'general:' or bind repos)" >&2
+          return 7
+        fi ;;
     esac
   fi
   case "$prefixed_path" in
@@ -205,7 +221,8 @@ resolve_ground_rule_path() {
     project:*) echo "$project_kb/${prefixed_path#project:}" ;;
     repo:*)
       # repo:<name>:<rel-path> — resolves under that bound repo's knowledge-base/
-      local rest="${prefixed_path#repo:}" repo_name="${rest%%:*}" rel="${rest#*:}"
+      local rest repo_name rel
+      rest="${prefixed_path#repo:}"; repo_name="${rest%%:*}"; rel="${rest#*:}"
       local repo_root=""
       if command -v wf_repo_path >/dev/null 2>&1; then
         repo_root="$(wf_repo_path "$repo_name" 2>/dev/null || true)"
