@@ -72,8 +72,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_all_six_event_categories_correctly() {
-        // Given JSONL lines for each of the six categories
+    fn parse_known_event_categories_correctly() {
+        // Given JSONL lines for each known category (original six +
+        // [spec-review-1] widened set)
         let categories = [
             ("context_read", EventCategory::ContextRead),
             ("kb_rule", EventCategory::KbRule),
@@ -81,6 +82,8 @@ mod tests {
             ("agent_invocation", EventCategory::AgentInvocation),
             ("validation_result", EventCategory::ValidationResult),
             ("tool_call", EventCategory::ToolCall),
+            ("config_approved", EventCategory::ConfigApproved),
+            ("tier_approved", EventCategory::TierApproved),
         ];
 
         for (snake, expected) in &categories {
@@ -92,6 +95,17 @@ mod tests {
             assert_eq!(events.len(), 1);
             assert_eq!(&events[0].category, expected);
         }
+    }
+
+    // [spec-review-1] an unrecognised category must NOT produce a
+    // ParseWarning::MalformedLine skip — it deserializes to
+    // EventCategory::Unknown and the event is retained.
+    #[test]
+    fn unknown_category_is_retained_not_skipped() {
+        let (events, warnings) = parse_monitor_log(&valid_event("brand_new_thing"), "test");
+        assert!(warnings.is_empty());
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].category, EventCategory::Unknown);
     }
 
     #[test]

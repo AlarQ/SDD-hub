@@ -1,0 +1,4 @@
+# `cargo web` runs the dashboard binary (ADR-002). No `tui` alias — the
+# terminal-UI crate was deleted in task 001.
+[alias]
+web = "run -p workflow-web --"

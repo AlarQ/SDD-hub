@@ -1,0 +1,18 @@
+# Root Cargo workspace (ADR-002). Supersedes the prior per-crate layout —
+# `knowledge-base/languages/rust.md` Validation Scope updated in the same PR
+# (spec-review-4). All cargo commands run with `--workspace` from repo root.
+[workspace]
+members = ["workflow-core", "workflow-web"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_yml = "0.0.12"
+serde_json = "1.0"
+anyhow = "1.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"

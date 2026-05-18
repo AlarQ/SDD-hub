@@ -1,4 +1,3 @@
-use ratatui::style::Color;
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
 use std::fmt;
@@ -12,19 +11,6 @@ pub enum TaskStatus {
     Implemented,
     Review,
     Done,
-}
-
-impl TaskStatus {
-    pub fn color(&self) -> Color {
-        match self {
-            Self::Blocked => Color::Red,
-            Self::Todo => Color::Gray,
-            Self::InProgress => Color::Yellow,
-            Self::Implemented => Color::Cyan,
-            Self::Review => Color::Magenta,
-            Self::Done => Color::Green,
-        }
-    }
 }
 
 impl fmt::Display for TaskStatus {
@@ -48,15 +34,6 @@ pub enum Interaction {
     Hitl,
     #[default]
     Afk,
-}
-
-impl Interaction {
-    pub fn color(&self) -> Color {
-        match self {
-            Self::Hitl => Color::Yellow,
-            Self::Afk => Color::Green,
-        }
-    }
 }
 
 impl fmt::Display for Interaction {
@@ -158,20 +135,5 @@ status: done
 "#;
         let task: Task = serde_yml::from_str(yaml).unwrap();
         assert_eq!(task.status, TaskStatus::Done);
-    }
-
-    #[test]
-    fn status_colors_are_distinct() {
-        let statuses = [
-            TaskStatus::Blocked,
-            TaskStatus::Todo,
-            TaskStatus::InProgress,
-            TaskStatus::Done,
-        ];
-        for (i, a) in statuses.iter().enumerate() {
-            for b in statuses.iter().skip(i + 1) {
-                assert_ne!(a.color(), b.color());
-            }
-        }
     }
 }
