@@ -324,6 +324,17 @@ validate_required_fields() {
   max_files=$(read_frontmatter "$file" '.max_files')
   [[ "$max_files" =~ ^[0-9]+$ ]] || die "max_files must be a number in $file"
   [ "$max_files" -le 20 ] || die "max_files exceeds 20 in $file"
+  # Optional `interaction` field — `hitl` or `afk`. Absent defaults to `afk`
+  # (backward compatible with pre-existing task files). Only an explicit
+  # invalid value is rejected.
+  local interaction
+  interaction=$(read_frontmatter "$file" '.interaction')
+  if [ "$interaction" != "null" ] && [ -n "$interaction" ]; then
+    case "$interaction" in
+      hitl|afk) ;;
+      *) die "Invalid interaction '$interaction' in $file. Valid: hitl, afk" ;;
+    esac
+  fi
 }
 
 # Warn if ground_rules paths don't resolve to real files.

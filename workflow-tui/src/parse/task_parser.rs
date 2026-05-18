@@ -10,7 +10,7 @@ pub fn parse_task(content: &str, path: &str) -> Result<Task> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::TaskStatus;
+    use crate::model::{Interaction, TaskStatus};
 
     #[test]
     fn parses_full_task() {
@@ -26,6 +26,7 @@ estimated_files:
   - src/middleware/auth.rs
 test_cases:
   - "should reject unauthenticated requests"
+interaction: hitl
 ground_rules:
   - general:security/general.md
   - project:languages/rust.md
@@ -39,5 +40,20 @@ Details here.
         assert_eq!(task.status, TaskStatus::Blocked);
         assert_eq!(task.blocked_by, vec!["001", "002"]);
         assert_eq!(task.max_files, 8);
+        assert_eq!(task.interaction, Interaction::Hitl);
+    }
+
+    #[test]
+    fn interaction_defaults_to_afk_when_absent() {
+        let content = r#"---
+id: "001"
+name: "no interaction field"
+status: todo
+max_files: 3
+---
+body
+"#;
+        let task = parse_task(content, "test.md").unwrap();
+        assert_eq!(task.interaction, Interaction::Afk);
     }
 }

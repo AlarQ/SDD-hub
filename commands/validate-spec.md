@@ -31,6 +31,8 @@ Instruct the agent with this directive:
 
 > "Audit `specs/$ARGUMENTS/` before implementation starts. Inspect every artifact under the directory (prd.md, spec.md, design.md, test-strategy.md, config.yml, tasks/*.md) and surface findings across four pillars: contract directions, logic gaps, missing pieces (traceability: FR→scenario→task→test), and repo misalignment (every file path, function reference, reuse target, and ground_rules prefix must resolve against the actual repo via Glob / `git ls-files` / Grep). Additional checks: knowledge-base rule compliance against both knowledge bases, task graph sanity (DAG, ground_rules prefix convention, ordering), ambiguity (undefined terms used before glossary), testability of acceptance criteria, and traceability of Security Scenarios to a STRIDE threat (if a threat model is present).
 >
+> The repo-root `docs/adr/` (and `CONTEXT.md`) are authoritative for durable, cross-spec decisions and canonical glossary terms. A `design.md` ADR that references an existing `docs/adr/` entry by id (instead of inlining it) is correct by design — do NOT flag the referenced-but-not-inlined decision as a missing piece or gap. Glossary terms defined in `CONTEXT.md` count as defined for the ambiguity check.
+>
 > Output findings as a YAML list matching the report schema below. Every finding MUST include a concrete `fix_proposal` that patches spec/design/tasks files — never the code. If the spec is clean, return `findings: []`. Mark all findings `source: llm`."
 
 ## Phase 2: Emit Report

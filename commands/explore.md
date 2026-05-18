@@ -141,7 +141,7 @@ The agent's YAML must include `tier: small|medium|large`. If the YAML lacks `tie
 If the agent picked `small` and the spec keywords include `auth`, `security`, `migration`, `api`, `schema`, or `crypto`, override to `medium` and note the override in reasoning. The user can override via `Edit` path.
 
 ## Steps
-1. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) to understand available ground rules
+1. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) to understand available ground rules. Also read the repo-root `CONTEXT.md` (or per-context `CONTEXT.md` files via `CONTEXT-MAP.md`) and `docs/adr/` if they exist — produced by `/grill`. Use the canonical glossary terms and respect recorded ADRs throughout the conversation.
 2. Ask the user to describe the feature or change
 3. **Establish the user perspective first** — before diving into technical areas, clarify:
    - Who benefits from this feature? (user role, persona)
@@ -178,7 +178,7 @@ If the agent picked `small` and the spec keywords include `auth`, `security`, `m
    - Only proceed after the user has selected an option for every scope fork
 6. Identify which rule files from both knowledge bases are relevant to this feature
 7. Summarize understanding and list applicable ground rules (using prefix convention per `knowledge-base-rules.md`)
-8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name. When saving, include an `## Agent Insights (Explore Phase)` section after the ground-rules listing containing all agent outputs collected during the conversation, labeled by agent name. Mark as advisory. Omit agents that were not spawned or that errored.
+8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name. Use canonical `CONTEXT.md` glossary terms in the PRD prose; reference any relevant `docs/adr/` decision by id rather than restating it. When saving, include an `## Agent Insights (Explore Phase)` section after the ground-rules listing containing all agent outputs collected during the conversation, labeled by agent name. Mark as advisory. Omit agents that were not spawned or that errored.
 
 ## Agent Advisory Block Format
 

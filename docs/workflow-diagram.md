@@ -37,6 +37,7 @@ graph LR
     end
 
     subgraph Core["Core spec-driven flow"]
+        GRILL["/grill<br/>(optional, pre-explore)<br/>→ CONTEXT.md + docs/adr/"]
         EXP["/explore"]
         TIER{WF_SPEC_TIER}
         PROP["/propose"]
@@ -65,7 +66,9 @@ graph LR
         WS["/workflow-summary"]
     end
 
+    BOOT -.-> GRILL
     BOOT -.-> EXP
+    GRILL -.->|optional| EXP
     EXP --> TIER
     TIER -->|small / medium / large| PROP
     PROP -->|small: skip| IMPL
@@ -187,6 +190,8 @@ graph TB
     subgraph Inputs
         CONV[conversation]
         PRD[prd.md]
+        CTXMD["CONTEXT.md (glossary)"]
+        ADR["docs/adr/NNNN (durable, cross-spec)"]
     end
 
     subgraph Specs["specs/$FEATURE/"]
@@ -229,9 +234,15 @@ graph TB
         SNAP[.monitor-context-snapshot]
     end
 
+    GR["/grill (optional)"] --> CTXMD
+    GR --> ADR
     CONV --> EX["/explore"]
+    CTXMD -.->|glossary terms| EX
+    ADR -.->|respect decisions| EX
     EX --> PRD
     PRD --> PP["/propose"]
+    CTXMD -.->|canonical terms| PP
+    ADR -.->|reference by id, no dup| PP
     PP --> TASKS
     PP -.->|medium / large| SPEC
     PP -.->|large only| DESIGN
@@ -267,6 +278,22 @@ graph TB
 
 One diagram per command. Solid arrow = always spawned. Dashed arrow = conditional (keyword/context-triggered or error-triggered). Agents listed only for commands that spawn them — other commands (`/bootstrap`, `/ship`, `/quick-ship`, `/spec-status`, `/continue-task`, `/research`, `/workflow-summary`) do not spawn agents directly. `/review-findings` spawns background sub-agents to apply accepted fix groups in parallel (not shown as a separate diagram — the agents are generic fix-appliers, not role-specialized).
 
+### 5a-pre. `/grill` — optional pre-explore domain sharpening
+
+No role-specialized agent spawn. `/grill` itself runs the relentless
+one-question-at-a-time interview, exploring the codebase to answer questions it
+can, and writes `CONTEXT.md` + `docs/adr/` inline. Optional; typically skipped
+for `small` tier. Feeds canonical vocabulary into `/explore` and `/propose`.
+
+```mermaid
+graph LR
+    GR["/grill"] --> Q{interview loop<br/>one Q at a time}
+    Q -->|term resolved| CTXW["CONTEXT.md update (inline)"]
+    Q -->|hard-to-reverse + surprising + real trade-off| ADRW["docs/adr/NNNN"]
+    Q -->|answerable from code| CODE[explore codebase]
+    GR --> NEXT["Next: /explore"]
+```
+
 ### 5a. `/explore` — requirements clarification
 
 Step 0 runs before any perspective questions: the `config-inferencer` agent drafts `config.yml` (gates + agents-per-phase) from repo signal files. User approves (single key) or edits via `/config`. `config.yml` is written before the normal explore flow begins.
@@ -297,7 +324,8 @@ graph LR
     CFG0 -->|missing → exit 4| STOP_PR[stop]
     CFG0 -->|loaded| SE[engineering-security-engineer]
     CFG0 -->|loaded| SA[engineering-software-architect]
-    CFG0 -->|loaded| SPM[project-manager-senior]
+    CFG0 -->|loaded| SPM[project-manager-senior<br/>tracer-bullet slices<br/>+ interaction: hitl/afk per task]
+    SA -.->|read docs/adr| ADRREF[reference ADR by id<br/>no dup in design.md]
     PR -.->|backend kw| BA[engineering-backend-architect]
     PR -.->|ui kw| UXA[design-ux-architect]
     PR -.->|ui kw| UID[design-ui-designer]

@@ -10,7 +10,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, config, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-rules, promote-tier, capture-rule)
+- `commands/*.md` — Slash command definitions (bootstrap, config, grill, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-rules, promote-tier, capture-rule)
 - `skills/` — Reusable skill prompts (e.g. `bash-scripting/SKILL.md`). Installed to `~/.claude/skills/` by `setup.sh`.
 - `tests/` — Bash test suite for scripts (task-manager, config-loader, monitor, validate-impl, tier-check, etc.). Run individual tests directly: `bash tests/test-task-manager.sh`.
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Lives in this repo; not installed globally.
@@ -110,9 +110,9 @@ Specs are tiered to right-size flow ceremony. Tier is inferred at `/explore` ste
 
 | Tier | Target tasks | Ceiling tasks | Ceiling files | Flow shape |
 |------|--------------|---------------|---------------|------------|
-| `small`  | 2–4         | 5             | 10            | `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. |
-| `medium` | 4–7         | 10            | 30            | `/explore` → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
-| `large`  | 7–12 typical | unbounded    | unbounded     | Full unchanged flow. |
+| `small`  | 2–4         | 5             | 10            | (`/grill` optional) → `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. Typically skip `/grill`. |
+| `medium` | 4–7         | 10            | 30            | (`/grill` optional) → `/explore` → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
+| `large`  | 7–12 typical | unbounded    | unbounded     | (`/grill` optional) → full unchanged flow. |
 
 Defaults live in `.workflow.yml` under `tiers:`. Per-spec override via `tier_ceiling:` in `specs/<feature>/config.yml`.
 
@@ -146,6 +146,24 @@ No `design.md`, no `test-strategy`, no `/validate-spec`, no `/validate-impl`, no
 
 Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 
+## Domain Docs (`CONTEXT.md` / `docs/adr/`)
+
+`/grill` is an **optional pre-`/explore` step** (skill vendored at
+`skills/grill-with-docs/`, installed by `setup.sh`). It runs a relentless
+one-question-at-a-time domain interview that sharpens terminology into a
+repo-root `CONTEXT.md` glossary (or per-context files via `CONTEXT-MAP.md`) and
+records durable decisions as `docs/adr/NNNN-*.md`. It writes no spec artifacts.
+
+**ADR-home split:** `docs/adr/` = durable, cross-spec, repo-level
+domain/architecture decisions. `specs/<feature>/design.md
+## Architecture Decision Records` = spec-scoped decisions for one feature.
+`/propose` (and its Software Architect agent) reads `docs/adr/` + `CONTEXT.md`,
+references existing ADRs by id instead of duplicating them, and uses canonical
+glossary terms. `/explore` reads both as inputs. `/validate-spec` treats
+`docs/adr/` as authoritative — a `design.md` ADR that references an existing
+`docs/adr/` entry by id is correct, not a gap; `CONTEXT.md` terms count as
+defined for the ambiguity check.
+
 ## Key Design Decisions
 
 - `/ship` is separate from `/implement` — commit/push/PR creation happens after validation
@@ -154,6 +172,9 @@ Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 - `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition
+- `/grill` (optional, before `/explore`) sharpens the domain model into `CONTEXT.md` + repo-level `docs/adr/` before requirements work — see "Domain Docs" above
+- Senior Project Manager decomposition uses a **tracer-bullet lens**: each task is the thinnest slice that still ships end-to-end demoable behavior (balanced against the grouping bias, not a contradiction). Every task carries an `interaction: hitl|afk` frontmatter field — `hitl` needs a human-in-the-loop decision, `afk` is autonomously implementable+mergeable (prefer `afk`). `task-manager.sh` validates the value; absent → defaults to `afk` (backward compatible). Surfaced as a badge in the workflow TUI.
+- `to-issues` (external tracer-bullet skill) is intentionally **not** wired as a tracker command: redundant with the Senior PM task decomposition and incompatible with the file-based, no-tracker, PR-first flow. Its genuinely-new ideas (tracer-bullet thin-slice lens + HITL/AFK classification) were harvested into the `project-manager-senior` agent + the `interaction` task field instead.
 - `/implement` auto-spawns `Ultrathink Debugger` on errors/test failures for root cause analysis; spawns `Code Quality Pragmatist` post-implementation for pre-validation sanity check (high/critical issues go through human accept/reject)
 - `/pr-review` spawns `Code Reviewer` agent to proactively analyze PR diff before handling human comments; agent findings go through accept/reject flow
 - `/review-findings` groups related findings (same file + overlapping/nearby lines, or same file + same category) into review units for single accept/reject decisions — reduces redundant decisions across gates

@@ -124,6 +124,7 @@ mod tests {
             estimated_files: vec![],
             test_cases: vec![],
             ground_rules: vec![],
+            interaction: Default::default(),
         }
     }
 

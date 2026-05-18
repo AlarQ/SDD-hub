@@ -68,6 +68,34 @@ Test task.
 EOF
 }
 
+# === interaction field tests ===
+
+test_validate_interaction_afk_accepted() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  # Insert an explicit valid interaction field into the frontmatter
+  sed -i.bak 's/^status: todo$/status: todo\ninteraction: afk/' "$task_file"
+  "$TASK_MANAGER" validate "$task_file"
+}
+
+test_validate_interaction_absent_defaults_ok() {
+  # write_task emits no interaction field — must still validate (defaults afk)
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  "$TASK_MANAGER" validate "$task_file"
+}
+
+test_validate_interaction_invalid_rejected() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  sed -i.bak 's/^status: todo$/status: todo\ninteraction: bogus/' "$task_file"
+  # Expect non-zero exit (die on invalid interaction)
+  if "$TASK_MANAGER" validate "$task_file" 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
 # === Walk-up tests ===
 
 test_validate_from_nested_subdir() {
@@ -273,6 +301,9 @@ run_test "vault single-repo: project: → sole repo KB" test_vault_single_repo_p
 run_test "vault: general: always resolves" test_vault_general_prefix_always_resolves
 run_test "vault multi-repo: unprefixed rejected (exit 7)" test_vault_multi_repo_unprefixed_rejected
 run_test "vault multi-repo: repo:<name>: resolves" test_vault_multi_repo_named_prefix_resolves
+run_test "validate accepts interaction: afk" test_validate_interaction_afk_accepted
+run_test "validate accepts task with no interaction field (defaults afk)" test_validate_interaction_absent_defaults_ok
+run_test "validate rejects invalid interaction value" test_validate_interaction_invalid_rejected
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"

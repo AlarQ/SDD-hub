@@ -40,6 +40,34 @@ impl fmt::Display for TaskStatus {
     }
 }
 
+/// How a task gets completed: autonomously, or with a human in the loop.
+/// Absent in frontmatter → `Afk` (backward compatible with pre-existing tasks).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Interaction {
+    Hitl,
+    #[default]
+    Afk,
+}
+
+impl Interaction {
+    pub fn color(&self) -> Color {
+        match self {
+            Self::Hitl => Color::Yellow,
+            Self::Afk => Color::Green,
+        }
+    }
+}
+
+impl fmt::Display for Interaction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Hitl => write!(f, "hitl"),
+            Self::Afk => write!(f, "afk"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct Task {
@@ -56,6 +84,8 @@ pub struct Task {
     pub test_cases: Vec<String>,
     #[serde(default)]
     pub ground_rules: Vec<String>,
+    #[serde(default)]
+    pub interaction: Interaction,
 }
 
 /// Deserialize a value that can be either a number or a list of strings.

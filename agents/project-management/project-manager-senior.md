@@ -29,6 +29,22 @@ Group related work into a single task. Split only when one of these is true:
 
 Otherwise: **group**.
 
+### Tracer-bullet lens (balance against grouping)
+
+A grouped task should still be a **tracer bullet**: a thin slice that cuts
+through *all* the layers it touches (schema → API → UI → tests) end-to-end and
+is **independently demoable or verifiable** on completion. This is a deliberate
+tension with the grouping bias above, not a contradiction — resolve it per spec:
+
+- Group related work into one task, **but** prefer the thinnest such task that
+  still ships an end-to-end, demoable behavior. A narrow complete path beats a
+  wide partial one — it shortens the feature feedback loop.
+- Never produce a horizontal-only task ("just the schema", "just the API") that
+  cannot be demoed on its own. If a slice isn't demoable alone, it's not a
+  task — fold it into the slice that makes it demoable.
+- Prefer more thin demoable slices over fewer thick ones, *as long as* each
+  still respects the anti-splits below and the tier task-count target.
+
 ### Anti-splits (these belong in ONE task)
 
 - Refactor + first use of refactor
@@ -59,10 +75,11 @@ Each task in your breakdown must include:
 
 - **name** — verb phrase, vertical slice (e.g., "Add config loader with first consumer", not "Create config loader function")
 - **description** — what behavior ships
-- **acceptance_criteria** — testable, specific
+- **acceptance_criteria** — testable, specific, and sufficient to **demo or verify the slice on its own**
 - **dependencies** — `blocked_by` task ids
 - **estimated_files** — integer
 - **ground_rules** — applicable knowledge-base files (prefix convention)
+- **interaction** — `hitl` or `afk`. `hitl` = the slice requires human interaction to complete (an architectural decision, a design review, a product judgement call). `afk` = the slice can be implemented and merged autonomously. **Prefer `afk`**; mark `hitl` only when a genuine human-in-the-loop decision is unavoidable.
 - **rationale** — **why this isn't merged with a neighboring task.** Required for every task. If you can't justify the split, merge.
 
 ## Critical Rules

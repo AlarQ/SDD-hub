@@ -177,10 +177,16 @@ for skill_dir in "$SCRIPT_DIR/skills/"*/; do
   [ -d "$skill_dir" ] || continue
   skill_name=$(basename "$skill_dir")
   mkdir -p "$SKILLS_DIR/$skill_name"
-  if ! safe_copy "$skill_dir/SKILL.md" "$SKILLS_DIR/$skill_name/SKILL.md"; then
-    conflicts=$((conflicts + 1))
-    conflict_files+=("$skill_name/SKILL.md")
-  fi
+  # Copy the whole skill directory (SKILL.md + any bundled resources),
+  # preserving subdirectory structure.
+  while IFS= read -r -d '' src_file; do
+    rel_path="${src_file#"$skill_dir"}"
+    mkdir -p "$SKILLS_DIR/$skill_name/$(dirname "$rel_path")"
+    if ! safe_copy "$src_file" "$SKILLS_DIR/$skill_name/$rel_path"; then
+      conflicts=$((conflicts + 1))
+      conflict_files+=("$skill_name/$rel_path")
+    fi
+  done < <(find "$skill_dir" -type f -print0)
 done
 
 # 9. Verify
@@ -258,10 +264,15 @@ done
 for skill_dir in "$SCRIPT_DIR/skills/"*/; do
   [ -d "$skill_dir" ] || continue
   skill_name=$(basename "$skill_dir")
-  if [ -f "$SKILLS_DIR/$skill_name/SKILL.md" ]; then
+  missing_file=""
+  while IFS= read -r -d '' src_file; do
+    rel_path="${src_file#"$skill_dir"}"
+    [ -f "$SKILLS_DIR/$skill_name/$rel_path" ] || missing_file="$rel_path"
+  done < <(find "$skill_dir" -type f -print0)
+  if [ -z "$missing_file" ]; then
     echo -e "${GREEN}[ok]${RESET} $skill_name skill"
   else
-    echo -e "${RED}[FAIL]${RESET} $skill_name skill missing"
+    echo -e "${RED}[FAIL]${RESET} $skill_name skill missing $missing_file"
     errors=$((errors + 1))
   fi
 done

@@ -46,7 +46,11 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect, active: bool) {
                 Span::raw(&task.name),
                 Span::raw(" ["),
                 Span::styled(task.status.to_string(), Style::default().fg(status_color)),
-                Span::raw("]"),
+                Span::raw("] "),
+                Span::styled(
+                    task.interaction.to_string(),
+                    Style::default().fg(task.interaction.color()),
+                ),
             ])));
         }
     }

@@ -43,6 +43,7 @@ If `WF_REPO_NAMES` is non-empty (loaded by Step 0 via `wf_load_config --spec`):
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context
 2. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) — identify all applicable rules from both
 3. Read the applicable rule files from both knowledge bases
+4. Read the repo-root `CONTEXT.md` (or per-context files via `CONTEXT-MAP.md`) and `docs/adr/` if they exist (produced by `/grill`). Use the canonical glossary terms in all generated artifacts. **ADR home:** `docs/adr/` holds durable, cross-spec, repo-level decisions; `design.md ## Architecture Decision Records` holds spec-scoped decisions for this feature only. When an architectural decision is already recorded in `docs/adr/`, reference it by id (e.g. "see ADR-0003") — do not restate or duplicate it in `design.md`.
 
 ## Generate Artifacts
 
@@ -86,7 +87,7 @@ Before writing design.md, spawn agents in parallel using the Agent tool. All age
 
 ##### Always spawn (default):
 
-**Software Architect** (`engineering-software-architect`): Instruct: "Evaluate the proposed architecture in the spec against the provided architecture rules. For each major architectural decision, produce a trade-off analysis and an ADR. Flag any patterns that introduce irreversible coupling, scaling risks, or that the team is unlikely to sustain. Use the Proposal Output format defined in your agent definition."
+**Software Architect** (`engineering-software-architect`): Pass the existing repo-root `CONTEXT.md` and `docs/adr/` contents. Instruct: "Evaluate the proposed architecture in the spec against the provided architecture rules. Read the supplied `docs/adr/` — do NOT duplicate a decision already recorded there; reference it by ADR id instead. For each major *new, spec-scoped* architectural decision, produce a trade-off analysis and an ADR for `design.md`. Flag any patterns that introduce irreversible coupling, scaling risks, or that the team is unlikely to sustain. Use the Proposal Output format defined in your agent definition."
 
 ##### Conditionally spawn (in parallel with Software Architect, default only):
 
@@ -166,11 +167,11 @@ Before generating task files, spawn the `Senior Project Manager` agent (`project
 - The design.md content (with all embedded agent outputs)
 - The project's `CLAUDE.md`
 
-Instruct the agent with this directive: "Analyze the spec and design, then produce a vertical-slice task breakdown. Target task count per tier: small=2–4, medium=4–7, large=7–12. Group related work; only split when files >20, deploys are independent, or work is parallelizable across devs. Each task must justify why it isn't merged with a neighbor. Flag any spec where you cannot stay within the target without losing reviewability. Stay true to the spec — do not add scope."
+Instruct the agent with this directive: "Analyze the spec and design, then produce a vertical-slice task breakdown. Each task must be a tracer bullet — a thin slice cutting through all layers it touches, independently demoable/verifiable. Target task count per tier: small=2–4, medium=4–7, large=7–12. Group related work; only split when files >20, deploys are independent, or work is parallelizable across devs. Classify each task `interaction: hitl|afk` (prefer afk). Each task must justify why it isn't merged with a neighbor. Flag any spec where you cannot stay within the target without losing reviewability. Stay true to the spec — do not add scope."
 
 ##### PM Agent Output Contract
 The agent must return:
-1. **Task list** — ordered tasks with: name, description, acceptance criteria, dependencies, estimated file count, **rationale (why this task isn't merged with a neighbor)**
+1. **Task list** — ordered tasks with: name, description, acceptance criteria, dependencies, estimated file count, `interaction` (`hitl`|`afk`), **rationale (why this task isn't merged with a neighbor)**
 2. **Dependency graph** — which tasks block which
 3. **Scope flags** — any tasks that risk scope creep, exceed the 20-file limit, or breach the tier task-count target
 
@@ -183,6 +184,7 @@ Use the PM agent's task breakdown as input for generating the final task files:
 - Include Security Engineer's security ground rules on relevant tasks
 - Set `status: blocked` with `blocked_by` IDs for tasks with dependencies (per PM dependency graph)
 - Set `status: todo` for tasks with no dependencies
+- Set the `interaction:` frontmatter field to the PM's `hitl`/`afk` classification (omit only if the PM analysis was unavailable — `task-manager.sh` then defaults it to `afk`)
 
 #### Agent — Test Strategist (after task generation)
 After all task files have been generated, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool. The agent receives:
