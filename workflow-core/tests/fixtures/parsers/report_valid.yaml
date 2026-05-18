@@ -1,0 +1,12 @@
+gate: lint
+task_id: "002"
+status: findings
+findings:
+  - id: F001
+    severity: warning
+    category: style
+    title: "Unused import"
+    description: "Remove the unused import"
+    file: src/lib.rs
+    lines: "3"
+    source: tool

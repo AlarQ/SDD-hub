@@ -25,7 +25,6 @@ where
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct Finding {
     #[serde(default)]
     pub id: String,
@@ -52,7 +51,6 @@ pub struct Finding {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct Report {
     #[serde(default)]
     pub gate: String,

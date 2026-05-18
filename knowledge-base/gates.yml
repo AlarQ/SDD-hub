@@ -20,4 +20,28 @@
 #     category: code-quality
 #     blocking: true
 #     applies_to_repos: [frontend]
-gates: []
+gates:
+  - id: rust-check
+    command: "cargo check --workspace"
+    applies_to: ["project:languages/rust.md", "general:languages/rust/_index.md"]
+    category: code-quality
+    blocking: true
+    applies_to_repos: [dev-workflow]
+  - id: rust-clippy
+    command: "cargo clippy --workspace -- -D warnings"
+    applies_to: ["project:languages/rust.md", "general:languages/rust/_index.md"]
+    category: code-quality
+    blocking: true
+    applies_to_repos: [dev-workflow]
+  - id: rust-fmt
+    command: "cargo fmt --check"
+    applies_to: ["project:languages/rust.md", "general:languages/rust/_index.md"]
+    category: code-quality
+    blocking: true
+    applies_to_repos: [dev-workflow]
+  - id: rust-test
+    command: "cargo test --workspace"
+    applies_to: ["project:languages/rust.md", "general:languages/rust/_index.md"]
+    category: testing
+    blocking: true
+    applies_to_repos: [dev-workflow]

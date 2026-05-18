@@ -14,7 +14,7 @@ Supersedes earlier draft (had errors: plugin API shape, permission-key list, fil
 - **Agent descriptions: postpone rewrite.** Use existing Claude descriptions as-is in v1. Revisit only if smoke testing shows OpenCode auto-delegation misfires.
 - **Knowledge-base → OpenCode skills** required v1 (`~/.config/opencode/skills/<name>/SKILL.md`).
 - **Drop dismissive-language hook in OpenCode** — `Stop`-equivalent block-on-output not available.
-- **Drop workflow-tui** from migration scope (already runtime-agnostic).
+- **Rust dashboard** out of migration scope — the `workflow-core` + `workflow-web` workspace is runtime-agnostic.
 - **Drop custom tools** (`tools/*.ts`) from v1.
 - **Project instructions** auto-loaded from `~/.config/opencode/AGENTS.md` (no `instructions:` array — auto-discovery handles it).
 - **Parallel subagent spawn**: assumed supported (General subagent docs imply); runtime-verified during smoke test. If sequential-only — accept perf hit, do not block v1.

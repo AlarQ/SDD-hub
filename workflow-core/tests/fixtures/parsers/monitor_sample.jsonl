@@ -1,0 +1,8 @@
+{"ts":"2026-05-18T00:00:01.000Z","category":"context_read","task":"001","feature":"workflow-web-ui","data":{"file":"spec.md"}}
+{"ts":"2026-05-18T00:00:02.000Z","category":"config_approved","feature":"workflow-web-ui","data":{}}
+{"ts":"2026-05-18T00:00:03.000Z","category":"tier_approved","feature":"workflow-web-ui","data":{"tier":"large"}}
+{"ts":"2026-05-18T00:00:04.000Z","category":"task_transition","task":"001","feature":"workflow-web-ui","data":{"to":"in-progress"}}
+{"ts":"2026-05-18T00:00:05.000Z","category":"tdd_red","task":"001","feature":"workflow-web-ui","data":{"behavior":"x"}}
+{"ts":"2026-05-18T00:00:06.000Z","category":"tdd_green","task":"001","feature":"workflow-web-ui","data":{"behavior":"x"}}
+{"ts":"2026-05-18T00:00:07.000Z","category":"brand_new_unrecognised","feature":"workflow-web-ui","data":{}}
+not valid json at all

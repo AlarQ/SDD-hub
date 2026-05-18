@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, agents, hooks, and templates get installed globally to `~/.claude/` via `setup.sh`. Target projects get a project-specific `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
 
-**This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust TUI dashboard. No application code lives here.
+**This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust web dashboard. No application code lives here.
 
 ## Project Structure
 
@@ -21,7 +21,9 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `hooks/` — Claude Code hook scripts for enforcement and monitoring (block-git-hook-bypass, block-dismissive-language, monitor-tool-calls). Installed to `~/.claude/hooks/` by `setup.sh`.
 - `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
 - `templates/` — CLAUDE.md template, settings.json hook wiring template for target projects
-- `workflow-tui/` — Rust TUI dashboard for viewing spec/task status
+- `Cargo.toml` — root Cargo workspace (`members = ["workflow-core", "workflow-web"]`)
+- `workflow-core/` — shared Rust library: `model/`, `parse/`, `WatchSource`/`WatchEvent`
+- `workflow-web/` — Rust web dashboard (Axum + Leptos SSR) for viewing spec/task status
 - `onboarding.md` — Full workflow documentation
 - `plan.md` — Original design document
 
@@ -34,31 +36,31 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 ./setup.sh --force  # overwrite existing files
 ```
 
-### Workflow TUI (Rust)
+### Workflow web dashboard (Rust)
+
+Root Cargo workspace. Run all cargo commands with `--workspace` from the repo root.
 
 ```bash
-cd workflow-tui
-cargo build
-cargo run -- /path/to/project   # project must contain specs/ directory
+cargo check --workspace
+cargo test --workspace
+cargo web -- /path/to/master-brain-root   # alias for `cargo run -p workflow-web --`
 ```
 
-Dependencies: ratatui, crossterm, notify (file watcher), serde_yml, clap, anyhow. Edition 2024.
+Edition 2024. Shared `[workspace.dependencies]`: serde, serde_yml, serde_json, anyhow, tokio, tracing.
 
 ### Prerequisites
 
 `yq` (`brew install yq`), `gh` (`brew install gh`)
 
-## Workflow TUI Architecture
+## Workspace Architecture
 
-Elm-like architecture with file-system watching for live reload:
+Two-crate Cargo workspace (ADR-001, ADR-002):
 
-- `main.rs` — CLI parsing (clap), terminal setup, event loop
-- `app.rs` — Application state and update logic
-- `event.rs` — Event polling (keyboard, terminal resize)
-- `watcher.rs` — File system watcher (notify) for live-reloading specs
-- `model/` — Domain types: `spec.rs`, `task.rs`, `report.rs`
-- `parse/` — File parsers: `scanner.rs` (directory scanning), `task_parser.rs`, `report_parser.rs`, `frontmatter.rs` (generic YAML frontmatter)
-- `ui/` — Ratatui widgets: `layout.rs`, `spec_list.rs`, `progress.rs`, `reports.rs`, `dep_graph.rs`, `styles.rs`
+- `workflow-core/` — shared library, builds standalone (`cargo check -p workflow-core`):
+  - `model/` — domain types: `spec.rs`, `task.rs`, `report.rs`, `monitor_event.rs`
+  - `parse/` — file parsers: `scanner.rs`, `task_parser.rs`, `report_parser.rs`, `monitor_parser.rs`, `frontmatter.rs`, `warning.rs`
+  - `watch.rs` — `WatchSource` trait + `WatchEvent` enum (notify-backed impls live in `workflow-web`)
+- `workflow-web/` — web dashboard (Axum + Leptos SSR); the only `WatchSource` implementor. Consumes `workflow-core`; no terminal UI.
 
 ## Slash Command Conventions
 
@@ -206,7 +208,7 @@ defined for the ambiguity check.
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition
 - `/grill` (optional, before `/explore`) sharpens the domain model into `CONTEXT.md` + repo-level `docs/adr/` before requirements work — see "Domain Docs" above
-- Senior Project Manager decomposition uses a **tracer-bullet lens**: each task is the thinnest slice that still ships end-to-end demoable behavior (balanced against the grouping bias, not a contradiction). Every task carries an `interaction: hitl|afk` frontmatter field — `hitl` needs a human-in-the-loop decision, `afk` is autonomously implementable+mergeable (prefer `afk`). `task-manager.sh` validates the value; absent → defaults to `afk` (backward compatible). Surfaced as a badge in the workflow TUI.
+- Senior Project Manager decomposition uses a **tracer-bullet lens**: each task is the thinnest slice that still ships end-to-end demoable behavior (balanced against the grouping bias, not a contradiction). Every task carries an `interaction: hitl|afk` frontmatter field — `hitl` needs a human-in-the-loop decision, `afk` is autonomously implementable+mergeable (prefer `afk`). `task-manager.sh` validates the value; absent → defaults to `afk` (backward compatible). Surfaced as a badge in the workflow web dashboard.
 - `to-issues` (external tracer-bullet skill) is intentionally **not** wired as a tracker command: redundant with the Senior PM task decomposition and incompatible with the file-based, no-tracker, PR-first flow. Its genuinely-new ideas (tracer-bullet thin-slice lens + HITL/AFK classification) were harvested into the `project-manager-senior` agent + the `interaction` task field instead.
 - `/implement` is **test-driven** (governed by the `tdd` skill at `~/.claude/skills/tdd/SKILL.md`): steps 9–11 are pre-loop backlog settle (Test Strategist refinement moved *before* code; HITL interface/priority approval only for `interaction: hitl` tasks — `afk` treats spec.md BDD + test-strategy.md as pre-approval) → red-green-refactor loop (one failing test → minimal code → repeat, vertical slices; horizontal "all tests then all code" prohibited) → post-loop refactor. Per-cycle `tdd_red`/`tdd_green` monitor events. Applies to **all tiers, no exemption**. `/validate-impl` Step 3a appends per-task TDD evidence; tasks lacking a red→green pair get an **advisory** finding (does not by itself force `reopen`)
 - `/implement` auto-spawns `Ultrathink Debugger` on errors/test failures (inside the GREEN phase) for root cause analysis; spawns `Code Quality Pragmatist` post-implementation for pre-validation sanity check (high/critical issues go through human accept/reject)
