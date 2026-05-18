@@ -54,7 +54,7 @@ options considered (keep dual KB; keep gates.yml file but drop rule md —
 both rejected), consequences (loses project-scoped override; old specs work
 via shim), cross-ref ADR-002/005/006.
 
-### 2. `scripts/config-loader.sh`
+### 2. `scripts/config-loader.sh` ✅ IMPLEMENTED
 - Remove `WF_PROJECT_KB` entirely (decls ~21–28; exports ~560–562; CLI
   allowlist ~654–660). No alias.
 - `gate_pool` is now an inline array, not a path. Repo mode: `WF_GATE_POOL`
