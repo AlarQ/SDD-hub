@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use workflow_core::model::{EventCategory, MonitorEvent, Report, Spec, Task, TaskStatus};
 use workflow_core::parse::{parse_monitor_log, parse_report, parse_task, scan_specs};
-use workflow_core::watch::WatchEvent;
+use workflow_core::watch::{WatchEvent, WatchSource};
 
 #[test]
 fn public_parse_and_model_api_is_importable() {
@@ -55,3 +55,7 @@ fn watch_event_shape_is_structural_and_monitor_append() {
         events: vec![ev],
     };
 }
+
+// A downstream crate can name the trait as a bound — proves `WatchSource` is
+// part of the public seam even though no impl exists in core yet.
+fn _accepts_any_source<S: WatchSource>(_s: &S) {}
