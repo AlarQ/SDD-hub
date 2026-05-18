@@ -113,13 +113,15 @@ tdd_block="$(mktemp)"
     [[ -z "$tid" || "$tid" == "null" ]] && continue
     r=$(grep -c "\"category\":\"tdd_red\".*\"task\":\"$tid\"" "$spec_dir/.monitor.jsonl" 2>/dev/null || echo 0)
     g=$(grep -c "\"category\":\"tdd_green\".*\"task\":\"$tid\"" "$spec_dir/.monitor.jsonl" 2>/dev/null || echo 0)
-    echo "- task $tid: tdd_red=$r tdd_green=$g"
+    ta=$(bash -c 'source ~/.claude/scripts/task-manager.sh && read_frontmatter "$1" ".technical_acceptance | length"' _ "$tf" 2>/dev/null)
+    [[ -z "$ta" || "$ta" == "null" ]] && ta=0
+    echo "- task $tid: tdd_red=$r tdd_green=$g technical_acceptance=$ta"
   done
 } > "$tdd_block"
 cat "$tdd_block" >> "$prompt_file"
 ```
 
-Instruct Odium (via the wrapper prompt — append this directive): "For any done task with `tdd_red=0` or `tdd_green=0`, emit an **advisory** finding 'TDD loop not evidenced for task <id>'. This is advisory only — it does **not** by itself force `verdict: reopen`; record it in the over-engineering/process-flags section."
+Instruct Odium (via the wrapper prompt — append this directive): "For any done task with `tdd_red=0` or `tdd_green=0`, emit an **advisory** finding 'TDD loop not evidenced for task <id>'. Additionally, for any done task with `technical_acceptance>0` but `tdd_red=0` or `tdd_green=0`, emit an **advisory** finding 'Technical acceptance not test-evidenced for task <id>' (the per-task acceptance criteria should each have driven a red→green cycle). Both are advisory only — they do **not** by themselves force `verdict: reopen`; record them in the over-engineering/process-flags section."
 
 ## Step 4 — Spawn Odium via Agent Tool
 

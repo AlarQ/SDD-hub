@@ -504,6 +504,31 @@ test_repo_cwd_unchanged_no_vault_root() {
       && [[ -z "${WF_VAULT_ROOT:-}" ]] )
 }
 
+test_loader_track_defaults_feature() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: small\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_SPEC_TRACK" == "feature" ]] )
+}
+
+test_loader_track_technical_exported() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\ntrack: technical\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_SPEC_TRACK" == "technical" ]] )
+}
+
+test_loader_track_invalid_exit_4() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: small\ntrack: bogus\n' > "$repo/specs/demo/config.yml"
+  local rc=0 err="$TEST_TMPDIR/err"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo ) >/dev/null 2>"$err" || rc=$?
+  [[ "$rc" == "4" ]] && grep -q "track invalid" "$err"
+}
+
 echo "=== test-config-loader.sh ==="
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
@@ -540,6 +565,9 @@ run_test "vault: no spec config.yml fails exit 2"       test_vault_spec_config_m
 run_test "vault: empty repos[] fails exit 4"            test_vault_repos_empty_fails_4
 run_test "vault: bad repo path fails exit 7"            test_vault_repo_path_invalid_fails_7
 run_test "repo CWD unchanged: WF_VAULT_ROOT unset"      test_repo_cwd_unchanged_no_vault_root
+run_test "track absent defaults to feature"             test_loader_track_defaults_feature
+run_test "track: technical exported"                    test_loader_track_technical_exported
+run_test "track invalid value exits 4"                  test_loader_track_invalid_exit_4
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

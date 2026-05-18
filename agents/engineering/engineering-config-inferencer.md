@@ -43,6 +43,7 @@ Produce YAML matching this exact schema:
 
 ```yaml
 tier: small | medium | large    # required
+track: feature | technical       # optional, default feature
 tags: [list of 1-5 relevant tags, each ^[a-zA-Z0-9_-]{1,32}$]
 gates:
   - <gate-id>          # each must exist in gates.yml
@@ -89,6 +90,21 @@ Pick the smallest tier that fits, then escalate on hard rules.
 
 If unsure between two tiers, pick the larger. Misclassifying small skips Phase-2 agent gates — security/compliance issues will not surface.
 
+### Track Inference Rubric
+
+Classify the spec as `feature` or `technical`. Default `feature` when unsure.
+
+| Track | Heuristic |
+|-------|-----------|
+| `feature`   | Delivers business/user-facing behavior. Has a user story, an end-user or external consumer, a product requirement. |
+| `technical` | No business case — internal/technical intent only: refactor, decouple modules, improve tracing/observability, change deployment method, dependency upgrade, tech-debt paydown, performance work with no behavior change. |
+
+Signals for `technical`: PRD/description phrased as "refactor X", "decouple A from B", "add tracing/metrics", "migrate build/deploy", "reduce coupling", "extract module", "upgrade <dep>" — and explicitly states no user-visible behavior change.
+
+**Caller override:** if the caller passed `--technical`, emit `track: technical` regardless of heuristic and note `OVERRIDE (track): forced technical by caller flag` in reasoning.
+
+`track` and `tier` are independent — a `technical` spec can be any tier (a small rename vs. a large service decoupling). Apply the Tier rubric unchanged.
+
 ### ID Validation Rules
 
 **Gate IDs:** must match `^[a-zA-Z0-9_-]{1,64}$` AND exist in the provided `gates.yml`.
@@ -127,6 +143,7 @@ Return exactly two blocks:
 ```
 REASONING:
 Languages detected: <list>
+Track: <feature|technical> — <one-line reason>
 Gates selected: <list with reason>
 Agents selected: <phase: agents with reason>
 ```
@@ -134,6 +151,7 @@ Agents selected: <phase: agents with reason>
 **Block 2 — Draft config (YAML fenced block):**
 ```yaml
 tier: <small|medium|large>
+track: <feature|technical>
 tags: [...]
 gates:
   - ...
@@ -172,6 +190,7 @@ FALLBACK: Unable to infer config — <reason>. Manual entry required.
 Then emit a minimal default template:
 ```yaml
 tier: medium    # safe default in fallback — never small (would skip agent gates)
+track: feature  # safe default in fallback
 tags: []
 gates: []
 agents:

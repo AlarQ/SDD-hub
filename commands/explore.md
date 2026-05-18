@@ -9,8 +9,11 @@ Run this step before asking the user any questions. It is non-blocking: failure 
 
 ### 0a. Resolve spec storage (+ project segment in vault mode)
 
-`$ARGUMENTS` is `<feature> [--project <proj>]`. Parse the feature name and the
-optional `--project` value.
+`$ARGUMENTS` is `<feature> [--project <proj>] [--technical]`. Parse the feature
+name, the optional `--project` value, and the optional `--technical` flag.
+`--technical` forces `track: technical` in the inferred config (overrides the
+inferencer's heuristic). Absence leaves the track to inference (default
+`feature`).
 
 Source the config loader to resolve `WF_SPEC_STORAGE`. In vault mode the
 `spec_storage` may contain a `{project}` token that must be substituted before
@@ -49,7 +52,7 @@ If `$ARGUMENTS` is non-empty (feature name provided), spawn the `Config Inferenc
 - `WF_SPEC_STORAGE_MODE` value (`repo` or `vault`)
 - When `WF_SPEC_STORAGE_MODE=vault`: the `default_repos[]` block from `.workflow.yml`, and the resolved `$proj` (project segment). Path verification already ran in the loader (exit 7 on bad path) so the inferencer can trust the entries — it only decides which subset the spec needs.
 
-Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block. In vault mode, seed `repos:` from `default_repos[]` (select the subset the spec needs) and emit `project: <proj>`."
+Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block. Include `track:` per the Track Inference Rubric. In vault mode, seed `repos:` from `default_repos[]` (select the subset the spec needs) and emit `project: <proj>`." If `--technical` was given, append: "The caller passed `--technical` — emit `track: technical` regardless of heuristic."
 
 **On success:** emit `config_inferred` monitor event now (before showing the approval summary):
 ```bash
@@ -139,6 +142,26 @@ The agent's YAML must include `tier: small|medium|large`. If the YAML lacks `tie
 - `large` → unchanged full flow.
 
 If the agent picked `small` and the spec keywords include `auth`, `security`, `migration`, `api`, `schema`, or `crypto`, override to `medium` and note the override in reasoning. The user can override via `Edit` path.
+
+### 0g. Track — optional field (default feature)
+
+`track:` is optional; absence resolves to `feature` in the loader. The agent
+should emit it per its Track Inference Rubric. Two adjustments to the written
+config:
+
+- **`--technical` flag given:** before writing `config.yml` (A, E, or M paths),
+  ensure the YAML contains `track: technical`. If the agent omitted it or set
+  `feature`, inject/replace it — the explicit flag wins over inference and over
+  a pasted edit that dropped it. Note the override in the approval summary.
+- **No flag:** keep whatever the agent emitted (or nothing → loader defaults to
+  `feature`).
+
+`track` and `tier` are independent. A `technical` spec changes `/propose`
+shape (no spec.md/design.md/test-strategy.md at any tier; rationale from
+`docs/adr/` + `CONTEXT.md`; `/grill` mandatory for medium/large). Surface this
+in the approval summary so the user sees the consequence before approving:
+*"track: technical → /propose writes tasks/ only; medium/large require a
+completed /grill (docs/adr)."*
 
 ## Steps
 1. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) to understand available ground rules. Also read the repo-root `CONTEXT.md` (or per-context `CONTEXT.md` files via `CONTEXT-MAP.md`) and `docs/adr/` if they exist — produced by `/grill`. Use the canonical glossary terms and respect recorded ADRs throughout the conversation.

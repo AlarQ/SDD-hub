@@ -21,6 +21,8 @@ Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and 
 
 `/explore` step 0 sets `WF_SPEC_TIER` (`small | medium | large`). Tier forks the flow: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl` (emits `validate_impl_skipped`); `medium` skips `/validate-spec` but runs full per-task gates and `/validate-impl`; `large` is the unchanged full flow. `/implement` step 0 runs `tier-check.sh`; on breach (exit 9) the user picks `Continue` (proceed) or `Abort` → `/promote-tier` → re-runs `/propose` at the next tier (preserved `done`/`implemented` tasks remain).
 
+`/explore` step 0 also sets `WF_SPEC_TRACK` (`feature` default | `technical`), orthogonal to tier. On the **technical track** `/propose` writes **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md; rationale comes from `docs/adr/` + `CONTEXT.md`), and hard-refuses for `medium`/`large` until `/grill` has produced a non-empty `docs/adr/` (`small` is exempt). Per-task `technical_acceptance` seeds the `/implement` TDD backlog; `/validate-impl` adds an advisory finding if those items lack red→green evidence. All other flow (validate gates, state machine, ship) is unchanged.
+
 ```mermaid
 graph LR
     subgraph Setup["One-time setup"]
@@ -322,14 +324,19 @@ graph LR
 graph LR
     PR["/propose"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_PR[stop]
-    CFG0 -->|loaded| SE[engineering-security-engineer]
-    CFG0 -->|loaded| SA[engineering-software-architect]
-    CFG0 -->|loaded| SPM[project-manager-senior<br/>tracer-bullet slices<br/>+ interaction: hitl/afk per task]
+    CFG0 --> TRK{WF_SPEC_TRACK}
+    TRK -->|feature| SE[engineering-security-engineer]
+    TRK -->|feature| SA[engineering-software-architect]
+    TRK -->|feature / technical| SPM[project-manager-senior<br/>tracer-bullet slices<br/>+ interaction: hitl/afk per task]
+    TRK -->|technical| TGATE{tier ∈ medium/large<br/>& docs/adr empty?}
+    TGATE -->|yes| STOP_GR[hard-refuse:<br/>run /grill first]
+    TGATE -->|no / small| SPM
+    SPM -.->|technical track| TA[emit per-task<br/>technical_acceptance]
     SA -.->|read docs/adr| ADRREF[reference ADR by id<br/>no dup in design.md]
-    PR -.->|backend kw| BA[engineering-backend-architect]
-    PR -.->|ui kw| UXA[design-ux-architect]
-    PR -.->|ui kw| UID[design-ui-designer]
-    PR -.->|ai kw| AIE[engineering-ai-engineer]
+    PR -.->|feature + backend kw| BA[engineering-backend-architect]
+    PR -.->|feature + ui kw| UXA[design-ux-architect]
+    PR -.->|feature + ui kw| UID[design-ui-designer]
+    PR -.->|feature + ai kw| AIE[engineering-ai-engineer]
 ```
 
 ### 5c. `/implement` — task execution
@@ -341,6 +348,7 @@ graph LR
     IM -->|step 6a: after branch creation| SNAP[.monitor-context-snapshot]
     IM --> S9["step 9: pre-loop<br/>settle behavior backlog"]
     S9 -.->|if test-strategy.md exists| TSG[engineering-test-strategist]
+    S9 -.->|technical track| TAP[prepend technical_acceptance<br/>characterization first]
     S9 -.->|interaction: hitl only| HITL[AskUserQuestion:<br/>interface + priority]
     S9 --> LOOP["step 10: per behavior"]
     LOOP --> RED["RED: 1 failing test<br/>→ tdd_red event"]

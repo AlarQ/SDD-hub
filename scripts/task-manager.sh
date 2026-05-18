@@ -335,6 +335,16 @@ validate_required_fields() {
       *) die "Invalid interaction '$interaction' in $file. Valid: hitl, afk" ;;
     esac
   fi
+  # Optional `technical_acceptance` field — technical-track tasks only.
+  # Absent → empty (feature-track tasks omit it; backward compatible). When
+  # present it must be a YAML array of acceptance statements.
+  local ta_type
+  ta_type=$(read_frontmatter "$file" '.technical_acceptance')
+  if [ "$ta_type" != "null" ] && [ -n "$ta_type" ]; then
+    local ta_seq
+    ta_seq=$(read_frontmatter "$file" '.technical_acceptance | type')
+    [ "$ta_seq" = "!!seq" ] || die "technical_acceptance must be a YAML array in $file"
+  fi
 }
 
 # Warn if ground_rules paths don't resolve to real files.

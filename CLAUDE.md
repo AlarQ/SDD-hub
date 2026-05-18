@@ -124,6 +124,39 @@ Loader exports: `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, 
 
 Monitor events: `tier_inferred`, `tier_approved`, `tier_breach`, `tier_promoted`, `validate_impl_skipped`.
 
+## Technical Track (feature | technical)
+
+`track` is a per-spec axis **orthogonal to tier**, for work that is neither a
+business feature nor a bug: refactors, module decoupling, tracing/observability,
+deployment changes, dependency upgrades, tech-debt. It reuses the entire
+tier/task/TDD/validate/validate-impl pipeline — only the *input artifacts*
+change. It is not a separate command or storage namespace.
+
+| Track | `/propose` artifacts | Rationale source | `/grill` |
+|-------|----------------------|------------------|----------|
+| `feature` (default) | spec.md/design.md/test-strategy.md per tier + tasks/ | spec.md / design.md | optional |
+| `technical` | **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md) | `docs/adr/` + `CONTEXT.md` | optional `small`; **mandatory `medium`/`large`** |
+
+- Inferred by `engineering-config-inferencer` at `/explore` step 0 (Track
+  Inference Rubric), user-approved; `/explore --technical` forces it. Written to
+  `specs/<feature>/config.yml` as `track:`. Absent → `feature`.
+- `/propose` technical mode: only the Senior Project Manager spawns (no
+  Security/Architect/Test-Strategist agents). PM reads `docs/adr/`+`CONTEXT.md`
+  in place of spec.md/design.md and emits a per-task `technical_acceptance`
+  list (refactor tasks lead with a characterization assertion). **Grill gate:**
+  `medium`/`large` technical specs hard-refuse `/propose` if `docs/adr/` is
+  empty — run `/grill` first; `small` is exempt (not ADR-worthy).
+- `/implement` prepends `technical_acceptance` to the TDD behavior backlog as
+  acceptance criteria; characterization items get a behavior-preserving test
+  written GREEN before the change and kept GREEN throughout. `afk` pre-approval
+  on the technical track = `technical_acceptance` + `docs/adr/`.
+- `/validate-impl` Step 3a emits an **advisory** finding when a done task has
+  `technical_acceptance` items but no `tdd_red`/`tdd_green` evidence (does not
+  force `reopen`).
+- `task-manager.sh` validates optional `technical_acceptance` (YAML array;
+  absent on feature track). Loader exports `WF_SPEC_TRACK` (see
+  `scripts/config-loader.contract.md`).
+
 ## Multi-Repo Specs (Vault Mode)
 
 **Vault mode is the going-forward path** (all specs live in the master-brain vault). `.workflow.yml spec_storage_mode: vault` makes the vault `.workflow.yml` a **thin pointer**: it owns workflow settings + `general_kb_path` only — **no `gate_pool`, no `knowledge-base/` in the vault**. Each target code repo owns its own `knowledge-base/` + `gates.yml`, created once by `/bootstrap` repo-gate-init inside that repo (vault itself: `/bootstrap` vault-init, once). There is **no "primary repo for config"** — `role: primary` only selects default git/PR context.

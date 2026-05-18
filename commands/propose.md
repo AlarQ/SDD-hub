@@ -13,7 +13,7 @@ Before generating any artifact, load the spec config (substituting the actual fe
 bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PROPOSE=%s\n" "${WF_SPEC_AGENTS_PROPOSE:-}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_PROPOSE`, `WF_SPEC_TIER`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_PROPOSE`, `WF_SPEC_TIER`, `WF_SPEC_TRACK`.
 
 If `WF_SPEC_AGENTS_PROPOSE` is non-empty, it lists the agent IDs to spawn during spec/design generation (overrides the default keyword-based conditional list below). Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
 
@@ -30,6 +30,31 @@ If `WF_SPEC_AGENTS_PROPOSE` is non-empty, it lists the agent IDs to spawn during
 Branch on `WF_SPEC_TIER` at the top of the generation loop. For sections "skipped" do NOT spawn the corresponding agent and do NOT write the file.
 
 For `small`, the only generated artifact is `tasks/001-*.md` (decompose directly from prd.md/conversation context). Keep ground_rules minimal — language file + any explicitly relevant general rule.
+
+### Track branching (technical track)
+
+`WF_SPEC_TRACK` (`feature` default | `technical`) is orthogonal to tier and is
+evaluated **after** the tier table above. When `WF_SPEC_TRACK=technical`:
+
+- **No business artifacts at any tier.** Skip `spec.md`, `design.md`, and
+  `test-strategy.md` regardless of `WF_SPEC_TIER` (technical work has no
+  business case to specify — rationale lives in `docs/adr/` + `CONTEXT.md`).
+  Do NOT spawn Security Engineer (spec.md), the Architecture/Backend/UX/UI/AI
+  agents (design.md), or the Test Strategist (test-strategy.md). The only
+  generated artifact is `tasks/NNN-*.md`.
+- **Grill gate (medium/large):** if `WF_SPEC_TIER` is `medium` or `large`,
+  verify a non-empty `docs/adr/` exists (≥1 `docs/adr/NNNN-*.md`). If it does
+  not, **hard-refuse**: stop and print —
+  *"Technical track at tier `<tier>` requires a recorded rationale. Run
+  `/grill $ARGUMENTS` first to capture the decision in docs/adr/ (and sharpen
+  CONTEXT.md), then re-run /propose."* Do not generate any artifact. For
+  `small`, skip this check (a rename/one-span change is not ADR-worthy —
+  `/grill` is optional).
+- **Decomposition input:** the Senior Project Manager is the only agent
+  spawned. It receives `docs/adr/` + repo-root `CONTEXT.md` (+ `prd.md`/
+  conversation context) **in place of** spec.md/design.md, plus the project's
+  `CLAUDE.md`. See the technical-track addendum under *Agent — Senior Project
+  Manager* below.
 
 ### Multi-repo branching
 
@@ -163,15 +188,18 @@ Style: follow `docs/workflow-diagram.md` (solid arrows direct, dashed async/huma
 
 #### Agent — Senior Project Manager (before task generation)
 Before generating task files, spawn the `Senior Project Manager` agent (`project-manager-senior`) using the Agent tool. The agent receives:
-- The spec.md content
-- The design.md content (with all embedded agent outputs)
+- The spec.md content *(feature track)* — **technical track:** `docs/adr/` contents + repo-root `CONTEXT.md` instead
+- The design.md content (with all embedded agent outputs) *(feature track only — omit on technical track)*
+- The prd.md content or conversation context (both tracks)
 - The project's `CLAUDE.md`
 
 Instruct the agent with this directive: "Analyze the spec and design, then produce a vertical-slice task breakdown. Each task must be a tracer bullet — a thin slice cutting through all layers it touches, independently demoable/verifiable. Target task count per tier: small=2–4, medium=4–7, large=7–12. Group related work; only split when files >20, deploys are independent, or work is parallelizable across devs. Classify each task `interaction: hitl|afk` (prefer afk). Each task must justify why it isn't merged with a neighbor. Flag any spec where you cannot stay within the target without losing reviewability. Stay true to the spec — do not add scope."
 
+**Technical-track addendum** (`WF_SPEC_TRACK=technical`) — append to the directive: "There is no spec.md/design.md. The source of intent is `docs/adr/` + `CONTEXT.md` + the change description. For **every** task, emit a `technical_acceptance` list: concrete, verifiable, behavior-level statements that prove the technical change is done and safe — e.g. `public API of module X unchanged`, `trace span 'checkout.charge' emitted with attrs order_id, amount`, `module A no longer imports module B`, `p95 of endpoint /foo unchanged within 5%`. Derive them from ADR Decision/Consequences and the stated intent. For any task that is a **refactor / behavior-preserving change**, the first `technical_acceptance` entry MUST be a characterization assertion (existing observable behavior unchanged) so `/implement` writes a characterization test first. Keep `technical_acceptance` tight — only what actually gates 'done'."
+
 ##### PM Agent Output Contract
 The agent must return:
-1. **Task list** — ordered tasks with: name, description, acceptance criteria, dependencies, estimated file count, `interaction` (`hitl`|`afk`), **rationale (why this task isn't merged with a neighbor)**
+1. **Task list** — ordered tasks with: name, description, acceptance criteria, dependencies, estimated file count, `interaction` (`hitl`|`afk`), **rationale (why this task isn't merged with a neighbor)**, and — **technical track only** — a `technical_acceptance` list per task (refactor tasks lead with a characterization assertion)
 2. **Dependency graph** — which tasks block which
 3. **Scope flags** — any tasks that risk scope creep, exceed the 20-file limit, or breach the tier task-count target
 
@@ -185,8 +213,11 @@ Use the PM agent's task breakdown as input for generating the final task files:
 - Set `status: blocked` with `blocked_by` IDs for tasks with dependencies (per PM dependency graph)
 - Set `status: todo` for tasks with no dependencies
 - Set the `interaction:` frontmatter field to the PM's `hitl`/`afk` classification (omit only if the PM analysis was unavailable — `task-manager.sh` then defaults it to `afk`)
+- **Technical track:** write the PM's per-task `technical_acceptance` list into each task file's `technical_acceptance:` frontmatter array (see `scripts/task-manager.sh` schema). On the feature track this field is omitted.
 
 #### Agent — Test Strategist (after task generation)
+**Skip entirely on the technical track** (`WF_SPEC_TRACK=technical`) — there is no test-strategy.md; per-task `technical_acceptance` drives `/implement`'s TDD loop instead.
+
 After all task files have been generated, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool. The agent receives:
 - The spec.md content (with BDD scenarios)
 - The design.md content (with architecture and module boundaries)

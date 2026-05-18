@@ -96,6 +96,32 @@ test_validate_interaction_invalid_rejected() {
   return 0
 }
 
+# === technical_acceptance field tests ===
+
+test_validate_technical_acceptance_absent_ok() {
+  # feature-track task omits the field — must still validate
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  "$TASK_MANAGER" validate "$task_file"
+}
+
+test_validate_technical_acceptance_array_accepted() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  sed -i.bak 's/^status: todo$/status: todo\ntechnical_acceptance:\n  - "public API of module X unchanged"\n  - "span checkout.charge emitted"/' "$task_file"
+  "$TASK_MANAGER" validate "$task_file"
+}
+
+test_validate_technical_acceptance_scalar_rejected() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  sed -i.bak 's/^status: todo$/status: todo\ntechnical_acceptance: not-an-array/' "$task_file"
+  if "$TASK_MANAGER" validate "$task_file" 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
 # === Walk-up tests ===
 
 test_validate_from_nested_subdir() {
@@ -301,6 +327,9 @@ run_test "vault single-repo: project: → sole repo KB" test_vault_single_repo_p
 run_test "vault: general: always resolves" test_vault_general_prefix_always_resolves
 run_test "vault multi-repo: unprefixed rejected (exit 7)" test_vault_multi_repo_unprefixed_rejected
 run_test "vault multi-repo: repo:<name>: resolves" test_vault_multi_repo_named_prefix_resolves
+run_test "validate accepts technical_acceptance absent" test_validate_technical_acceptance_absent_ok
+run_test "validate accepts technical_acceptance array" test_validate_technical_acceptance_array_accepted
+run_test "validate rejects technical_acceptance scalar" test_validate_technical_acceptance_scalar_rejected
 run_test "validate accepts interaction: afk" test_validate_interaction_afk_accepted
 run_test "validate accepts task with no interaction field (defaults afk)" test_validate_interaction_absent_defaults_ok
 run_test "validate rejects invalid interaction value" test_validate_interaction_invalid_rejected
