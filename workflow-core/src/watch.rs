@@ -1,7 +1,8 @@
-//! Watch surface (ADR-001). `workflow-core` owns the event shape so the
-//! emitted models stay co-located with the rest of the domain. The async
-//! watcher contract (tokio + notify) will be defined in task 005 once the
-//! real interface requirements are known.
+//! Watch surface (ADR-001). New abstraction — **no concrete impl in this
+//! crate**. The `workflow-web` crate provides the only `WatchSource`
+//! implementation (notify-backed) in later tasks. `workflow-core` owns the
+//! trait + event shape so the emitted models stay co-located with the watcher
+//! contract.
 
 use std::path::PathBuf;
 
@@ -23,4 +24,12 @@ pub enum WatchEvent {
         feature: String,
         events: Vec<MonitorEvent>,
     },
+}
+
+/// A source of [`WatchEvent`]s. Concrete (notify-backed) implementations live
+/// in the `workflow-web` consumer; `workflow-core` defines only the contract.
+pub trait WatchSource {
+    /// Block until the next watch event is available, or return `None` once
+    /// the source is exhausted/closed. `Err` is a fatal watcher failure.
+    fn next_event(&mut self) -> anyhow::Result<Option<WatchEvent>>;
 }
