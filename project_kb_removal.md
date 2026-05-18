@@ -75,7 +75,7 @@ via shim), cross-ref ADR-002/005/006.
   `WF_PROJECT_KB` row; rewrite `WF_GATE_POOL` row; vault section steps 5/6;
   exit-3/exit-7 text).
 
-### 3. `scripts/task-manager.sh` — `resolve_ground_rule_path` (~184–256)
+### 3. `scripts/task-manager.sh` — `resolve_ground_rule_path` (~184–256) ✅ IMPLEMENTED
 Collapse to one branch + strip-prefix shim:
 - Require `WF_GENERAL_KB` (else `return 7`).
 - `case` strips `general:` / `project:` / `repo:*:` / `repo:*` prefixes;
