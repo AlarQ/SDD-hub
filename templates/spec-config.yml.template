@@ -35,6 +35,17 @@
 #   and skips Phase-2 agent gates + /validate-impl. medium skips design.md +
 #   test-strategy.md + validate-spec. large = full flow.
 
+# track: feature | technical
+#   Optional, default `feature`. Inferred by config-inferencer at /explore
+#   step 0 (user-approved) or forced via `/explore --technical`.
+#   feature   = business-facing work; normal spec.md/design.md flow.
+#   technical = refactor / decouple / tracing / deploy / tech-debt. NO
+#               spec.md/design.md/test-strategy.md at any tier (tasks/ only);
+#               rationale lives in docs/adr/ + CONTEXT.md (via /grill).
+#               /grill is mandatory for medium/large technical specs
+#               (/propose hard-refuses without docs/adr), optional for small.
+#               Per-task technical_acceptance drives the TDD loop.
+
 # tier_ceiling:
 #   Optional per-spec override of .workflow.yml tiers.<tier> thresholds.
 #   tasks: <int|null>

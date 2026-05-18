@@ -43,6 +43,7 @@ Idempotent: re-sourcing is a no-op unless `WF_RELOAD=1`.
 | `WF_SPEC_HAS_CONFIG` | `1` | `--spec` only | Marker that per-spec config loaded. |
 | `WF_SPEC_AGENTS_<PHASE>` | space-sep IDs | `--spec` only | One per phase present in `config.yml agents:`. `<PHASE>` ∈ `EXPLORE`, `PROPOSE`, `IMPLEMENT`, `VALIDATE`, `PR_REVIEW`. Absent if phase not configured. |
 | `WF_SPEC_TIER` | enum | `--spec` only | `small` \| `medium` \| `large`. Required in `config.yml`; absence → exit 4. Drives flow shape. |
+| `WF_SPEC_TRACK` | enum | `--spec` only | `feature` (default) \| `technical`. Optional in `config.yml`; absence → `feature`. `technical` = `/propose` skips spec.md/design.md/test-strategy.md at every tier (tasks/ only), rationale from docs/adr/+CONTEXT.md, /grill mandatory for medium/large. Invalid value → exit 4. |
 | `WF_TIER_TASK_CEILING` | int or empty | `--spec` only | Task-count ceiling for this tier (per-spec `tier_ceiling.tasks` override → `.workflow.yml tiers.<tier>.tasks`). Empty = unbounded. |
 | `WF_TIER_FILE_CEILING` | int or empty | `--spec` only | File-count ceiling for this tier. Empty = unbounded. |
 | `WF_TIER_AGENT_SKIP` | space-sep IDs | `--spec` only | Agent gates to skip in `/validate` Phase 2 for this tier. Empty for medium/large by default. |

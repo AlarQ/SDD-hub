@@ -61,7 +61,7 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
    ```
    This snapshot is compared by `/ship` to detect mid-task `config.yml` drift. Normalized JSON (sorted keys, sorted gate list) ensures whitespace-only edits do not trigger false drift.
 7. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
-8. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
+8. Read context for the task. **Feature track** (`WF_SPEC_TRACK=feature`, default): read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md`. **Technical track** (`WF_SPEC_TRACK=technical`): spec.md/design.md do not exist — read `docs/adr/` + repo-root `CONTEXT.md` (the recorded rationale) and the task file's `technical_acceptance` instead. (`WF_SPEC_TRACK` is exported by the Step 0/6 `wf_load_config --spec` call.)
 **Implementation is test-driven.** Follow the `tdd` skill at `~/.claude/skills/tdd/SKILL.md` — it is the governing method for steps 9–11. Code is written to make a failing test pass, not before it. The horizontal-slice anti-pattern (all tests, then all code) is prohibited; slices are vertical (one test → one impl → repeat).
 
 9. **Pre-loop setup — settle the behavior backlog (no code yet):**
@@ -74,10 +74,11 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
 
      Apply the agent's output to produce the ordered backlog: drop `skip` items, apply `modify`, add identified integration tests, note reusable shared fixtures.
 
-     If the agent errors or times out, or if test-strategy.md does not exist, use the task file's `test_cases` as-is in listed order and note: *"Test Strategist refinement unavailable — using task file test_cases as the behavior backlog."*
+     If the agent errors or times out, or if test-strategy.md does not exist, use the task file's `test_cases` as-is in listed order and note: *"Test Strategist refinement unavailable — using task file test_cases as the behavior backlog."* (On the **technical track** test-strategy.md never exists by design — this is the expected path, not a failure; do not emit the unavailable note.)
+   - **Technical track — seed the backlog with acceptance criteria.** If the task file has a non-empty `technical_acceptance` list, **prepend** each entry to the behavior backlog, tagged as an acceptance criterion. Ordering rule: a `technical_acceptance` entry that asserts *behavior is unchanged* (characterization — typical of refactor tasks) comes **first**; its test is written and confirmed GREEN against current code **before** any change, then must stay GREEN throughout (the RED for such an item is a *new* required assertion the change introduces, e.g. an added trace span — not the characterization itself). Non-characterization acceptance items follow, then the task's `test_cases`.
    - **Planning gate (HITL only).** Read the task file's `interaction` frontmatter field:
      - `interaction: hitl` → use `AskUserQuestion` to confirm the public interface shape and the behavior priority order before the loop. Apply the user's adjustments to the backlog.
-     - `interaction: afk` (or absent — defaults to afk) → `spec.md` BDD scenarios + the refined backlog **are** the pre-approval. Do not prompt. Proceed directly to the loop.
+     - `interaction: afk` (or absent — defaults to afk) → the pre-approval is `spec.md` BDD scenarios + the refined backlog on the **feature track**, or `technical_acceptance` + `docs/adr/` + the refined backlog on the **technical track**. Do not prompt. Proceed directly to the loop.
 
 10. **Red-green-refactor loop — iterate the backlog one behavior at a time** (vertical slices):
 
@@ -86,7 +87,7 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
       `~/.claude/scripts/monitor.sh log_event $ARGUMENTS tdd_red <task-id> '{"behavior":"<short label>"}'`
     - **GREEN**: Write the **minimal** code to make that test pass — no speculative features, no anticipating later backlog items. Run the test. Confirm it **passes** (and previously-green tests stay green). Emit:
       `~/.claude/scripts/monitor.sh log_event $ARGUMENTS tdd_green <task-id> '{"behavior":"<short label>"}'`
-    - Follow architectural decisions from design.md, language patterns from knowledge-base/languages/, and security rules from both knowledge bases while writing GREEN code.
+    - Follow architectural decisions from design.md (feature track) or `docs/adr/` (technical track), language patterns from knowledge-base/languages/, and security rules from both knowledge bases while writing GREEN code.
     - **On error or unexpected test failure during GREEN** → spawn the `Ultrathink Debugger` agent (`ultrathink-debugger`) with the error output, relevant source files, and task context. The agent must return its findings in the structured format defined in the agent's "Implementation Fix Output" section. Present the agent's diagnosis and proposed fix to the user. On accept: apply the fix and continue the loop. On reject or if the agent cannot resolve the issue: report the failure with the agent's diagnosis and pause for guidance.
     - **Never refactor while RED.** Get to GREEN first. Move to the next backlog behavior.
 

@@ -23,6 +23,7 @@ wf__unset_partials() {
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
+        WF_SPEC_TRACK \
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT \
         WF_PROJECT_KB WF_SPEC_PROJECT
   local v
@@ -407,6 +408,20 @@ wf_load_config() {
     esac
     WF_SPEC_TIER="$tier"
 
+    # Track resolution: spec config.yml `track` (optional, default feature).
+    # feature = business-facing flow (spec.md/design.md). technical = refactor/
+    # tracing/decoupling/deploy — skips business artifacts (see /propose).
+    local track
+    track="$(wf__json_get "$spec_json" '.track' '')" || {
+      wf__err "$spec_cfg: track extraction failed"; wf__unset_partials; return 5
+    }
+    case "$track" in
+      feature|technical) ;;
+      "") track="feature" ;;
+      *)  wf__err "$spec_cfg: track invalid: '$track' (expected: feature, technical)"; wf__unset_partials; return 4 ;;
+    esac
+    WF_SPEC_TRACK="$track"
+
     local tc fc as
     tc="$(wf__json_get "$spec_json" ".tier_ceiling.tasks" '')"
     fc="$(wf__json_get "$spec_json" ".tier_ceiling.files" '')"
@@ -537,6 +552,7 @@ wf_load_config() {
     WF_SPEC_HAS_CONFIG=1
     export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
            WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
+           WF_SPEC_TRACK \
            WF_REPO_NAMES WF_REPO_PATHS
   fi
 
@@ -639,6 +655,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         WF_GENERAL_KB
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
+        WF_SPEC_TRACK
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
         WF_PROJECT_KB WF_SPEC_PROJECT
       )

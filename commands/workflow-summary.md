@@ -52,6 +52,7 @@ blocked → todo → in-progress → implemented → review → done
 - **Rejected findings can become new rules** in project knowledge-base (feedback loop)
 - **Max 20 files per task** — keep PRs reviewable
 - **TDD red-green-refactor** — `/implement` writes one failing test (RED) → minimal code (GREEN) → repeat, then refactor; per-cycle `tdd_red`/`tdd_green` monitor events. Behavior backlog from spec.md BDD + test-strategy.md (human-named scenarios, AI bodies)
+- **Tracks** — `track: feature` (default) = normal spec/design flow. `track: technical` (refactor/decouple/tracing/deploy/tech-debt) = `/propose` writes **tasks/ only** at every tier; rationale from `docs/adr/`+`CONTEXT.md` (`/grill` mandatory for medium/large, optional small); per-task `technical_acceptance` drives the TDD loop. Inferred at `/explore` step 0 or forced via `/explore --technical`
 
 ### Branching
 ```
