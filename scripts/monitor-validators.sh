@@ -11,6 +11,7 @@ _WF_VALID_CATEGORIES=(
   spec_reaudit_requested
   tier_inferred tier_approved tier_breach tier_promoted validate_impl_skipped
   fix_started fix_root_cause fix_shipped
+  tdd_red tdd_green
 )
 
 redact_home() {

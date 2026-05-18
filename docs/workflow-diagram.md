@@ -338,11 +338,21 @@ graph LR
 graph LR
     IM["/implement"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_IM[stop]
-    IM -.->|post-impl, if in WF_SPEC_AGENTS_IMPLEMENT| CQP[code-quality-pragmatist]
-    IM -.->|if test-strategy.md exists| TSG[engineering-test-strategist]
-    IM -.->|on error / test fail| UD[ultrathink-debugger]
     IM -->|step 6a: after branch creation| SNAP[.monitor-context-snapshot]
+    IM --> S9["step 9: pre-loop<br/>settle behavior backlog"]
+    S9 -.->|if test-strategy.md exists| TSG[engineering-test-strategist]
+    S9 -.->|interaction: hitl only| HITL[AskUserQuestion:<br/>interface + priority]
+    S9 --> LOOP["step 10: per behavior"]
+    LOOP --> RED["RED: 1 failing test<br/>→ tdd_red event"]
+    RED --> GREEN["GREEN: minimal code<br/>→ tdd_green event"]
+    GREEN -.->|on error / test fail| UD[ultrathink-debugger]
+    GREEN -->|next behavior| LOOP
+    LOOP -->|backlog empty| RF["step 11: refactor<br/>(never while RED)"]
+    RF --> CQP2[code-quality-pragmatist]
+    CQP2 -.->|post-impl, if in WF_SPEC_AGENTS_IMPLEMENT| DONE[implemented → draft PR]
 ```
+
+Step 10 is a vertical red-green loop: exactly one test then minimal code per behavior, repeated. Horizontal slicing (all tests, then all code) is prohibited per the `tdd` skill. Applies to all tiers — no small-tier exemption.
 
 ### 5d. `/validate` — validation gates (parallel)
 

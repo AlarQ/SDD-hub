@@ -82,6 +82,15 @@ test_new_categories_accepted() {
   log_event "test-feature" "gate_skip" "001" '{"reason":"empty intersection"}'
 }
 
+test_tdd_categories_accepted() {
+  # Given monitor.sh is sourced
+  source "$MONITOR_SCRIPT"
+
+  # When log_event is called with the TDD loop categories
+  log_event "test-feature" "tdd_red" "001" '{"behavior":"rejects empty cart"}' && \
+  log_event "test-feature" "tdd_green" "001" '{"behavior":"rejects empty cart"}'
+}
+
 test_unknown_category_rejected() {
   # Given monitor.sh is sourced
   source "$MONITOR_SCRIPT"
@@ -229,6 +238,7 @@ echo "Running monitor-events.sh tests..."
 echo ""
 run_test "pre-existing categories are accepted" test_known_category_accepted
 run_test "four new T003 categories accepted: config_inferred, config_approved, agent_spawn, gate_skip" test_new_categories_accepted
+run_test "TDD loop categories accepted: tdd_red, tdd_green" test_tdd_categories_accepted
 run_test "unknown category rejected with non-zero exit" test_unknown_category_rejected
 run_test "unknown category writes nothing to JSONL" test_unknown_category_writes_nothing
 run_test "path under HOME is redacted to ~ prefix in event" test_home_path_redacted_in_event

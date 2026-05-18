@@ -93,6 +93,34 @@ The wrapper prompt contains:
 - Failing-gate output, if step 2 captured any.
 - Required output: YAML frontmatter (`feature`, `timestamp`, `scope`, `verdict`) + FR × Status matrix + orphan-code section + over-engineering flags.
 
+## Step 3a — Append TDD Evidence (advisory)
+
+Implementation is test-driven (see `/implement` steps 9–11). Each `done` task should have ≥1 `tdd_red` → `tdd_green` cycle in `specs/$ARGUMENTS/.monitor.jsonl`. Compute per-task evidence and append it to the prompt file:
+
+```bash
+tdd_block="$(mktemp)"
+{
+  echo
+  echo "## TDD Loop Evidence (advisory)"
+  echo
+  echo "Per done task: count of tdd_red and tdd_green monitor events. A task with zero of either did not follow the red-green loop."
+  for tf in "$spec_dir"/tasks/*.md; do
+    # Read id only from the YAML frontmatter block (never the prose body) —
+    # reuse task-manager.sh's frontmatter-bounded reader (sourcing is safe:
+    # its CLI/check_yq is guarded by BASH_SOURCE==0).
+    tid="$(bash -c 'source ~/.claude/scripts/task-manager.sh && read_frontmatter "$1" .id' _ "$tf" 2>/dev/null)"
+    tid="${tid//\"/}"
+    [[ -z "$tid" || "$tid" == "null" ]] && continue
+    r=$(grep -c "\"category\":\"tdd_red\".*\"task\":\"$tid\"" "$spec_dir/.monitor.jsonl" 2>/dev/null || echo 0)
+    g=$(grep -c "\"category\":\"tdd_green\".*\"task\":\"$tid\"" "$spec_dir/.monitor.jsonl" 2>/dev/null || echo 0)
+    echo "- task $tid: tdd_red=$r tdd_green=$g"
+  done
+} > "$tdd_block"
+cat "$tdd_block" >> "$prompt_file"
+```
+
+Instruct Odium (via the wrapper prompt — append this directive): "For any done task with `tdd_red=0` or `tdd_green=0`, emit an **advisory** finding 'TDD loop not evidenced for task <id>'. This is advisory only — it does **not** by itself force `verdict: reopen`; record it in the over-engineering/process-flags section."
+
 ## Step 4 — Spawn Odium via Agent Tool
 
 Spawn the Odium agent (`subagent_type: odium`) with the prompt file's content. **Do not edit `agents/odium.md`.** Capture the agent's full Markdown output into a temp file `/tmp/spec-audit-body-$$.md`.

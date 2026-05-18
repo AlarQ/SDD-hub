@@ -51,7 +51,7 @@ blocked → todo → in-progress → implemented → review → done
 - **Human is final authority** on all findings via `/review-findings`
 - **Rejected findings can become new rules** in project knowledge-base (feedback loop)
 - **Max 20 files per task** — keep PRs reviewable
-- **TDD/BDD** — human names test cases, AI implements bodies
+- **TDD red-green-refactor** — `/implement` writes one failing test (RED) → minimal code (GREEN) → repeat, then refactor; per-cycle `tdd_red`/`tdd_green` monitor events. Behavior backlog from spec.md BDD + test-strategy.md (human-named scenarios, AI bodies)
 
 ### Branching
 ```

@@ -62,30 +62,39 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
    This snapshot is compared by `/ship` to detect mid-task `config.yml` drift. Normalized JSON (sorted keys, sorted gate list) ensures whitespace-only edits do not trigger false drift.
 7. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
 8. Read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md` for context
-9. Implement the code changes following the spec and ground rules:
-   - Follow architectural decisions from design.md
-   - Follow language-specific patterns from knowledge-base/languages/
-   - Apply security rules from both knowledge bases
-   - **On error or test failure** → spawn the `Ultrathink Debugger` agent (`ultrathink-debugger`) with the error output, relevant source files, and task context. The agent must return its findings in the structured format defined in the agent's "Implementation Fix Output" section. Present the agent's diagnosis and proposed fix to the user. On accept: apply the fix and continue. On reject or if the agent cannot resolve the issue: report the failure to the user with the agent's diagnosis and pause for guidance.
-10. If `specs/$ARGUMENTS/test-strategy.md` exists, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool before writing test bodies. The agent receives:
-   - The test-strategy.md content
-   - The current task file (with test_cases)
-   - List of existing test files from completed tasks (find test files in the task branches already merged to `feat/$ARGUMENTS`)
-   
-   Instruct the agent with this directive: "Review this task's test cases against the test strategy and existing test coverage from completed tasks. For each test case, determine: keep, skip (already covered), or modify. Add any missing integration seam tests assigned to this task. List shared fixtures available from completed tasks. Use the Implementation Refinement Output format defined in your agent definition."
-   
-   Apply the agent's output:
-   - Skip test cases marked as `skip` (already covered by completed tasks)
-   - Modify test cases as directed
-   - Add new integration tests the agent identifies
-   - Reuse shared fixtures instead of recreating test data
-   
-   If the agent errors or times out, or if test-strategy.md does not exist, proceed with all test cases from the task file as-is and note: *"Test Strategist refinement unavailable — implementing all test cases from task file."*
-11. Implement test bodies for the (filtered) test cases
-   - Use the refined test list from step 10 if available, otherwise use the task file's test_cases as-is
-   - AI writes the test implementations
-   - Use Given/When/Then structure from testing knowledge-base rules
-12. Add implementation notes to the task file explaining decisions made
+**Implementation is test-driven.** Follow the `tdd` skill at `~/.claude/skills/tdd/SKILL.md` — it is the governing method for steps 9–11. Code is written to make a failing test pass, not before it. The horizontal-slice anti-pattern (all tests, then all code) is prohibited; slices are vertical (one test → one impl → repeat).
+
+9. **Pre-loop setup — settle the behavior backlog (no code yet):**
+   - If `specs/$ARGUMENTS/test-strategy.md` exists, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool. The agent receives:
+     - The test-strategy.md content
+     - The current task file (with test_cases)
+     - List of existing test files from completed tasks (find test files in the task branches already merged to `feat/$ARGUMENTS`)
+
+     Instruct the agent with this directive: "Review this task's test cases against the test strategy and existing test coverage from completed tasks. For each test case, determine: keep, skip (already covered), or modify. Add any missing integration seam tests assigned to this task. List shared fixtures available from completed tasks. Return the result as an **ordered behavior backlog** (priority order, one behavior per entry). Use the Implementation Refinement Output format defined in your agent definition."
+
+     Apply the agent's output to produce the ordered backlog: drop `skip` items, apply `modify`, add identified integration tests, note reusable shared fixtures.
+
+     If the agent errors or times out, or if test-strategy.md does not exist, use the task file's `test_cases` as-is in listed order and note: *"Test Strategist refinement unavailable — using task file test_cases as the behavior backlog."*
+   - **Planning gate (HITL only).** Read the task file's `interaction` frontmatter field:
+     - `interaction: hitl` → use `AskUserQuestion` to confirm the public interface shape and the behavior priority order before the loop. Apply the user's adjustments to the backlog.
+     - `interaction: afk` (or absent — defaults to afk) → `spec.md` BDD scenarios + the refined backlog **are** the pre-approval. Do not prompt. Proceed directly to the loop.
+
+10. **Red-green-refactor loop — iterate the backlog one behavior at a time** (vertical slices):
+
+    For each behavior in the ordered backlog, in order:
+    - **RED**: Write exactly ONE test for this behavior (Given/When/Then structure from testing knowledge-base rules; public interface only — never implementation internals). Run it. Confirm it **fails** for the expected reason. Emit:
+      `~/.claude/scripts/monitor.sh log_event $ARGUMENTS tdd_red <task-id> '{"behavior":"<short label>"}'`
+    - **GREEN**: Write the **minimal** code to make that test pass — no speculative features, no anticipating later backlog items. Run the test. Confirm it **passes** (and previously-green tests stay green). Emit:
+      `~/.claude/scripts/monitor.sh log_event $ARGUMENTS tdd_green <task-id> '{"behavior":"<short label>"}'`
+    - Follow architectural decisions from design.md, language patterns from knowledge-base/languages/, and security rules from both knowledge bases while writing GREEN code.
+    - **On error or unexpected test failure during GREEN** → spawn the `Ultrathink Debugger` agent (`ultrathink-debugger`) with the error output, relevant source files, and task context. The agent must return its findings in the structured format defined in the agent's "Implementation Fix Output" section. Present the agent's diagnosis and proposed fix to the user. On accept: apply the fix and continue the loop. On reject or if the agent cannot resolve the issue: report the failure with the agent's diagnosis and pause for guidance.
+    - **Never refactor while RED.** Get to GREEN first. Move to the next backlog behavior.
+
+11. **Refactor — after the whole backlog is GREEN:**
+   - Extract duplication, deepen modules (small interface / deep implementation), apply SOLID where natural, consider what new code revealed about existing code.
+   - Run the full test suite after each refactor step; revert any step that breaks a test.
+   - Tests are behavior-level and must survive this refactor unchanged — if a test breaks on a pure internal rename, it was testing implementation; fix the test to assert behavior.
+12. Add implementation notes to the task file explaining decisions made (interface choices, backlog deviations, refactors applied)
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), spawn the implement-phase agents from `WF_SPEC_AGENTS_IMPLEMENT` for a pre-validation sanity check. If `WF_SPEC_AGENTS_IMPLEMENT` is empty, skip this step. If it contains `code-quality-pragmatist` or any advisory agent, spawn it using the Agent tool. The spawned agent(s) receive:
