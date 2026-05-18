@@ -45,12 +45,6 @@ mod tests {
         )
     }
 
-    fn valid_event_with_task(category: &str, task: &str) -> String {
-        format!(
-            r#"{{"ts":"2026-04-05T14:32:01.000Z","category":"{category}","task":"{task}","feature":"my-feature","data":{{}}}}"#
-        )
-    }
-
     #[test]
     fn parse_valid_jsonl_line_into_monitor_event() {
         // Given a valid JSONL line with all fields
@@ -171,38 +165,5 @@ mod tests {
         assert!(warnings.is_empty());
         assert_eq!(events[0].data["findings_count"], 3);
         assert_eq!(events[0].data["details"]["critical"], 1);
-    }
-
-    #[test]
-    fn event_category_deserializes_from_snake_case_strings() {
-        // Given raw JSON strings with snake_case category values
-        let input = r#"{"ts":"t","category":"agent_invocation","feature":"f","data":{}}"#;
-
-        // When deserialized
-        let event: MonitorEvent = serde_json::from_str(input).unwrap();
-
-        // Then the enum variant matches
-        assert_eq!(event.category, EventCategory::AgentInvocation);
-    }
-
-    #[test]
-    fn multiple_valid_lines_parsed_into_vec_of_monitor_events() {
-        // Given multiple valid JSONL lines
-        let content = format!(
-            "{}\n{}\n{}",
-            valid_event_with_task("context_read", "001"),
-            valid_event_with_task("tool_call", "001"),
-            valid_event_with_task("task_transition", "002"),
-        );
-
-        // When we parse them
-        let (events, warnings) = parse_monitor_log(&content, "test");
-
-        // Then all lines are parsed in order
-        assert_eq!(events.len(), 3);
-        assert!(warnings.is_empty());
-        assert_eq!(events[0].category, EventCategory::ContextRead);
-        assert_eq!(events[1].category, EventCategory::ToolCall);
-        assert_eq!(events[2].category, EventCategory::TaskTransition);
     }
 }

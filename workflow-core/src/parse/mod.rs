@@ -1,7 +1,7 @@
 mod frontmatter;
 mod monitor_parser;
 mod report_parser;
-pub mod scanner;
+mod scanner;
 mod task_parser;
 mod warning;
 

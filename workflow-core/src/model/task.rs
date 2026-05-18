@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use serde::de::{self, Deserializer};
+use serde::de::Deserializer;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -65,43 +65,42 @@ pub struct Task {
     pub interaction: Interaction,
 }
 
-/// Deserialize a value that can be either a number or a list of strings.
-/// A bare number becomes an empty vec; a list is kept as-is.
-fn deserialize_flexible_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum FlexVec {
-        #[allow(dead_code)]
-        Num(u32),
-        List(Vec<String>),
-    }
-
-    match FlexVec::deserialize(deserializer) {
-        Ok(FlexVec::List(v)) => Ok(v),
-        Ok(FlexVec::Num(_)) => Ok(Vec::new()),
-        Err(_) => Ok(Vec::new()),
-    }
-}
-
-/// Deserialize a value that can be either a number or a string representation of a number.
+/// Deserialize a u32 from any YAML scalar (number or quoted string).
 fn deserialize_flexible_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
     D: Deserializer<'de>,
 {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum FlexNum {
-        Num(u32),
-        Str(String),
+    let value = serde_yml::Value::deserialize(deserializer)?;
+    match value {
+        serde_yml::Value::Number(n) => n
+            .as_u64()
+            .map(|v| v as u32)
+            .ok_or_else(|| serde::de::Error::custom("expected unsigned integer")),
+        serde_yml::Value::String(s) => s.parse().map_err(serde::de::Error::custom),
+        serde_yml::Value::Null => Ok(0),
+        _ => Ok(0),
     }
+}
 
-    match FlexNum::deserialize(deserializer) {
-        Ok(FlexNum::Num(n)) => Ok(n),
-        Ok(FlexNum::Str(s)) => s.parse().map_err(de::Error::custom),
-        Err(_) => Ok(0),
+/// Deserialize a list of strings from any YAML sequence; non-sequence values yield an empty vec.
+fn deserialize_flexible_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_yml::Value::deserialize(deserializer)?;
+    match value {
+        serde_yml::Value::Sequence(seq) => seq
+            .into_iter()
+            .map(|v| match v {
+                serde_yml::Value::String(s) => Ok(s),
+                other => Ok(serde_yml::to_string(&other)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string()),
+            })
+            .collect(),
+        serde_yml::Value::Null => Ok(Vec::new()),
+        _ => Ok(Vec::new()),
     }
 }
 
