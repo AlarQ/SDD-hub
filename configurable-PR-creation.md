@@ -101,7 +101,7 @@
      - /validate-impl may run before the spec PR exists in single-branch — fine, diff range independent of PR.
      - Snapshot includes branch_strategy → /ship drift check catches mid-spec flip.
 
-     Tests
+     Tests — ✅ IMPLEMENTED (odium-validated; 2 findings fixed: vacuous no-partial assertion restructured to pre-seed + capture rc separately; tautological inferencer enum test hardened — validate_schema_shape now enforces branch_strategy enum + negative case added. Snapshot/drift placed in test-config-loader.sh, not test-implement-context.sh, since that's the loader's test home — plan L109 text inconsistent but behavior covered.)
 
      - tests/test-config-loader.sh: branch_strategy default→per-task, single-branch exported, invalid→rc4 + vars unset, export --spec emits line. Model on
      test_loader_track_* (L608–619).

@@ -630,6 +630,66 @@ test_loader_track_invalid_exit_4() {
   [[ "$rc" == "4" ]] && grep -q "track invalid" "$err"
 }
 
+test_loader_branch_strategy_defaults_per_task() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: small\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_BRANCH_STRATEGY" == "per-task" ]] )
+}
+
+test_loader_branch_strategy_single_branch_exported() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\nbranch_strategy: single-branch\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_BRANCH_STRATEGY" == "single-branch" ]] )
+}
+
+test_loader_branch_strategy_invalid_exit_4_no_partial() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: small\nbranch_strategy: bogus\n' > "$repo/specs/demo/config.yml"
+  local rc=0 err="$TEST_TMPDIR/err"
+  # Pre-seed WF_BRANCH_STRATEGY to a non-empty value; wf__unset_partials must
+  # clear it on the exit-4 path. Capture loader rc separately from the echo so
+  # the no-partial assertion is not short-circuited by the && chain.
+  ( cd "$repo" && source "$LOADER"
+    WF_BRANCH_STRATEGY="stale-value"
+    wf_load_config --spec demo; rc=$?
+    echo "VAR=${WF_BRANCH_STRATEGY:-UNSET}"
+    exit $rc ) >"$TEST_TMPDIR/out" 2>"$err" || rc=$?
+  [[ "$rc" == "4" ]] || return 1
+  grep -q "branch_strategy invalid" "$err" || return 1
+  # no partial export: WF_BRANCH_STRATEGY must be unset (not the stale or bogus value)
+  grep -q "^VAR=UNSET$" "$TEST_TMPDIR/out"
+}
+
+test_loader_branch_strategy_export_emits_line() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\nbranch_strategy: single-branch\n' > "$repo/specs/demo/config.yml"
+  local out
+  out="$(cd "$repo" && "$LOADER" export --spec demo 2>/dev/null)"
+  echo "$out" | grep -qE "^WF_BRANCH_STRATEGY='?single-branch'?$"
+}
+
+test_loader_snapshot_includes_branch_strategy_drift_detected() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\nbranch_strategy: per-task\n' > "$repo/specs/demo/config.yml"
+  local snap="$TEST_TMPDIR/snap.json"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && wf_write_snapshot "$snap" ) || return 1
+  grep -q '"branch_strategy": *"per-task"' "$snap" || return 1
+  # Flip the axis mid-spec; drift check must catch it.
+  printf 'tier: medium\nbranch_strategy: single-branch\n' > "$repo/specs/demo/config.yml"
+  local rc=0
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && wf_check_snapshot_drift "$snap" ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" != "0" ]]
+}
+
 echo "=== test-config-loader.sh ==="
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
@@ -671,6 +731,11 @@ run_test "repo CWD unchanged: WF_VAULT_ROOT unset"      test_repo_cwd_unchanged_
 run_test "track absent defaults to feature"             test_loader_track_defaults_feature
 run_test "track: technical exported"                    test_loader_track_technical_exported
 run_test "track invalid value exits 4"                  test_loader_track_invalid_exit_4
+run_test "branch_strategy absent defaults to per-task"  test_loader_branch_strategy_defaults_per_task
+run_test "branch_strategy: single-branch exported"      test_loader_branch_strategy_single_branch_exported
+run_test "branch_strategy invalid exits 4, no partial"  test_loader_branch_strategy_invalid_exit_4_no_partial
+run_test "branch_strategy export emits WF_ line"        test_loader_branch_strategy_export_emits_line
+run_test "snapshot includes branch_strategy; drift caught" test_loader_snapshot_includes_branch_strategy_drift_detected
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
