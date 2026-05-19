@@ -141,7 +141,7 @@ two-layer/prefix tables and "never modified by feedback loop" line.
 - `onboarding.md`, `plan.md`: sweep `knowledge-base/`, `gates.yml`,
   `project KB`, `/promote-rules`, prefix convention.
 
-### 12. `docs/workflow-diagram.md` (Mermaid — flow change, mandatory per CLAUDE.md)
+### 12. `docs/workflow-diagram.md` (Mermaid — flow change, mandatory per CLAUDE.md) ✅ IMPLEMENTED
 - `REPO_MODE`/`REPO_GATE` node labels → inline `gate_pool` / thin
   `.workflow.yml kind: repo-gate-pool`.
 - Collapse `GKB`+`PKB` → single `GKB`; repoint `RF`/`LFR`/`IM` edges to `GKB`;
