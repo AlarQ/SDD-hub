@@ -86,6 +86,13 @@ validate_schema_shape() {
   local agents; agents="$(yq e '.agents' "$file")" || return 1
   [[ "$agents" != "null" ]] || { echo "  agents is null in $file" >&2; fail=1; }
 
+  # branch_strategy is optional; when present it must be a valid enum value
+  local bs; bs="$(yq e '.branch_strategy' "$file")" || return 1
+  if [[ "$bs" != "null" ]]; then
+    [[ "$bs" == "per-task" || "$bs" == "single-branch" ]] \
+      || { echo "  branch_strategy invalid enum '$bs' in $file" >&2; fail=1; }
+  fi
+
   for phase in explore propose implement validate pr-review; do
     local val; val="$(yq e ".agents.\"$phase\"" "$file" 2>/dev/null)"
     if [[ "$val" == "null" ]]; then
@@ -413,6 +420,60 @@ test_monitor_events_documented() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Test: branch_strategy axis documented in agent def (schema + rubric + default)
+# ──────────────────────────────────────────────────────────────────────────────
+test_branch_strategy_documented_in_agent_def() {
+  local fail=0
+  grep -q 'branch_strategy: per-task | single-branch' "$AGENT_DEF" \
+    || { echo "  branch_strategy not in Output Contract schema" >&2; fail=1; }
+  grep -qi 'Branch Strategy' "$AGENT_DEF" \
+    || { echo "  Branch Strategy inference rubric missing" >&2; fail=1; }
+  grep -q 'branch_strategy: per-task  # safe default in fallback' "$AGENT_DEF" \
+    || { echo "  fallback default branch_strategy missing" >&2; fail=1; }
+  return $fail
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test: inferencer output carrying branch_strategy key parses; value is enum
+# ──────────────────────────────────────────────────────────────────────────────
+test_branch_strategy_key_valid_in_output() {
+  local out_file="$TEST_TMPDIR/config-bs.yml"
+  cat > "$out_file" <<'YAML'
+tags: [rust]
+branch_strategy: single-branch
+gates:
+  - rust-clippy
+agents:
+  explore: []
+  propose: []
+  implement: []
+  validate: []
+  pr-review: []
+YAML
+  # Positive: valid enum value passes schema validation.
+  validate_schema_shape "$out_file" || return 1
+
+  # Negative: an out-of-enum branch_strategy must be rejected by the validator
+  # (proves the check is real, not a tautology over a self-written value).
+  local bad_file="$TEST_TMPDIR/config-bs-bad.yml"
+  cat > "$bad_file" <<'YAML'
+tags: [rust]
+branch_strategy: bogus-strategy
+gates: []
+agents:
+  explore: []
+  propose: []
+  implement: []
+  validate: []
+  pr-review: []
+YAML
+  if validate_schema_shape "$bad_file" 2>/dev/null; then
+    echo "  validator accepted invalid branch_strategy" >&2
+    return 1
+  fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Run all tests
 # ──────────────────────────────────────────────────────────────────────────────
 echo "=== test-inferencer-schema.sh (T008) ==="
@@ -455,6 +516,12 @@ run_test "negative-shape: Cargo.toml-only signals include rust gate, exclude pyt
 
 run_test "inferencer inputs and outputs logged to monitor events" \
   test_monitor_events_documented
+
+run_test "branch_strategy axis documented in agent def" \
+  test_branch_strategy_documented_in_agent_def
+
+run_test "inferencer output branch_strategy key is a valid enum" \
+  test_branch_strategy_key_valid_in_output
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

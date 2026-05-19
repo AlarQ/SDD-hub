@@ -96,6 +96,15 @@ _Avoid_: MVP, increment.
 A Task's `interaction` field. **HITL** = needs a human-in-the-loop decision; **AFK** = autonomously implementable and mergeable (preferred default).
 _Avoid_: manual/auto, interactive/batch.
 
+**Branch strategy**:
+A Feature's per-spec `branch_strategy` axis (`per-task | single-branch`),
+orthogonal to Tier/Track; inferred at `/explore` step 0, user-approved, absent → `per-task`. **per-task** = `feat/<feature>` integration branch + a per-Task sub-branch and one draft PR per Task (today's default). **single-branch** = one `feat/<feature>` branch off `main`, commits accumulate, no per-Task PR — one spec PR opened at the final `/ship` (base `main`).
+_Avoid_: "branch mode", "PR strategy", conflating with Tier.
+
+**task_base_sha**:
+The `git rev-parse HEAD` recorded into a Task's frontmatter at Task start under `single-branch` (via `task-manager.sh set-base-sha`); anchors start-vs-mid detection and the quality diff range (`${task_base_sha}..HEAD`).
+_Avoid_: "base commit", "start sha" (when used loosely).
+
 ### Audits
 
 **Spec audit**:
@@ -118,7 +127,7 @@ _Avoid_: final validation, impl validation.
 - A **Gate** or **Validation agent** produces zero or more **Findings**
 - **Findings** are grouped into **Review units** for accept/reject
 - A **Task** moves through the state machine: `blocked → todo → in-progress → implemented → review → done` (canonical source: `scripts/task-manager.sh`)
-- A **Feature** has exactly one **Tier**; each **Task** carries one **interaction** mode (HITL or AFK)
+- A **Feature** has exactly one **Tier**, one **Track**, and one **Branch strategy**; each **Task** carries one **interaction** mode (HITL or AFK)
 - **Spec audit** precedes implementation; **Task validation** runs per Task; **Spec-completion audit** runs once after the last Task is `done`
 
 ## Flagged ambiguities

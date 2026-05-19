@@ -23,7 +23,7 @@ wf__unset_partials() {
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-        WF_SPEC_TRACK \
+        WF_SPEC_TRACK WF_BRANCH_STRATEGY \
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT \
         WF_SPEC_PROJECT
   local v
@@ -424,6 +424,21 @@ wf_load_config() {
     esac
     WF_SPEC_TRACK="$track"
 
+    # Branch strategy resolution: spec config.yml `branch_strategy` (optional,
+    # default per-task). per-task = current behavior (per-task sub-branch +
+    # per-task draft PR). single-branch = one feat/$FEATURE branch, commits
+    # accumulate, review deferred to one spec PR at final /ship.
+    local branch_strategy
+    branch_strategy="$(wf__json_get "$spec_json" '.branch_strategy' '')" || {
+      wf__err "$spec_cfg: branch_strategy extraction failed"; wf__unset_partials; return 5
+    }
+    case "$branch_strategy" in
+      per-task|single-branch) ;;
+      "") branch_strategy="per-task" ;;
+      *)  wf__err "$spec_cfg: branch_strategy invalid: '$branch_strategy' (expected: per-task, single-branch)"; wf__unset_partials; return 4 ;;
+    esac
+    WF_BRANCH_STRATEGY="$branch_strategy"
+
     local tc fc as
     tc="$(wf__json_get "$spec_json" ".tier_ceiling.tasks" '')"
     fc="$(wf__json_get "$spec_json" ".tier_ceiling.files" '')"
@@ -576,7 +591,7 @@ wf_load_config() {
     WF_SPEC_HAS_CONFIG=1
     export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
            WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-           WF_SPEC_TRACK \
+           WF_SPEC_TRACK WF_BRANCH_STRATEGY \
            WF_REPO_NAMES WF_REPO_PATHS
   fi
 
@@ -632,7 +647,8 @@ gates = sorted(l for l in os.environ.get('WF_SPEC_GATES', '').splitlines() if l)
 agents = {k[len('WF_SPEC_AGENTS_'):].lower(): sorted(v.split())
           for k, v in os.environ.items()
           if k.startswith('WF_SPEC_AGENTS_') and v}
-print(json.dumps({'agents': agents, 'gates': gates}, sort_keys=True))
+branch_strategy = os.environ.get('WF_BRANCH_STRATEGY', '') or 'per-task'
+print(json.dumps({'agents': agents, 'branch_strategy': branch_strategy, 'gates': gates}, sort_keys=True))
 "
 }
 
@@ -678,7 +694,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         WF_GENERAL_KB
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
-        WF_SPEC_TRACK
+        WF_SPEC_TRACK WF_BRANCH_STRATEGY
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
         WF_SPEC_PROJECT
       )

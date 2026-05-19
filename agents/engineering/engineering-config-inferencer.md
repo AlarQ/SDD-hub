@@ -44,6 +44,7 @@ Produce YAML matching this exact schema:
 ```yaml
 tier: small | medium | large    # required
 track: feature | technical       # optional, default feature
+branch_strategy: per-task | single-branch  # optional, default per-task
 tags: [list of 1-5 relevant tags, each ^[a-zA-Z0-9_-]{1,32}$]
 gates:
   - <gate-id>          # each must exist in the provided gate_pool
@@ -105,6 +106,17 @@ Signals for `technical`: PRD/description phrased as "refactor X", "decouple A fr
 
 `track` and `tier` are independent — a `technical` spec can be any tier (a small rename vs. a large service decoupling). Apply the Tier rubric unchanged.
 
+### Branch Strategy Inference Rubric
+
+Classify as `per-task` or `single-branch`. **Default `per-task`** — emit `single-branch` only on a clear signal.
+
+| Strategy | Heuristic |
+|----------|-----------|
+| `per-task` (default) | Normal work. Tasks are independently reviewable; per-task PR review surface is wanted. |
+| `single-branch` | Caller explicitly asks for "one branch" / "one PR" / "no per-task PRs"; **or** a small, tightly-coupled, single-author refactor or spike where per-task PR overhead outweighs incremental review (commits accumulate on `feat/$FEATURE`, one spec PR at final `/ship`). |
+
+`single-branch` is independent of `tier` and `track`, but pairs most often with `track: technical`. When unsure, choose `per-task` — it preserves incremental reviewability and per-task revert granularity.
+
 ### ID Validation Rules
 
 **Gate IDs:** must match `^[a-zA-Z0-9_-]{1,64}$` AND exist in the provided `gate_pool`.
@@ -152,6 +164,7 @@ Agents selected: <phase: agents with reason>
 ```yaml
 tier: <small|medium|large>
 track: <feature|technical>
+branch_strategy: <per-task|single-branch>
 tags: [...]
 gates:
   - ...
@@ -191,6 +204,7 @@ Then emit a minimal default template:
 ```yaml
 tier: medium    # safe default in fallback — never small (would skip agent gates)
 track: feature  # safe default in fallback
+branch_strategy: per-task  # safe default in fallback
 tags: []
 gates: []
 agents:

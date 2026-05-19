@@ -52,7 +52,7 @@ If `$ARGUMENTS` is non-empty (feature name provided), spawn the `Config Inferenc
 - `WF_SPEC_STORAGE_MODE` value (`repo` or `vault`)
 - When `WF_SPEC_STORAGE_MODE=vault`: the `default_repos[]` block from `.workflow.yml`, and the resolved `$proj` (project segment). Path verification already ran in the loader (exit 7 on bad path) so the inferencer can trust the entries — it only decides which subset the spec needs.
 
-Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block. Include `track:` per the Track Inference Rubric. In vault mode, seed `repos:` from `default_repos[]` (select the subset the spec needs) and emit `project: <proj>`." If `--technical` was given, append: "The caller passed `--technical` — emit `track: technical` regardless of heuristic."
+Instruct: "Infer a draft `config.yml` for this spec. Use the Output Contract defined in your agent definition. Return REASONING block and YAML block. Include `track:` per the Track Inference Rubric and `branch_strategy:` per the Branch Strategy Inference Rubric (default `per-task`). In vault mode, seed `repos:` from `default_repos[]` (select the subset the spec needs) and emit `project: <proj>`." If `--technical` was given, append: "The caller passed `--technical` — emit `track: technical` regardless of heuristic."
 
 **On success:** emit `config_inferred` monitor event now (before showing the approval summary):
 ```bash

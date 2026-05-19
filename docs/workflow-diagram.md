@@ -23,6 +23,8 @@ Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and 
 
 `/explore` step 0 also sets `WF_SPEC_TRACK` (`feature` default | `technical`), orthogonal to tier. On the **technical track** `/propose` writes **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md; rationale comes from `docs/adr/` + `CONTEXT.md`), and hard-refuses for `medium`/`large` until `/grill` has produced a non-empty `docs/adr/` (`small` is exempt). Per-task `technical_acceptance` seeds the `/implement` TDD backlog; `/validate-impl` adds an advisory finding if those items lack red→green evidence. All other flow (validate gates, state machine, ship) is unchanged.
 
+`/explore` step 0 also sets `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`), orthogonal to tier/track. Under **per-task** the chain is unchanged: per-task sub-branch, draft PR, `/pr-review`, one PR per task into `feat/$FEATURE`. Under **single-branch** there is no per-task sub-branch and **no draft PR** — `/implement` → `tier-check` → `/validate` directly (no DPR/PRR node); commits accumulate on `feat/$FEATURE` with a per-task `task_base_sha`; the serial gate is "preceding task `done`". On a **non-last** task `/ship` only pushes (`/ship` → `/implement` next); on the **last** task `/ship` opens/readies **one spec PR with base `main`**. `/pr-review` mid-spec is an intended clean dead-end. See `docs/adr/0003-branch-strategy.md`. (ADR-0003)
+
 ```mermaid
 graph LR
     subgraph Setup["One-time setup"]
@@ -78,10 +80,12 @@ graph LR
     VSPEC_PRE -->|findings| REV
     VSPEC_PRE -->|pass| IMPL
     IMPL --> TCHK
-    TCHK -->|no breach| DPR
-    TCHK -.->|breach: Continue| DPR
+    TCHK --> BSTR{WF_BRANCH_STRATEGY}
     TCHK -.->|breach: Abort| PROMO
     PROMO -.-> PROP
+    BSTR -->|per-task: no breach| DPR
+    BSTR -.->|per-task: breach Continue| DPR
+    BSTR -->|single-branch| VAL
     DPR -.->|comments present| PRR
     DPR -->|no comments| VAL
     PRR -->|re-loop / new comments| PRR
@@ -93,7 +97,10 @@ graph LR
     REV -->|re-validate| VAL
     REV -->|skip| LEARN
     LEARN --> SHIP
-    SHIP -.->|PR merged| IMPL
+    SHIP -.->|per-task: PR merged| IMPL
+    SHIP -->|single-branch: non-last task, push only| IMPL
+    SHIP -.->|single-branch: last task| SBPR2["spec PR → main<br/>opened/readied once"]
+    SBPR2 -.->|merged| Core
     IMPL -.->|medium/large: last task done| VIMPL
     IMPL -.->|small: skip audit| Core
     VIMPL --> ODIUM
@@ -211,10 +218,18 @@ graph TB
         GKB["$WF_GENERAL_KB (single KB · from .workflow.yml general_kb_path)"]
     end
 
-    subgraph Git
+    subgraph Git["Git — branch_strategy"]
         FEAT[feat/$FEATURE]
-        TBR[feat/$FEATURE/NNN-task]
-        PR[task PR → feat/$FEATURE]
+        subgraph GitPT["per-task (default)"]
+            TBR[feat/$FEATURE/NNN-task]
+            PR[task PR → feat/$FEATURE]
+        end
+        subgraph GitSB["single-branch"]
+            SBC[commits accumulate on feat/$FEATURE<br/>task_base_sha per task]
+            SBPR[one spec PR → main<br/>opened at final /ship only]
+        end
+        FEAT --> TBR
+        FEAT --> SBC
     end
 
     subgraph MultiRepo["Vault mode (spec_storage_mode=vault)"]
@@ -251,11 +266,13 @@ graph TB
 
     TASKS --> IM["/implement"]
     GKB -.-> IM
-    IM --> TBR
+    IM -->|per-task| TBR
+    IM -->|single-branch| SBC
     IM --> CTX
     IM --> JSONL
-    IM -->|step 6a: after branch creation| SNAP
+    IM -->|per-task: step 6a after branch creation| SNAP
 
+    SBC --> VA
     TBR --> VA["/validate"]
     VA --> REPORTS
     REPORTS --> RF["/review-findings"]
@@ -264,8 +281,10 @@ graph TB
     LFR -.->|mined new rules| GKB
 
     TBR --> SH["/ship"]
+    SBC --> SH
     SNAP -.->|drift check| SH
-    SH --> PR
+    SH -->|per-task| PR
+    SH -.->|single-branch: last task only| SBPR
     PR --> FEAT
     WTRP -.->|git -C scoped| IM
     WTRP -.->|gates cd into| VA
@@ -444,11 +463,11 @@ Notes:
 
 ## Key Invariants
 
-- **Serial execution** — one task `in-progress` at a time
-- **Per-task sequence** — `/implement` (opens draft PR) → `/pr-review` (optional loop) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks PR ready), each invoked explicitly by the user
+- **Serial execution** — one task `in-progress` at a time (gate: per-task = preceding PR merged; single-branch = preceding task `done`)
+- **Per-task sequence** — `/implement` → `/pr-review` (optional loop) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship`, each invoked explicitly by the user. Under `branch_strategy: per-task` (default) `/implement` opens a draft PR and `/ship` marks it ready; under `single-branch` there is no per-task draft PR and `/pr-review` is an inert dead-end mid-spec (see ADR-0003)
 - **All-gates** — all configured validation gates (from `WF_SPEC_AGENTS_VALIDATE` ∩ ceiling) must pass before `done`
 - **Single KB** — one knowledge base (`$WF_GENERAL_KB`); no project-KB layer (ADR-0002). Feedback loop writes learned rules here.
-- **One PR per task** — target is `feat/$FEATURE`, not `main`
+- **PR shape per `branch_strategy`** — `per-task` (default): one PR per task, base `feat/$FEATURE`. `single-branch`: no per-task PR; one spec PR opened/readied at the final `/ship`, base `main` (ADR-0003)
 - **Ground rules** — bare `$WF_GENERAL_KB`-relative paths (e.g. `security/general.md`). Legacy `general:`/`project:`/`repo:<name>:` prefixes stripped by migration shim + one-time-per-process deprecation warn. Missing `$WF_GENERAL_KB` → exit 7.
 - **Vault mode** — `spec_storage_mode: vault` + thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only; no vault `gate_pool` except self-hosting exception). `spec_storage` uses `{project}` token. Per-spec `repos[]` bind code repos; gates resolve per-task from the bound repo's thin `.workflow.yml gate_pool` (`WF_TASK_REPO_PATH`, `WF_TASK_GATE_POOL`). One task = one repo. PR opens in that repo's remote only. `/bootstrap`: vault-init once + repo-gate-init per target repo.
 - **No YAML edits** — all status changes via `task-manager.sh`

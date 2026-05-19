@@ -48,6 +48,18 @@
 #               (/propose hard-refuses without docs/adr), optional for small.
 #               Per-task technical_acceptance drives the TDD loop.
 
+# branch_strategy: per-task | single-branch
+#   Optional, default `per-task`. Inferred by config-inferencer at /explore
+#   step 0 (user-approved).
+#   per-task      = current behavior: integration branch feat/$FEATURE +
+#                   per-task sub-branch feat/$FEATURE/<task> + per-task draft
+#                   PR (base feat/$FEATURE).
+#   single-branch = one feat/$FEATURE branch off main; no per-task sub-branch;
+#                   commits accumulate; no per-task PR. One spec PR opened/
+#                   readied at the final /ship (base main). For tightly-coupled
+#                   refactors/spikes where per-task PR overhead is unwanted.
+#                   TDD red/green/refactor commits preserved (no squash).
+
 # tier_ceiling:
 #   Optional per-spec override of .workflow.yml tiers.<tier> thresholds.
 #   tasks: <int|null>

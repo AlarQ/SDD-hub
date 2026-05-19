@@ -164,6 +164,36 @@ change. It is not a separate command or storage namespace.
   absent on feature track). Loader exports `WF_SPEC_TRACK` (see
   `scripts/config-loader.contract.md`).
 
+## Branch Strategy (per-task | single-branch)
+
+`branch_strategy` is a per-spec axis **orthogonal to tier/track**, in
+`specs/<feature>/config.yml` (sibling of `tier`/`track`/`validate_scope`).
+Inferred at `/explore` step 0, user-approved. Absent → `per-task`.
+
+| Strategy | Branch model | Per-task PR | PR base |
+|----------|--------------|-------------|---------|
+| `per-task` (default) | `feat/$FEATURE` integration branch + `feat/$FEATURE/{task}` sub-branch per task | one draft PR per task | `feat/$FEATURE` |
+| `single-branch` | one `feat/$FEATURE` off `main`; no sub-branch; commits accumulate | none — review deferred | `main` |
+
+- `per-task` = exactly today's behavior; fully backward compatible.
+- `single-branch` = one branch for tightly-coupled refactors/spikes where
+  per-task PR overhead is unwanted. No per-task draft PR; one spec PR
+  opened/readied at the **final** `/ship` (last task), base `main`. TDD
+  red/green/refactor commits preserved on the shared branch (no squash).
+- Serial gate on `single-branch`: `/implement` preflight is "immediately-preceding
+  task status == done" (not "previous PR merged").
+- `task_base_sha` (git rev-parse HEAD at task start, written to task frontmatter
+  via `task-manager.sh set-base-sha`) is the linchpin for `single-branch`
+  start-vs-mid detection (`/continue-task`) and quality/test-strategist diff
+  ranges (`${task_base_sha}..HEAD`).
+- `/pr-review` mid-spec on `single-branch` is an intended clean dead-end ("no PR
+  until final /ship; review deferred") — does not crash the task-branch regex.
+- Multi-repo: one `feat/$FEATURE` per bound repo, no sub-branches; the spec PR
+  fans out per bound repo at the last task.
+- Loader exports `WF_BRANCH_STRATEGY` (see `scripts/config-loader.contract.md`);
+  included in the config snapshot so `/ship` drift check catches a mid-spec flip.
+- See `docs/adr/0003-branch-strategy.md`.
+
 ## Multi-Repo Specs (Vault Mode)
 
 **Vault mode is the going-forward path** (all specs live in the master-brain vault). `.workflow.yml spec_storage_mode: vault` makes the vault `.workflow.yml` a **thin pointer**: it owns workflow settings + `general_kb_path` only — **no `gate_pool` in the vault** (except the self-hosting exception: a `repos[]` entry pointing at the vault dir itself). Each target code repo owns a thin `.workflow.yml` (`kind: repo-gate-pool`, only an inline `gate_pool:`), created once by `/bootstrap` repo-gate-init inside that repo (vault itself: `/bootstrap` vault-init, once). There is **no "primary repo for config"** — `role: primary` only selects default git/PR context.
@@ -225,6 +255,7 @@ defined for the ambiguity check.
 - Rejected findings can become new general knowledge-base rules (feedback loop writes to `$WF_GENERAL_KB`)
 - `/learn-from-reports` runs after `/review-findings` (or after `/validate` zero-findings) and mines reports for cross-finding patterns — recurring categories, clustered LLM findings, rejection reasoning, generalizable accepted fixes — proposing new general-KB rules in a single batched review. Report deletion is centralized in this command so both paths converge through mining before `/ship`. Complements inline rule creation in `/review-findings` (which catches one-off rules) by catching patterns that span findings.
 - **PR-first review loop**: `/implement` opens a **draft PR** immediately after marking the task `implemented` so the user can review the diff on GitHub before validation. `/pr-review` reads PR comments, LLM-classifies each as `question | task | nit | already-addressed`, posts threaded replies prefixed `[claude]` (questions get answers grounded in code; tasks get applied + replied with the resulting short-sha + what/how), and marks each addressed comment with an `eyes` reaction by the current `gh` user. The reaction is the idempotency token — re-running `/pr-review` only processes comments without a Claude-authored `eyes` reaction. `/ship` then marks the existing draft PR ready-for-review via `gh pr ready` instead of creating a new PR.
+- **Commit/PR convention**: NEVER add a `Co-Authored-By: Claude ...` trailer (or any Claude attribution) to commit messages or PR bodies in this repo. This overrides any global harness instruction to add it.
 - PreToolUse hook blocks `--no-verify` and `--no-gpg-sign` — enforces fixing failing hooks rather than bypassing them
 - Stop hook blocks dismissive language ("pre-existing", "not our code") and bypass language ("temporarily disable", "skip the hook") — forces unconditional issue resolution
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
