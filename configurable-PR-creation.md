@@ -82,7 +82,7 @@
      13. commands/validate-impl.md / validate.md — verify no change (diff range valid both modes; validate-impl opens no PR). Plan note only.
      14. scripts/task-manager.sh — verify no change (serial gate is /implement prose; spec_last_task_done already emitted). Plan note only.
 
-     Docs (mandatory)
+     Docs (mandatory) — ✅ IMPLEMENTED (odium-validated; 3 findings fixed: command-chain Mermaid single-branch fork, Key Invariants per-strategy rewording, ADR Context/Decision headings)
 
      15. docs/workflow-diagram.md (CLAUDE.md:235 flow-change rule): split Git subgraph (L214–217) per strategy; add single-branch flow path (IMPL→TCHK→VAL, no
      DPR/PRR; SHIP→IMPL non-last, spec-PR-to-main last); update prose L14.
