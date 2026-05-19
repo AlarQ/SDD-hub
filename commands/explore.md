@@ -46,7 +46,7 @@ create the spec dir: `mkdir -p "$WF_SPEC_STORAGE/<feature>"`. Do not mkdir while
 If `$ARGUMENTS` is non-empty (feature name provided), spawn the `Config Inferencer` agent (`engineering-config-inferencer`) using the Agent tool. Pass:
 - The feature name (`$ARGUMENTS`)
 - Any PRD or description already available at `$WF_SPEC_STORAGE/$ARGUMENTS/prd.md` (read if it exists; omit if not)
-- Gate registry contents: in repo mode, the full contents of `knowledge-base/gates.yml` (if it exists). In vault mode (`WF_SPEC_STORAGE_MODE=vault`, no `gates.yml` at the vault root) the concatenated contents of each `default_repos[]` repo's `knowledge-base/gates.yml`, labeled by repo name — never pass nothing, the inferencer needs the gate list to propose a ceiling.
+- Gate registry contents: in repo mode, the inline `gate_pool:` from `$WF_GATE_POOL` (the repo's `.workflow.yml`, if it exists). In vault mode (`WF_SPEC_STORAGE_MODE=vault`, no `gate_pool` at the vault root) the concatenated `.gate_pool` blocks of each `default_repos[]` repo's `.workflow.yml`, labeled by repo name — never pass nothing, the inferencer needs the gate list to propose a ceiling.
 - A listing of all agent files under the configured `agent_pool` directory
 - The project's `CLAUDE.md`
 - `WF_SPEC_STORAGE_MODE` value (`repo` or `vault`)

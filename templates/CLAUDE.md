@@ -4,9 +4,9 @@
 This project uses a custom spec-driven development workflow with validation gates.
 
 ### Flow
-0. `/bootstrap` — create project-specific knowledge-base (once per project)
+0. `/bootstrap` — create `.workflow.yml` with inline `gate_pool:` (once per project)
 1. `/explore` — investigate and clarify requirements
-2. `/propose <name>` — generate spec, design, tasks with knowledge-base rules
+2. `/propose <name>` — generate spec, design, tasks with KB rules
 3. Human reviews artifacts, requests changes conversationally (edits to existing files)
 4. `/implement <name>` — implement tasks one at a time (one branch per task)
 5. `/validate <name>` — run validation gates (security, code-quality, architecture, compliance, testing)
@@ -24,36 +24,32 @@ This project uses a custom spec-driven development workflow with validation gate
 - A task cannot start if any other task is `implemented` or `review` (enforce validation-first)
 - When a task reaches `done`, all tasks blocked by it are checked and unblocked if ready
 
-### Dual Knowledge Base
-Two knowledge bases work together:
+### Single Knowledge Base
+One knowledge base (ADR-0002 in the dev-workflow repo collapsed the old dual layer):
 
-- **General KB** (`$WF_GENERAL_KB/`) — universal rules. Path is configured per-repo via `general_kb_path` in `.workflow.yml` (required key, no default) and exported by `scripts/config-loader.sh`. Typically points at a master-brain / shared vault. Contains security, architecture, testing, and style rules that apply across all projects.
-- **Project KB** (`knowledge-base/`) — project-specific rules created via `/bootstrap`. Contains language files and conventions discovered via the feedback loop.
+- **General KB** (`$WF_GENERAL_KB/`) — all KB rules. Path is configured per-repo via `general_kb_path` in `.workflow.yml` (required key, no default) and exported by `scripts/config-loader.sh`. Typically points at a master-brain / shared vault. Contains security, architecture, testing, style, plus learned language/convention rules. There is no per-repo `knowledge-base/` directory.
 
-Both are read by all commands. Project rules override general rules on the same topic.
+Read by all commands. The feedback loop (`/review-findings`, `/learn-from-reports`, `/capture-rule`) writes learned rules here.
 
-#### ground_rules Prefix Convention
-The `ground_rules` field on each task uses prefixes to reference rules from either KB:
-- `general:security/general.md` → resolves to `$WF_GENERAL_KB/security/general.md`
-- `project:languages/rust.md` → resolves to `knowledge-base/languages/rust.md`
-- Unprefixed paths default to `project:` for backward compatibility
+#### ground_rules Paths
+The `ground_rules` field on each task is **bare `$WF_GENERAL_KB`-relative paths** (e.g. `security/general.md`, `languages/rust.md`). Legacy `general:`/`project:`/`repo:<name>:` prefixes are stripped by a migration shim (one-time per-process deprecation warning) and resolved under `$WF_GENERAL_KB`.
 
 ### Rule Selection
 - The `ground_rules` field on each task is the single source of truth for which knowledge-base rules apply during `/implement` and `/validate`
 - Rules are selected during `/propose` and reviewed by human during spec review
 
 ### Validation
-- Gates in `knowledge-base/gates.yml` with `blocking: true` are mandatory for matching `ground_rules` — every gate must run
+- Gates in `.workflow.yml gate_pool:` with `blocking: true` are mandatory for matching `ground_rules` — every gate must run
 - Deterministic tool findings (`source: tool`) are high-confidence
 - Agent-based analysis findings (`source: llm`) are advisory — human decides
 - All findings go through `/review-findings` where human is final authority
 
 ### Agent-Powered Validation Gates
 `/validate` spawns specialized agents in parallel for advisory analysis:
-- **security** → `Security Engineer` agent — OWASP, CWE, secrets, input validation (checks both general and project security rules)
-- **code-quality** → `Code Quality Pragmatist` agent — over-engineering, DRY, modularity (checks both general and project style rules)
-- **architecture** → `Software Architect` agent (read-only) — DDD, layering, coupling (checks both general and project architecture rules)
-- **compliance** → `CLAUDE.md Compliance Checker` agent — CLAUDE.md + project knowledge-base conventions and languages
+- **security** → `Security Engineer` agent — OWASP, CWE, secrets, input validation (checks general-KB security rules)
+- **code-quality** → `Code Quality Pragmatist` agent — over-engineering, DRY, modularity (checks general-KB style rules)
+- **architecture** → `Software Architect` agent (read-only) — DDD, layering, coupling (checks general-KB architecture rules)
+- **compliance** → `CLAUDE.md Compliance Checker` agent — CLAUDE.md + general-KB conventions and languages
 
 Agents run alongside deterministic tools. Agent findings are advisory; tool findings are hard gates.
 
@@ -76,11 +72,10 @@ Agents run alongside deterministic tools. Agent findings are advisory; tool find
 - Human PR comments are handled separately after agent review
 
 ### Ground Rules
-- General rules live in `$WF_GENERAL_KB/` — universal across all projects
-- Project rules live in `knowledge-base/` — specific to this repository
-- Both must exist — commands refuse to run without either
-- Rejected validation findings may become new rules in project knowledge-base/
-- New rules always go to the project KB, never the general KB
+- All KB rules live in `$WF_GENERAL_KB/` — single knowledge base
+- `$WF_GENERAL_KB` must resolve — commands refuse to run without it (loader exit 2)
+- Rejected validation findings may become new rules in `$WF_GENERAL_KB/`
+- New rules go to the general KB (no project-KB layer)
 - Every line of code must be reviewable by human — keep tasks small (max 20 files)
 - AI explains architectural decisions against ground rules
 - TDD/BDD: human defines test case names, AI implements test bodies

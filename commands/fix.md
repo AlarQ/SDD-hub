@@ -83,7 +83,7 @@ Apply the fix inline. Single branch `fix/<slug>` off `main`. No separate task fi
 
 ## Step 6 — Validate
 
-Run gates from `knowledge-base/gates.yml` whose `applies_to` matches the touched files' inferred ground rules. Skip Phase-2 agent gates (security, code-quality, architecture, compliance) by default unless the diff touches security-sensitive paths (auth/, crypto/, migrations/) — in that case spawn `Security Engineer` advisory only.
+Run gates from `.workflow.yml gate_pool:` whose `applies_to` matches the touched files' inferred ground rules. Skip Phase-2 agent gates (security, code-quality, architecture, compliance) by default unless the diff touches security-sensitive paths (auth/, crypto/, migrations/) — in that case spawn `Security Engineer` advisory only.
 
 No `/validate-spec`. No `/validate-impl`. No `/learn-from-reports` unless a finding is rejected and produces a generalizable rule (then it is written to the general KB).
 

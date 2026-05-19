@@ -173,7 +173,7 @@ Incorporate all agent outputs directly into design.md:
 - Include UI Designer component specs in a `## UI Specifications` section (if spawned)
 - Include AI Engineer model/pipeline design in a `## AI/ML Architecture` section (if spawned)
 - Module boundaries, dependency direction, data flow
-- Reference `knowledge-base/languages/` for language-specific patterns
+- Reference `$WF_GENERAL_KB/languages/` for language-specific patterns
 
 ##### Embedding Mermaid Diagrams in design.md (large tier)
 Embed every Mermaid block emitted by an agent verbatim under the section that holds the corresponding text:

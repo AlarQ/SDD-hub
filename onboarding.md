@@ -1,6 +1,6 @@
 # Spec-Driven Dev Workflow: Onboarding Guide
 
-A file-based, spec-driven development workflow for Claude Code that adds validation gates, interactive finding review, and a knowledge-base feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code that adds validation gates, interactive finding review, and a knowledge-base (single general KB) feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ This installs:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 - 35+ agent definitions to `~/.claude/agents/`
 
-These are global — they work across every project that has a knowledge-base bootstrapped.
+These are global — they work across every project that has been bootstrapped with `/bootstrap`.
 
 Verify:
 ```bash
@@ -172,7 +172,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 ### Stage 2: `/propose <name>` (spec generation)
 
-**What it does:** Generates the full spec package from the PRD (or conversation context). Reads applicable knowledge-base rules and references them throughout.
+**What it does:** Generates the full spec package from the PRD (or conversation context). Reads applicable KB rules from `$WF_GENERAL_KB` and references them throughout.
 
 **Produces:**
 - `specs/<name>/spec.md` — functional spec with BDD scenarios (Given/When/Then)
@@ -271,7 +271,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 ### Stage 8: `/pr-review` (PR comment loop)
 
-**What it does:** Fetches unresolved PR comments via `gh`, reads referenced files and applicable knowledge-base rules, generates fix proposals. You accept or reject each proposal. Accepted fixes are committed with a reference to the comment.
+**What it does:** Fetches unresolved PR comments via `gh`, reads referenced files and applicable KB rules from `$WF_GENERAL_KB`, generates fix proposals. You accept or reject each proposal. Accepted fixes are committed with a reference to the comment.
 
 **Key detail:** PR review fixes do NOT trigger re-validation. The PR reviewer is the safety net at this stage. Task status stays `done`.
 

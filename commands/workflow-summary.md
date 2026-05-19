@@ -13,7 +13,7 @@ Print the following reference card exactly:
 ### Commands
 | # | Command | Purpose |
 |---|---------|---------|
-| 0 | `/bootstrap` | Create project knowledge-base (once per project) |
+| 0 | `/bootstrap` | Create `.workflow.yml` with inline `gate_pool:` (once per project) |
 | 1 | `/explore` | Clarify requirements conversationally |
 | 2 | `/propose <name>` | Generate spec, design, and tasks |
 | 3 | *(conversation)* | Human reviews artifacts, requests changes |
@@ -34,22 +34,19 @@ blocked → todo → in-progress → implemented → review → done
 - `review` = findings exist, needs `/review-findings`
 - `done` = validated and all findings resolved; needs `/ship`, then merge PR before next task
 
-### Dual Knowledge Base
-- **General KB** (`$WF_GENERAL_KB/`) — universal rules (security, architecture, testing, style) installed via `setup.sh`
-- **Project KB** (`knowledge-base/`) — project-specific rules (languages, conventions) created via `/bootstrap`
-- Both are read by all commands; project rules override general rules on same topic
-- `ground_rules` prefix convention: `general:security/general.md`, `project:languages/rust.md`
-- Unprefixed paths default to `project:` (backward compatibility)
-- New rules from `/review-findings` always go to the project KB
-- `/capture-rule` captures ad-hoc rules from conversation directly into the general KB
+### Single Knowledge Base (ADR-0002)
+- **General KB** (`$WF_GENERAL_KB/`) — all KB rules (security, architecture, testing, style, learned languages/conventions); path from `general_kb_path` in `.workflow.yml`
+- Read by all commands; no per-repo `knowledge-base/` directory
+- `ground_rules` are bare `$WF_GENERAL_KB`-relative paths (e.g. `security/general.md`); legacy `general:`/`project:`/`repo:<name>:` prefixes stripped + deprecation-warned
+- New rules from `/review-findings`, `/learn-from-reports`, `/capture-rule` all go to the general KB
 
 ### Key Rules
-- **Both knowledge bases are mandatory** — commands refuse without either
+- **`$WF_GENERAL_KB` is mandatory** — commands refuse without it (loader exit 2)
 - **`ground_rules` on each task** = single source of truth for which rules apply
-- **Gates in `knowledge-base/gates.yml`** with `blocking: true` = mandatory for matching `ground_rules` (every gate must run)
+- **Gates in `.workflow.yml gate_pool:`** with `blocking: true` = mandatory for matching `ground_rules` (every gate must run)
 - **Tool findings** (`source: tool`) are high-confidence; **LLM findings** (`source: llm`) are advisory
 - **Human is final authority** on all findings via `/review-findings`
-- **Rejected findings can become new rules** in project knowledge-base (feedback loop)
+- **Rejected findings can become new rules** in the general KB (feedback loop)
 - **Max 20 files per task** — keep PRs reviewable
 - **TDD red-green-refactor** — `/implement` writes one failing test (RED) → minimal code (GREEN) → repeat, then refactor; per-cycle `tdd_red`/`tdd_green` monitor events. Behavior backlog from spec.md BDD + test-strategy.md (human-named scenarios, AI bodies)
 - **Tracks** — `track: feature` (default) = normal spec/design flow. `track: technical` (refactor/decouple/tracing/deploy/tech-debt) = `/propose` writes **tasks/ only** at every tier; rationale from `docs/adr/`+`CONTEXT.md` (`/grill` mandatory for medium/large, optional small); per-task `technical_acceptance` drives the TDD loop. Inferred at `/explore` step 0 or forced via `/explore --technical`

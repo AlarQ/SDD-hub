@@ -1,4 +1,5 @@
-gates:
+# Inline gate_pool fixture with a duplicate id (dup-id validation test).
+gate_pool:
   - id: rust-clippy
     command: "cargo clippy -- -D warnings"
     applies_to: [rust]

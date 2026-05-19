@@ -46,7 +46,7 @@ If the agent errors or times out, report the failure to the user and proceed dir
 1. Group findings by priority: blockers first, then suggestions, then nits
 2. For each finding: print the finding details as plain output, then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Accept this fix?" options: `Accept`, `Reject`. One tool call per finding. Do NOT render accept/reject as a markdown question.
 3. On accept: apply fix, stage the change
-4. On reject: follow up with one `AskUserQuestion` call carrying two questions — (a) free-text "Reason?" and (b) "Promote to project KB rule?" `Yes`/`No`. Update KB only if Yes.
+4. On reject: follow up with one `AskUserQuestion` call carrying two questions — (a) free-text "Reason?" and (b) "Promote to general KB rule?" `Yes`/`No`. Write to `$WF_GENERAL_KB/` only if Yes.
 5. After all agent findings are resolved, commit accepted fixes (if any) with message referencing the agent review
 
 ## Phase 2: Human PR Comments — Classify & Address Loop
