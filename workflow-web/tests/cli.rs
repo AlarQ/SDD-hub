@@ -23,7 +23,10 @@ fn help_lists_every_flag() {
         assert!(help.contains(flag), "--help missing {flag}:\n{help}");
     }
     // Positional root is documented too.
-    assert!(help.to_lowercase().contains("root"), "help missing root arg");
+    assert!(
+        help.to_lowercase().contains("root"),
+        "help missing root arg"
+    );
 }
 
 #[test]
@@ -32,7 +35,11 @@ fn malformed_args_exit_2() {
         .args(["--port", "not-a-number", &fixture("with_projects")])
         .output()
         .expect("spawn bad args");
-    assert_eq!(out.status.code(), Some(2), "clap parse failure must be exit 2");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "clap parse failure must be exit 2"
+    );
 }
 
 /// Wait until `addr` accepts a TCP connection or `deadline` elapses.

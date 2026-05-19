@@ -3,9 +3,9 @@
 //! client). Handlers are added in task 004; the type is defined here so the
 //! router skeleton compiles against a stable contract.
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize)]

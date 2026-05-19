@@ -31,8 +31,9 @@ notify = "=8.2.0"                # fs watchers (task 005)
 # Unpinned (not in SEC-FR-25): registry, semver-compatible.
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
-tracing-subscriber = { version = "0.3", features = ["fmt"] }
-regex = "1"
+# Exact-pinned: both are in the SEC-FR-19 redaction trust path (fmt layer + log-scrubbing regex)
+tracing-subscriber = { version = "=0.3.23", features = ["fmt"] }
+regex = "=1.12.3"
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

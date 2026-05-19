@@ -12,6 +12,7 @@ pub mod tracing_setup;
 
 use app_state::AppState;
 use axum::Router;
+use clap::Parser;
 use config::{Cli, Config};
 use std::sync::Arc;
 
@@ -65,30 +66,23 @@ pub async fn run() -> i32 {
     }
 }
 
-// Re-export clap's `Parser` use site needs.
-use clap::Parser as _;
-
 #[cfg(test)]
 mod seam_tests {
     use super::*;
 
     fn valid_config() -> Arc<Config> {
         // Repo-relative fixture with a real `projects/` subtree.
-        let root = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/with_projects"
-        );
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/with_projects");
         let cli = Cli::parse_from(["workflow-web", root]);
         Arc::new(Config::from_cli(cli).expect("fixture is a valid root"))
     }
 
     #[test]
-    fn appstate_exposes_arc_cache_hub_config() {
+    fn appstate_exposes_cache_hub_config() {
         let cfg = valid_config();
         let state = AppState::new(cfg.clone());
-        // Arc-shared, not owned-by-value (strong count rises on clone).
-        let _c: Arc<app_state::Cache> = state.cache.clone();
-        let _h: Arc<app_state::BroadcastHub> = state.hub.clone();
+        // Fields are plain owned values inside the outer Arc<AppState>.
+        let _boot = state.hub.boot_id();
         assert!(Arc::strong_count(&state.config) >= 1);
         // Config is the same validated, immutable instance.
         assert_eq!(state.config.root(), cfg.root());
