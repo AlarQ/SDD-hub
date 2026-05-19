@@ -110,7 +110,7 @@ two-layer/prefix tables and "never modified by feedback loop" line.
 - Repo mode (Step A) writes full `.workflow.yml` with inline `gate_pool:`.
 - Keep the vault-guard refusal. Drop project-KB prerequisites.
 
-### 8. `commands/review-findings.md` & `commands/learn-from-reports.md`
+### 8. `commands/review-findings.md` & `commands/learn-from-reports.md` ✅ IMPLEMENTED
 - Both: rule write target → `$WF_GENERAL_KB/<category>/<file>.md`, update
   `$WF_GENERAL_KB/_index.md`. Invert "never the general KB" → "write to
   general KB". Drop project-KB resolution refs.

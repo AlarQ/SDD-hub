@@ -20,7 +20,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    - Frontmatter and FR-matrix contract per `~/.claude/scripts/report-schema.md §Spec-audit reports`. Refuse to process if frontmatter is missing required fields or `verdict` is outside the allowed set.
    - Each `missing` or `partial` FR row becomes one review unit (synthetic finding: `source: llm`, severity `high` for missing, `medium` for partial).
    - On **Accept** of a missing/partial FR review unit: invoke `~/.claude/scripts/task-manager.sh create-followup "$ARGUMENTS" "<FR-id>" "<FR description>"`. This subcommand validates the FR id against `spec.md` (fail-closed on unknown ids) and inherits `ground_rules` from the spec's `## Applicable Ground Rules` section.
-   - On **Reject**: the finding remains in the report so `/learn-from-reports` can mine it as a project-KB rule candidate (no inline rule creation needed for spec-audit findings).
+   - On **Reject**: the finding remains in the report so `/learn-from-reports` can mine it as a general-KB rule candidate (no inline rule creation needed for spec-audit findings).
 2. Partition findings: separate `severity: info` findings (informational) from all others (actionable)
 3. Group actionable findings before presenting them:
    a. Sort all actionable findings by file path, then by start line.
@@ -70,8 +70,8 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
        4. **Multi-repo (vault mode):** if the group's `file` paths are relative, resolve them against the owning task's `WF_TASK_REPO_PATH` (per `~/.claude/scripts/multi-repo-resolution.md`). Pass `WF_TASK_REPO_PATH` to the sub-agent in its prompt so edits land inside the bound repo, not the vault.
      - **File exclusivity rule:** Before spawning, check if another sub-agent is currently editing the same file. If so, wait for that sub-agent to complete first, then spawn. Groups targeting different files spawn immediately (parallel).
      - Do NOT wait for the sub-agent to finish before presenting the next group (unless the next group targets the same file — in that case, wait for the previous sub-agent first).
-   - If Reject: invoke `AskUserQuestion` again with two questions in one call — (a) free-text "Reason for rejecting this group?" (open-ended), and (b) "Add reject reasoning as project KB rule?" with options `Yes`/`No`. Use answers to set review_notes on ALL findings in the group; review_status → "rejected".
-   - If the KB-rule answer was `Yes`: create/update the relevant file in the **project** knowledge-base (per `knowledge-base-rules.md`) and update `knowledge-base/_index.md`, set rule_added: true on the relevant finding(s).
+   - If Reject: invoke `AskUserQuestion` again with two questions in one call — (a) free-text "Reason for rejecting this group?" (open-ended), and (b) "Add reject reasoning as general KB rule?" with options `Yes`/`No`. Use answers to set review_notes on ALL findings in the group; review_status → "rejected".
+   - If the KB-rule answer was `Yes`: create/update the relevant file in the general knowledge base at `$WF_GENERAL_KB/<category>/<file>.md` (per `knowledge-base-rules.md`) and update `$WF_GENERAL_KB/_index.md`, set rule_added: true on the relevant finding(s).
    - After processing, show running tally: "X accepted, Y rejected so far (Z fixes in progress)"
 6. After all groups have been reviewed, wait for any in-flight fix sub-agents to complete. Report: "All N fix sub-agents completed." If any sub-agent errored, report which group/file failed and ask the user whether to retry or skip that fix (set review_status back to "pending" if retry, or "rejected" if skip).
 7. Set review_status to "noted" on all informational findings
