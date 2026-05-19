@@ -92,7 +92,7 @@ Collapse to one branch + strip-prefix shim:
 - Rewrite prose: gates read from bound repo `.workflow.yml .gate_pool`; drop
   `WF_PROJECT_KB` mentions.
 
-### 5. `scripts/gate-ceiling.sh` & `scripts/validate-impl.sh`
+### 5. `scripts/gate-ceiling.sh` & `scripts/validate-impl.sh` ✅ IMPLEMENTED
 Pool precedence `${WF_TASK_GATE_POOL:-${WF_GATE_POOL}}` unchanged. Switch
 every `yq … .gates[]` to `.gate_pool[]` (`wf_gc__intersect` + union reader,
 ~gate-ceiling 89/108, validate-impl ~134).
