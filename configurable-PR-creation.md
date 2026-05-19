@@ -49,7 +49,7 @@
      config_approved).
      7. commands/config.md — no change (loader enum-validates, same as track); confirm.
 
-     Command branching
+     Command branching — ✅ IMPLEMENTED (odium-validated; 4 findings fixed: pr-review prereq ordering, continue-task step3 gate, ship task_base_sha nil guard, ship step renumber). Deviation: step 14 task-manager.sh got a new `set-base-sha` setter (frontmatter write required by step 8; hand-edit forbidden by repo rule).
 
      8. commands/implement.md (core):
        - Step 0: add WF_BRANCH_STRATEGY to echo + "This step uses" line.

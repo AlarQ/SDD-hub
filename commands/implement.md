@@ -8,10 +8,12 @@ Feature name: $ARGUMENTS
 3. Run `~/.claude/scripts/task-manager.sh next specs/$ARGUMENTS/tasks/` to find the next eligible task
    - If no eligible task found, report which tasks are blocked and by which task IDs
    - If any task has `status: in-progress`, warn: "Task [ID] is stuck at in-progress (likely from a crashed session). Run `/continue-task $ARGUMENTS` to resume or manually reset its status."
-4. Check if any `done` tasks have an unmerged PR:
-   - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
-   - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/$ARGUMENTS`. Merge it before starting the next task."
-   - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."
+4. **Serial gate** — behavior depends on `WF_BRANCH_STRATEGY` (load Step 0 config first if not already loaded; absent → `per-task`):
+   - **`per-task`** (default — unchanged): check if any `done` tasks have an unmerged PR:
+     - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
+     - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/$ARGUMENTS`. Merge it before starting the next task."
+     - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."
+   - **`single-branch`**: there is no per-task PR — the gate is task status, not PR merge. Refuse to start the next task unless the immediately-preceding task (highest-numbered non-`todo`/`blocked` task) has `status: done`. Message: "Task [ID] is [status], not done. Single-branch strategy is serial — finish and `/ship $ARGUMENTS` the previous task first." Do **not** check `pr_url` (none exists until the final `/ship`).
    - **Important**: In bash scripts, never use `status` as a variable name — it is read-only in zsh. Use `task_status` instead.
 
 ## Step 0 — Load Spec Config
@@ -19,10 +21,10 @@ Feature name: $ARGUMENTS
 Before running any step, load the spec config (substituting the actual feature name for `$ARGUMENTS`):
 
 ```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_IMPLEMENT=%s\nWF_SPEC_CONFIG_FILE=%s\n" "${WF_SPEC_AGENTS_IMPLEMENT:-}" "${WF_SPEC_CONFIG_FILE:-}"'
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_IMPLEMENT=%s\nWF_SPEC_CONFIG_FILE=%s\nWF_BRANCH_STRATEGY=%s\n" "${WF_SPEC_AGENTS_IMPLEMENT:-}" "${WF_SPEC_CONFIG_FILE:-}" "${WF_BRANCH_STRATEGY:-per-task}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents), `WF_SPEC_CONFIG_FILE` (snapshot source), `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents), `WF_SPEC_CONFIG_FILE` (snapshot source), `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`; absent → `per-task`).
 
 ### Tier-Ceiling Check (hard stop on breach)
 
@@ -50,11 +52,19 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
 2. Set monitor context: run `~/.claude/scripts/monitor.sh set_context $ARGUMENTS <task-id>` (replace `<task-id>` with the numeric ID from the prerequisite step, e.g. `001`)
 3. Ensure the feature integration branch exists in the task repo: `git -C "$WF_TASK_REPO_PATH" rev-parse --verify feat/$ARGUMENTS` (create from `main` and push: `git -C "$WF_TASK_REPO_PATH" push -u origin feat/$ARGUMENTS` if first task in this repo)
 4. Pull latest feature branch: `git -C "$WF_TASK_REPO_PATH" checkout feat/$ARGUMENTS && git -C "$WF_TASK_REPO_PATH" pull`
-5. Check if task branch already exists: `git -C "$WF_TASK_REPO_PATH" rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`
+**Steps 5–6 are `per-task`-only.** Under `WF_BRANCH_STRATEGY=single-branch` there is **no per-task sub-branch** — stay on `feat/$ARGUMENTS` (already checked out in step 4), skip steps 5–6, and instead record the task base sha:
+
+```bash
+~/.claude/scripts/task-manager.sh set-base-sha <task-file> "$(git -C "$WF_TASK_REPO_PATH" rev-parse HEAD)"
+```
+
+`task_base_sha` = HEAD of `feat/$ARGUMENTS` at this task's start. It is the linchpin for single-branch start/mid phase detection (`/continue-task`) and the quality/test diff range below. Then proceed to step 6a.
+
+5. (`per-task`) Check if task branch already exists: `git -C "$WF_TASK_REPO_PATH" rev-parse --verify feat/$ARGUMENTS/{task-id}-{task-name}`
    - If it exists, ask the user: "Task branch `feat/$ARGUMENTS/{task-id}-{task-name}` already exists (likely from a previous aborted attempt). Delete it and start fresh, or continue on the existing branch?"
    - If starting fresh: delete the branch (`git branch -D feat/$ARGUMENTS/{task-id}-{task-name}`) and create a new one
    - If continuing: checkout the existing branch and proceed
-6. Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
+6. (`per-task`) Create task branch from the integration branch: `feat/$ARGUMENTS/{task-id}-{task-name}`
 6a. **Snapshot spec config** — write a normalized JSON snapshot of the effective fields to `.monitor-context-snapshot`:
    ```bash
    bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && wf_write_snapshot .monitor-context-snapshot'
@@ -68,7 +78,7 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
    - If `specs/$ARGUMENTS/test-strategy.md` exists, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool. The agent receives:
      - The test-strategy.md content
      - The current task file (with test_cases)
-     - List of existing test files from completed tasks (find test files in the task branches already merged to `feat/$ARGUMENTS`)
+     - List of existing test files from completed tasks on `feat/$ARGUMENTS` (`per-task`: test files in task branches already merged to `feat/$ARGUMENTS`; `single-branch`: test files changed in `feat/$ARGUMENTS` before `${task_base_sha}`)
 
      Instruct the agent with this directive: "Review this task's test cases against the test strategy and existing test coverage from completed tasks. For each test case, determine: keep, skip (already covered), or modify. Add any missing integration seam tests assigned to this task. List shared fixtures available from completed tasks. Return the result as an **ordered behavior backlog** (priority order, one behavior per entry). Use the Implementation Refinement Output format defined in your agent definition."
 
@@ -99,7 +109,9 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), spawn the implement-phase agents from `WF_SPEC_AGENTS_IMPLEMENT` for a pre-validation sanity check. If `WF_SPEC_AGENTS_IMPLEMENT` is empty, skip this step. If it contains `code-quality-pragmatist` or any advisory agent, spawn it using the Agent tool. The spawned agent(s) receive:
-- All changed files (`git -C "$WF_TASK_REPO_PATH" diff --name-only --diff-filter=ACMR feat/$ARGUMENTS...HEAD`)
+- All changed files for this task. Diff range depends on `WF_BRANCH_STRATEGY`:
+  - `per-task`: `git -C "$WF_TASK_REPO_PATH" diff --name-only --diff-filter=ACMR feat/$ARGUMENTS...HEAD`
+  - `single-branch`: `git -C "$WF_TASK_REPO_PATH" diff --name-only --diff-filter=ACMR ${task_base_sha}..HEAD`
 - The task file (scope, ground rules)
 - The project's `CLAUDE.md`
 
@@ -118,9 +130,19 @@ This is a lightweight pre-flight check — `/validate` remains the authoritative
 
 13. Run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`
 
-## Open Draft PR (pre-validation human review)
+## Open Draft PR (pre-validation human review) — `per-task` only
 
-After status set to `implemented`, open a **draft PR** so the user can review the diff on GitHub before validation runs.
+**`WF_BRANCH_STRATEGY=single-branch`: skip this entire section.** No per-task draft PR, no `gh pr create`, no `pr_url`, no `pr_opened_draft` event. Instead just push the integration branch so work is durable:
+
+```bash
+git -C "$WF_TASK_REPO_PATH" push -u origin feat/$ARGUMENTS
+```
+
+Then jump to the `single-branch` final instruction below. Review is deferred to the spec-level PR opened at the final `/ship`.
+
+---
+
+**`per-task` (default):** After status set to `implemented`, open a **draft PR** so the user can review the diff on GitHub before validation runs.
 
 1. Stage + commit any uncommitted work: `git -C "$WF_TASK_REPO_PATH" add -A && git -C "$WF_TASK_REPO_PATH" commit -m "type(task-id): {task-title}"` — skip if tree clean and commits already exist.
 2. Push task branch: `git -C "$WF_TASK_REPO_PATH" push -u origin feat/$ARGUMENTS/{task-id}-{task-name}`.
@@ -139,7 +161,9 @@ If PR creation fails (e.g. `gh auth` missing, no remote), report the failure and
 
 IMPORTANT:
 - Do NOT start the next task automatically — serial execution, one task in flight at a time.
-- Do NOT auto-invoke `/validate` or `/pr-review`. Stop and instruct the user: "Draft PR opened: <url>. Review on GitHub and comment, then run `/pr-review $ARGUMENTS` to address comments. Run `/validate $ARGUMENTS` when comments resolved (or skip `/pr-review` if no comments)."
+- Do NOT auto-invoke `/validate` or `/pr-review`.
+- **`per-task`**: Stop and instruct: "Draft PR opened: <url>. Review on GitHub and comment, then run `/pr-review $ARGUMENTS` to address comments. Run `/validate $ARGUMENTS` when comments resolved (or skip `/pr-review` if no comments)."
+- **`single-branch`**: Stop and instruct: "Task committed on `feat/$ARGUMENTS` (review deferred — no per-task PR). Run `/validate $ARGUMENTS`." Do NOT mention `/pr-review`.
 
 ## Spec-Done Detection
 

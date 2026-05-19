@@ -143,6 +143,7 @@ Commands:
   validate <task-file>           Validate task file structure and fields
   set-status <task-file> <status> Update task status (validates transition)
   set-pr-url <task-file> <url>   Write pr_url to task frontmatter atomically
+  set-base-sha <task-file> <sha> Write task_base_sha to task frontmatter (single-branch strategy)
   unblock <tasks-directory>      Check blocked tasks, unblock if dependencies are done
   next <tasks-directory>         Get next eligible task (status: todo)
   create-followup <feature> <fr-id> <description>
@@ -384,6 +385,20 @@ cmd_set_pr_url() {
   echo "pr_url set: $url ($file)"
 }
 
+# Write task_base_sha to task frontmatter atomically. Used by /implement when
+# branch_strategy=single-branch to record HEAD at task start — the linchpin for
+# single-branch start/mid phase detection (/continue-task) and the quality/test
+# diff range (${task_base_sha}..HEAD). Idempotent overwrite; validates sha shape.
+cmd_set_base_sha() {
+  local file="${1:-}" sha="${2:-}"
+  [ -z "$file" ] || [ -z "$sha" ] && die "Usage: task-manager.sh set-base-sha <task-file> <sha>"
+  [ -f "$file" ] || die "Task file not found: $file"
+  [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]] || die "Invalid task_base_sha (must be a hex git sha): $sha"
+  cmd_validate "$file" > /dev/null
+  update_frontmatter "$file" ".task_base_sha = \"$sha\""
+  echo "task_base_sha set: $sha ($file)"
+}
+
 # Create a follow-up task auto-generated from a spec-audit accepted finding (T017).
 # Validates FR id against spec.md FR allowlist (security boundary — Odium may hallucinate).
 # Inherits ground_rules from spec.md "## Applicable Ground Rules" section.
@@ -519,6 +534,7 @@ case "${1:-help}" in
   validate)         shift; cmd_validate "$@" ;;
   set-status)       shift; cmd_set_status "$@" ;;
   set-pr-url)       shift; cmd_set_pr_url "$@" ;;
+  set-base-sha)     shift; cmd_set_base_sha "$@" ;;
   unblock)          shift; cmd_unblock "$@" ;;
   next)             shift; cmd_next "$@" ;;
   create-followup)  shift; cmd_create_followup "$@" ;;

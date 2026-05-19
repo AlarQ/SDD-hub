@@ -6,7 +6,12 @@ Feature name: $ARGUMENTS
 
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
-2. Identify the task: extract task ID from the current branch name (`feat/$ARGUMENTS/{task-id}-{task-name}`) and read the matching task file from `specs/$ARGUMENTS/tasks/`
+1a. **Branch-strategy short-circuit (run before any branch-name parsing).** Quick-load `WF_BRANCH_STRATEGY`:
+   ```bash
+   bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "%s\n" "${WF_BRANCH_STRATEGY:-per-task}"'
+   ```
+   If `single-branch` **and** the current branch is exactly `feat/$ARGUMENTS` (no sub-path) **and** there is no `OPEN` PR with head `feat/$ARGUMENTS` → base `main`: refuse cleanly and **stop before Prerequisite 2** — do not run the task-branch regex. Print: "No PR until the final `/ship` under single-branch strategy — review is deferred. Run `/validate $ARGUMENTS` / `/implement $ARGUMENTS`." If `single-branch` and the spec PR exists, skip the task-branch regex in Prerequisite 2 and resolve the PR via `(cd "$WF_TASK_REPO_PATH" && gh pr view --json number,state,isDraft)` from `feat/$ARGUMENTS`. If `per-task`, continue to Prerequisite 2 normally.
+2. Identify the task (`per-task`, or `single-branch` with an existing spec PR): extract task ID from the current branch name (`feat/$ARGUMENTS/{task-id}-{task-name}`) and read the matching task file from `specs/$ARGUMENTS/tasks/`
    - If not on a task branch, check if `$ARGUMENTS` was provided and look for `done` tasks with a `pr_url` — use the most recently shipped one
    - If no task can be identified, refuse and say: "Cannot determine which task this PR belongs to. Run from a task branch or provide the feature name."
 3. Read the task's `ground_rules`, resolving prefixes per `$WF_GENERAL_KB/_rules.md`
@@ -16,10 +21,14 @@ Feature name: $ARGUMENTS
 Load the spec config before spawning any agent (substitute actual feature name for `$ARGUMENTS`):
 
 ```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PR_REVIEW=%s\n" "${WF_SPEC_AGENTS_PR_REVIEW:-}"'
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PR_REVIEW=%s\nWF_BRANCH_STRATEGY=%s\n" "${WF_SPEC_AGENTS_PR_REVIEW:-}" "${WF_BRANCH_STRATEGY:-per-task}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_PR_REVIEW`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_PR_REVIEW`, `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`; absent → `per-task`).
+
+**`single-branch` gate** — there is no per-task PR; review is deferred to the spec-level PR opened at the final `/ship`:
+- If no spec PR exists yet (no `OPEN` PR for `feat/$ARGUMENTS` → `main`): refuse cleanly, **do not crash the task-branch regex** — print: "No PR until the final `/ship` under single-branch strategy — review is deferred. Run `/validate $ARGUMENTS` / `/implement $ARGUMENTS`." Stop.
+- If the spec PR exists: resolve it via `(cd "$WF_TASK_REPO_PATH" && gh pr view --json number,state,isDraft)` from `feat/$ARGUMENTS` (the branch is the PR head — **do not** parse a task-branch name). Then proceed with Phases 1–2 against that PR.
 
 If `WF_SPEC_AGENTS_PR_REVIEW` is non-empty, spawn those agent IDs instead of the default `engineering-code-reviewer`. Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
 
