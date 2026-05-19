@@ -1,4 +1,5 @@
 mod frontmatter;
+pub(crate) mod limits;
 mod monitor_parser;
 mod report_parser;
 mod scanner;
