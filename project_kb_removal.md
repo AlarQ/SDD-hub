@@ -97,7 +97,7 @@ Pool precedence `${WF_TASK_GATE_POOL:-${WF_GATE_POOL}}` unchanged. Switch
 every `yq … .gates[]` to `.gate_pool[]` (`wf_gc__intersect` + union reader,
 ~gate-ceiling 89/108, validate-impl ~134).
 
-### 6. `scripts/knowledge-base-rules.md`
+### 6. `scripts/knowledge-base-rules.md` ✅ IMPLEMENTED
 Keep filename (7 commands link it). Rewrite to single-KB model: bare paths
 under `$WF_GENERAL_KB`; legacy prefixes stripped + deprecation-warned; remove
 two-layer/prefix tables and "never modified by feedback loop" line.
