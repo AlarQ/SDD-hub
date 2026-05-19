@@ -162,7 +162,7 @@ two-layer/prefix tables and "never modified by feedback loop" line.
   `test-validate-impl.sh`, `test-phase-command-ceiling.sh`,
   `test-inferencer-schema.sh` for `gates.yml`/`knowledge-base`/`WF_PROJECT_KB`.
 
-### 14. Dogfood migration (this repo)
+### 14. Dogfood migration (this repo) ✅ IMPLEMENTED
 - `.workflow.yml`: keep `spec_storage_mode: vault`; **keep** `gate_pool`
   but convert from path to inline array (self-hosting exception #8 — a
   `repos[]` entry points at this dir). Verify/add that `repos[]` self-entry.
