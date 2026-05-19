@@ -86,7 +86,7 @@ Collapse to one branch + strip-prefix shim:
 - Delete all vault single/multi-repo branching + `repo:<name>:` `wf_repo_path`
   resolution.
 
-### 4. `scripts/multi-repo-resolution.md`
+### 4. `scripts/multi-repo-resolution.md` ✅ IMPLEMENTED
 - `WF_TASK_GATE_POOL="$WF_TASK_REPO_PATH/.workflow.yml"` (was `…/knowledge-base/gates.yml`).
 - Error/remediation text → "bound repo missing `.workflow.yml`".
 - Rewrite prose: gates read from bound repo `.workflow.yml .gate_pool`; drop
