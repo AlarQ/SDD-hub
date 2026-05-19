@@ -102,7 +102,7 @@ Keep filename (7 commands link it). Rewrite to single-KB model: bare paths
 under `$WF_GENERAL_KB`; legacy prefixes stripped + deprecation-warned; remove
 two-layer/prefix tables and "never modified by feedback loop" line.
 
-### 7. `commands/bootstrap.md`
+### 7. `commands/bootstrap.md` ✅ IMPLEMENTED
 - Modes → two. `vault-init` unchanged (stays gateless unless self-hosting).
 - `repo-gate-init` rewritten: writes a thin `$repo/.workflow.yml` with
   `kind: repo-gate-pool` + seeded `gate_pool:` (language prompt). **Delete
