@@ -123,7 +123,7 @@ two-layer/prefix tables and "never modified by feedback loop" line.
   `commands/capture-rule.md`, `opencode-migration.md`. `setup.sh` line ~314
   message → "Run /bootstrap to configure gates". Leave dated audit docs.
 
-### 10. Templates
+### 10. Templates ✅ IMPLEMENTED
 - Delete `templates/gates.yml.template`.
 - `templates/workflow.yml.template`: inline `gate_pool:` array example +
   documented `kind: repo-gate-pool` per-repo block; rewrite vault comment.
