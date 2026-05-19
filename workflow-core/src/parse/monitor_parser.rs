@@ -1,7 +1,6 @@
 use crate::model::MonitorEvent;
 use crate::parse::ParseWarning;
-
-const MAX_EVENTS: usize = 10_000;
+use crate::parse::limits::MAX_EVENTS;
 
 pub fn parse_monitor_log(content: &str, source: &str) -> (Vec<MonitorEvent>, Vec<ParseWarning>) {
     let mut events = Vec::new();
