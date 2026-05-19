@@ -116,7 +116,7 @@ two-layer/prefix tables and "never modified by feedback loop" line.
   general KB". Drop project-KB resolution refs.
 - `commands/capture-rule.md`: remove any `/promote-rules` graduation mention.
 
-### 9. Delete `/promote-rules`
+### 9. Delete `/promote-rules` ✅ IMPLEMENTED
 - Delete `commands/promote-rules.md`.
 - Remove refs: `CLAUDE.md` cmd list, `onboarding.md`,
   `commands/workflow-summary.md`, `commands/fix.md`,
