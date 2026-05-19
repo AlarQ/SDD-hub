@@ -117,7 +117,7 @@
      - docs/workflow-diagram.md, CLAUDE.md, CONTEXT.md, docs/adr/0003-branch-strategy.md
      - templates/spec-config.yml.template, tests/test-config-loader.sh
 
-     Verification
+     Verification — ✅ IMPLEMENTED (odium-validated; all 6 criteria hold, zero findings; tests 45/45 + 15/15 green, cargo check --workspace green)
 
      1. bash tests/test-config-loader.sh — new branch_strategy cases green; existing green.
      2. bash tests/test-inferencer-schema.sh green.
