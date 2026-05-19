@@ -31,7 +31,7 @@ Run from the dev-workflow repository root:
 
 This installs:
 - Slash commands to `~/.claude/commands/`:
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-spec`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `promote-rules`, `fix`, `promote-tier`
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-spec`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `fix`, `promote-tier`
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 - 35+ agent definitions to `~/.claude/agents/`
@@ -380,7 +380,7 @@ Scaffold via `task-manager.sh init-fix <slug>`.
 7. Lint + ground-rule-matched gates run. Phase-2 agent gates are skipped by default unless the diff touches auth/crypto/migrations.
 8. `/ship` with PR title prefix `fix:`.
 
-**Not run:** `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants `/promote-rules`).
+**Not run:** `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants a new general-KB rule).
 
 Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 

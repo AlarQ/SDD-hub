@@ -10,7 +10,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, config, grill, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-rules, promote-tier, capture-rule)
+- `commands/*.md` — Slash command definitions (bootstrap, config, grill, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-tier, capture-rule)
 - `skills/` — Reusable skill prompts (e.g. `bash-scripting/SKILL.md`). Installed to `~/.claude/skills/` by `setup.sh`.
 - `tests/` — Bash test suite for scripts (task-manager, config-loader, monitor, validate-impl, tier-check, etc.). Run individual tests directly: `bash tests/test-task-manager.sh`.
 - `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Lives in this repo; not installed globally.

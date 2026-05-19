@@ -41,7 +41,7 @@ blocked → todo → in-progress → implemented → review → done
 - `ground_rules` prefix convention: `general:security/general.md`, `project:languages/rust.md`
 - Unprefixed paths default to `project:` (backward compatibility)
 - New rules from `/review-findings` always go to the project KB
-- `/capture-rule` captures ad-hoc rules from conversation directly into the general KB (alongside `/promote-rules` for graduation)
+- `/capture-rule` captures ad-hoc rules from conversation directly into the general KB
 
 ### Key Rules
 - **Both knowledge bases are mandatory** — commands refuse without either
