@@ -1,6 +1,33 @@
 spec_storage_mode: vault
 spec_storage: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/specs
-gate_pool: knowledge-base/gates.yml
+# Self-hosting exception (ADR-0002 #8): this vault .workflow.yml carries an
+# inline gate_pool because specs/workflow-web-ui/config.yml has a repos[] entry
+# whose path resolves to this dir (the dev-workflow repo dogfoods itself).
+gate_pool:
+  - id: rust-check
+    command: "cargo check --workspace"
+    applies_to: [rust]
+    category: code-quality
+    blocking: true
+    applies_to_repos: [dev-workflow]
+  - id: rust-clippy
+    command: "cargo clippy --workspace -- -D warnings"
+    applies_to: [rust]
+    category: code-quality
+    blocking: true
+    applies_to_repos: [dev-workflow]
+  - id: rust-fmt
+    command: "cargo fmt --check"
+    applies_to: [rust]
+    category: code-quality
+    blocking: true
+    applies_to_repos: [dev-workflow]
+  - id: rust-test
+    command: "cargo test --workspace"
+    applies_to: [rust]
+    category: testing
+    blocking: true
+    applies_to_repos: [dev-workflow]
 agent_pool: ~/.claude/agents
 general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/general-knowledge-base
 validate_scope: per-task
