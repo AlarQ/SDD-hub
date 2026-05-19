@@ -148,7 +148,7 @@ two-layer/prefix tables and "never modified by feedback loop" line.
   `WTGP` label → `repo/.workflow.yml gate_pool`. Remove any `/promote-rules`
   node (keep `/promote-tier`). Rewrite Dual-KB / vault bullets.
 
-### 13. Tests
+### 13. Tests ✅ IMPLEMENTED
 - `tests/test-task-manager.sh` (~273–329): rewrite resolve suite — bare path,
   legacy `general:`/`project:`/`repo:b:` → `$WF_GENERAL_KB/...` + WARN;
   missing `WF_GENERAL_KB` → exit 7; one-time-warn dedup test; delete vault
