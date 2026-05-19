@@ -130,7 +130,7 @@ two-layer/prefix tables and "never modified by feedback loop" line.
 - `templates/spec-config.yml.template`: "Each id must exist in the bound
   repo's `.workflow.yml gate_pool`".
 
-### 11. Docs
+### 11. Docs ✅ IMPLEMENTED
 - `CLAUDE.md`: rewrite §"Dual Knowledge Base" → single KB; fix lines ~7,16,17,
   73–80,88–89,164–168,206,220; remove `WF_PROJECT_KB`.
 - `CONTEXT.md`: delete term **Project KB**; edit **Ground rule**, **Gate
