@@ -1,10 +1,8 @@
-//! Placeholder binary — real Axum + Leptos SSR scaffold lands in task 002.
-//! Touches `workflow-core` so the import boundary (workflow-core ↔
-//! workflow-web seam) is exercised by the workspace build from task 001 on.
+//! Thin binary shell — all logic lives in the library so integration tests
+//! exercise the same code paths. Exit codes per ADR-010 (0/2/4/7).
 
-fn main() {
-    // `workflow_core` is reachable from the web crate; the structural watcher
-    // and handlers built in later tasks consume its `WatchSource`/parsers.
-    let _: Option<workflow_core::watch::WatchEvent> = None;
-    println!("workflow-web placeholder — scaffold lands in task 002");
+#[tokio::main]
+async fn main() {
+    let code = workflow_web::run().await;
+    std::process::exit(code);
 }

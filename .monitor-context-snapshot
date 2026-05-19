@@ -1,0 +1,1 @@
+{"agents": {"explore": ["engineering/software-architect"], "implement": ["code-quality-pragmatist"], "pr_review": ["engineering/code-reviewer"], "propose": ["engineering/software-architect"], "validate": ["code-quality-pragmatist", "engineering/security-engineer"]}, "branch_strategy": "per-task", "gates": ["rust-check", "rust-clippy", "rust-fmt", "rust-test"]}

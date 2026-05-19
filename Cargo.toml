@@ -11,7 +11,7 @@ version = "0.1.0"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_yml = "0.0.12"
+serde_yml = "=0.0.12"  # pinned per SEC-FR-25
 serde_json = "1.0"
 anyhow = "1.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

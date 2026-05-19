@@ -1,9 +1,39 @@
-# Minimal placeholder so the workspace resolves. The real Axum + Leptos SSR
-# scaffold lands in task 002 (web-crate-scaffold-cli-startup).
 [package]
 name = "workflow-web"
 edition.workspace = true
 version.workspace = true
 
+[lib]
+name = "workflow_web"
+path = "src/lib.rs"
+
+[[bin]]
+name = "workflow-web"
+path = "src/main.rs"
+
 [dependencies]
 workflow-core = { path = "../workflow-core" }
+serde.workspace = true
+serde_json.workspace = true
+serde_yml.workspace = true        # pinned (=0.0.12) at workspace per SEC-FR-25
+anyhow.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "net"] }
+
+# Security-pinned exact versions (SEC-FR-25): ammonia, pulldown-cmark, axum,
+# tower-http, notify, serde_yml. cargo-audit + cargo-deny gate pre-merge (010).
+axum = "=0.8.9"
+tower-http = "=0.6.11"            # request middleware wired in task 004
+ammonia = "=4.1.2"               # markdown sanitize pipeline (task 003)
+pulldown-cmark = "=0.13.3"       # markdown parse (task 003)
+notify = "=8.2.0"                # fs watchers (task 005)
+
+# Unpinned (not in SEC-FR-25): registry, semver-compatible.
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+regex = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"
