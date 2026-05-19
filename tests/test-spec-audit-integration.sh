@@ -34,8 +34,8 @@ Body.
 
 ## Applicable Ground Rules
 
-- `general:security/general.md` — input validation
-- `general:testing/principles.md` — Given/When/Then
+- `security/general.md` — input validation
+- `testing/principles.md` — Given/When/Then
 EOF
   # Seed an existing task so next id resolves to 002
   cat > "$TEST_TMPDIR/specs/demo/tasks/001-seed.md" <<'EOF'
@@ -48,7 +48,7 @@ max_files: 1
 estimated_files: []
 test_cases: []
 ground_rules:
-  - general:security/general.md
+  - security/general.md
 ---
 
 ## Description
@@ -108,8 +108,8 @@ test_create_followup_happy_path() {
   local body
   body="$(cat "$task_path")"
   assert_contains "$body" 'status: todo' "status is todo"
-  assert_contains "$body" 'general:security/general.md' "inherits security ground_rule from spec"
-  assert_contains "$body" 'general:testing/principles.md' "inherits testing ground_rule from spec"
+  assert_contains "$body" 'security/general.md' "inherits security ground_rule from spec"
+  assert_contains "$body" 'testing/principles.md' "inherits testing ground_rule from spec"
   assert_contains "$body" 'FR-2' "name references FR id"
   # Validate the generated task passes task-manager validate
   local rc=0

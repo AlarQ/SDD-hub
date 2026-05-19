@@ -12,15 +12,12 @@ TMPDIR_T=""
 
 setup() {
   TMPDIR_T="$(mktemp -d)"
-  mkdir -p "$TMPDIR_T/specs/demo/tasks" "$TMPDIR_T/knowledge-base"
-  cat > "$TMPDIR_T/.workflow.yml" <<EOF
+  mkdir -p "$TMPDIR_T/specs/demo/tasks"
+  cat > "$TMPDIR_T/.workflow.yml" <<'EOF'
 spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
 agent_pool: agents/
 validate_scope: per-spec
-EOF
-  cat > "$TMPDIR_T/knowledge-base/gates.yml" <<'EOF'
-gates:
+gate_pool:
   - id: shellcheck
     command: "true"
     applies_to: [shell]
@@ -57,7 +54,7 @@ EOF
 id: "001"
 status: implemented
 ground_rules:
-  - general:languages/shell/_index.md
+  - languages/shell/_index.md
 ---
 EOF
   cat > "$TMPDIR_T/specs/demo/tasks/002-b.md" <<'EOF'
@@ -65,15 +62,15 @@ EOF
 id: "002"
 status: implemented
 ground_rules:
-  - general:languages/shell/_index.md
-  - general:architecture/general.md
+  - languages/shell/_index.md
+  - architecture/general.md
 ---
 EOF
   cd "$TMPDIR_T"
   unset WF_VALIDATE_IMPL_LOADED WF_CONFIG_LOADED
   # shellcheck disable=SC1091
   source "$REPO_ROOT/scripts/validate-impl.sh"
-  export WF_GATE_POOL="$TMPDIR_T/knowledge-base/gates.yml"
+  export WF_GATE_POOL="$TMPDIR_T/.workflow.yml"
 }
 teardown() { cd "$REPO_ROOT"; rm -rf "$TMPDIR_T"; }
 
@@ -170,7 +167,7 @@ test_run_union_doc_only_spec_passes_with_empty_union() {
 id: "001"
 status: implemented
 ground_rules:
-  - general:architecture/general.md
+  - architecture/general.md
 ---
 EOF
   export WF_SPEC_GATES=$'shellcheck'

@@ -33,19 +33,37 @@ run_test() {
 }
 
 # Build a minimal valid repo in $TEST_TMPDIR; echoes repo path.
+# Inline gate_pool YAML block spliced into .workflow.yml (ADR-0002 — no
+# standalone gates.yml). Mirrors fixtures/config/gates-valid.yml content.
+GATE_POOL_INLINE='gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true'
+
 mk_repo() {
   local repo="$TEST_TMPDIR/repo"
-  mkdir -p "$repo/specs/demo/tasks" "$repo/knowledge-base" "$repo/agent_pool"
+  mkdir -p "$repo/specs/demo/tasks" "$repo/agent_pool"
   mkdir -p "$repo/gkb"
-  # rewrite paths to live in-repo (repo mode; general_kb_path required)
+  # repo mode; inline gate_pool array; general_kb_path required
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
 agent_pool: agent_pool
 general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
 validate_scope: per-task
+$GATE_POOL_INLINE
 EOF
-  cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
   # Seed agent files referenced by spec-config-valid.yml fixture
   : > "$repo/agent_pool/code-quality-pragmatist.md"
   printf '%s' "$repo"
@@ -71,13 +89,14 @@ test_loader_missing_workflow_fails_exit_2() {
   [[ "$rc" == "2" ]] && grep -q "/bootstrap" "$TEST_TMPDIR/err" && ! grep -q '^WF_SPEC_STORAGE=' <(env)
 }
 
-test_loader_malformed_gates_exit_3() {
+test_loader_malformed_gate_pool_exit_2() {
   require_yq || return 0
   local repo; repo="$(mk_repo)"
-  echo "gates: [ {id: x" > "$repo/knowledge-base/gates.yml"
+  # Malformed inline gate_pool → unparseable .workflow.yml (exit 2 malformed YAML).
+  printf 'spec_storage: specs/\ngate_pool: [ {id: x\n' > "$repo/.workflow.yml"
   local rc=0
   ( cd "$repo" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
-  [[ "$rc" == "3" ]]
+  [[ "$rc" == "2" ]]
 }
 
 test_loader_unknown_spec_gate_exit_4() {
@@ -94,7 +113,6 @@ test_loader_traversal_exit_2() {
   local repo; repo="$(mk_repo)"
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: ../../etc
-gate_pool: knowledge-base/gates.yml
 agent_pool: agent_pool
 EOF
   local rc=0
@@ -105,12 +123,13 @@ EOF
 test_loader_billion_laughs_exit_5_within_5s() {
   require_yq || return 0
   local repo; repo="$(mk_repo)"
-  cp "$FIXTURES/billion-laughs.yml" "$repo/knowledge-base/gates.yml"
+  # Billion-laughs bomb is now the .workflow.yml itself (inline gate_pool model).
+  cp "$FIXTURES/billion-laughs.yml" "$repo/.workflow.yml"
   local rc=0 start end
   start=$(date +%s)
   ( cd "$repo" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
   end=$(date +%s)
-  [[ "$rc" == "5" || "$rc" == "3" ]] && (( end - start <= 7 ))
+  [[ "$rc" == "5" || "$rc" == "2" ]] && (( end - start <= 7 ))
 }
 
 test_loader_double_source_idempotent() {
@@ -136,7 +155,7 @@ test_loader_warns_on_uncommitted_gates() {
   require_yq || return 0
   local repo; repo="$(mk_repo)"
   ( cd "$repo" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m init ) || return 1
-  echo "# drift" >> "$repo/knowledge-base/gates.yml"
+  echo "# drift" >> "$repo/.workflow.yml"
   local err rc=0
   err="$(cd "$repo" && source "$LOADER" && wf_load_config 2>&1 1>/dev/null)" || rc=$?
   [[ "$rc" == "0" ]] && grep -qi "uncommitted" <<<"$err"
@@ -182,23 +201,101 @@ test_loader_integration_seam_with_config_paths() {
 test_loader_gates_duplicate_id_exit_3() {
   require_yq || return 0
   local repo; repo="$(mk_repo)"
-  cp "$FIXTURES/gates-duplicate-id.yml" "$repo/knowledge-base/gates.yml"
+  # Inline duplicate gate_pool ids in .workflow.yml → exit 3.
+  cat > "$repo/.workflow.yml" <<EOF
+spec_storage: specs/
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: rust-clippy
+    command: "cargo clippy --all-targets"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+EOF
   local rc=0
   ( cd "$repo" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
   [[ "$rc" == "3" ]]
 }
 
-test_loader_gate_pool_traversal_exit_2() {
+# Walk-up skips a thin `kind: repo-gate-pool` .workflow.yml and keeps ascending
+# to the real config (ADR-0002 discovery discriminator).
+test_loader_walkup_skips_repo_gate_pool() {
   require_yq || return 0
   local repo; repo="$(mk_repo)"
-  cat > "$repo/.workflow.yml" <<EOF
-spec_storage: specs/
-gate_pool: ../../etc/hosts
-agent_pool: agent_pool
+  local child="$repo/sub"
+  mkdir -p "$child"
+  cat > "$child/.workflow.yml" <<EOF
+kind: repo-gate-pool
+gate_pool:
+  - id: local-lint
+    command: "true"
+    applies_to: [any]
+    category: lint
+    blocking: false
+EOF
+  ( cd "$child" && source "$LOADER" && wf_load_config \
+      && [[ "$WF_REPO_ROOT" == "$(realpath -- "$repo")" ]] )
+}
+
+# Self-hosting exception: a vault .workflow.yml MAY carry gate_pool iff a
+# repos[] entry resolves to the vault root dir itself (ADR-0002 #8).
+test_loader_self_hosting_exception_allows_vault_gate_pool() {
+  require_yq || return 0
+  local vault="$TEST_TMPDIR/selfhost"
+  mkdir -p "$vault/specs/demo/tasks" "$vault/gkb"
+  ( cd "$vault" && git init -q && git -c user.email=t@t -c user.name=t add -A \
+      && git -c user.email=t@t -c user.name=t commit -q -m init ) >/dev/null 2>&1 || true
+  local vreal; vreal="$(realpath -- "$vault")"
+  cat > "$vault/.workflow.yml" <<EOF
+spec_storage_mode: vault
+spec_storage: specs
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+$GATE_POOL_INLINE
+EOF
+  cat > "$vault/specs/demo/config.yml" <<EOF
+tier: small
+gates:
+  - rust-clippy
+repos:
+  - name: self
+    path: $vreal
+    role: primary
+EOF
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_GATE_POOL" == "$vreal/.workflow.yml" ]] )
+}
+
+# Vault gate_pool WITHOUT a self-referencing repos[] entry → rejected.
+test_loader_vault_gate_pool_no_self_ref_fails() {
+  require_yq || return 0
+  local vault="$TEST_TMPDIR/novault"
+  local other="$TEST_TMPDIR/other"
+  mkdir -p "$vault/specs/demo/tasks" "$vault/gkb" "$other"
+  ( cd "$other" && git init -q && git -c user.email=t@t -c user.name=t add -A \
+      && git -c user.email=t@t -c user.name=t commit -q -m init ) >/dev/null 2>&1 || true
+  cat > "$vault/.workflow.yml" <<EOF
+spec_storage_mode: vault
+spec_storage: specs
+general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+$GATE_POOL_INLINE
+EOF
+  cat > "$vault/specs/demo/config.yml" <<EOF
+tier: small
+gates:
+  - rust-clippy
+repos:
+  - name: other
+    path: $(realpath -- "$other")
+    role: primary
 EOF
   local rc=0
-  ( cd "$repo" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
-  [[ "$rc" == "2" ]]
+  ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo ) >/dev/null 2>&1 || rc=$?
+  [[ "$rc" != "0" ]]
 }
 
 test_loader_unresolved_agent_exit_4() {
@@ -309,8 +406,9 @@ test_loader_spec_gates_shape_well_formed() {
 
 # --- vault mode tests (thin-pointer .workflow.yml in vault) ---
 
-# Build a vault dir (thin pointer) + N code repos (no .workflow.yml; each owns
-# knowledge-base/gates.yml). Args: n_repos, primary index (-1 none),
+# Build a vault dir (thin pointer) + N code repos (each owns a thin
+# `.workflow.yml` with kind: repo-gate-pool + inline gate_pool). Args:
+# n_repos, primary index (-1 none),
 # use_project_token (1 → spec_storage uses projects/{project}/specs).
 # Echoes "<vault>|<repo0>|<repo1>|...".
 mk_vault() {
@@ -334,9 +432,12 @@ EOF
   local repos_yaml="" i repo repo_real role_line
   for ((i = 0; i < n_repos; i++)); do
     local repo="$TEST_TMPDIR/repo$i"
-    mkdir -p "$repo/knowledge-base"
+    mkdir -p "$repo"
     repo_real="$(realpath -- "$repo")"
-    cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
+    cat > "$repo/.workflow.yml" <<EOF
+kind: repo-gate-pool
+$GATE_POOL_INLINE
+EOF
     ( cd "$repo" && git init -q && git -c user.email=t@t -c user.name=t add -A \
         && git -c user.email=t@t -c user.name=t commit -q -m init ) >/dev/null 2>&1 || true
     role_line=""
@@ -371,7 +472,7 @@ test_vault_repo_root_is_vault() {
   ( cd "$vault" && source "$LOADER" && wf_load_config --spec demo \
       && [[ "$WF_REPO_ROOT" == "$(realpath -- "$vault")" ]] \
       && [[ "$WF_VAULT_ROOT" == "$(realpath -- "$vault")" ]] \
-      && [[ -z "$WF_GATE_POOL" ]] && [[ -z "$WF_PROJECT_KB" ]] \
+      && [[ -z "$WF_GATE_POOL" ]] \
       && [[ "$WF_SPEC_HAS_CONFIG" == "1" ]] \
       && [[ "$WF_REPO_NAMES" == $'repo0\nrepo1' ]] )
 }
@@ -532,7 +633,7 @@ test_loader_track_invalid_exit_4() {
 echo "=== test-config-loader.sh ==="
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
-run_test "malformed gates.yml fails closed exit 3" test_loader_malformed_gates_exit_3
+run_test "malformed inline gate_pool fails closed exit 2" test_loader_malformed_gate_pool_exit_2
 run_test "unknown spec gate id fails closed exit 4 naming missing id" test_loader_unknown_spec_gate_exit_4
 run_test "spec_storage path traversal fails closed exit 2" test_loader_traversal_exit_2
 run_test "billion-laughs exits 5 within 5 seconds" test_loader_billion_laughs_exit_5_within_5s
@@ -543,8 +644,10 @@ run_test "CI grep guard: loader sources no workflow script" test_loader_no_workf
 run_test "--spec sets WF_SPEC_GATES, WF_SPEC_AGENTS_*, WF_SPEC_HAS_CONFIG" test_loader_spec_exports_gates_agents_has_config
 run_test "missing per-spec config.yml with --spec exits 4 (no partial)" test_loader_missing_spec_config_exit_4_no_partial
 run_test "integration seam: loader composes config-paths.sh under WF_* contract" test_loader_integration_seam_with_config_paths
-run_test "gates.yml duplicate ids fail closed exit 3" test_loader_gates_duplicate_id_exit_3
-run_test "gate_pool with ../ traversal fails closed exit 2" test_loader_gate_pool_traversal_exit_2
+run_test "inline gate_pool duplicate ids fail closed exit 3" test_loader_gates_duplicate_id_exit_3
+run_test "walk-up skips kind: repo-gate-pool to real config" test_loader_walkup_skips_repo_gate_pool
+run_test "self-hosting exception allows vault gate_pool" test_loader_self_hosting_exception_allows_vault_gate_pool
+run_test "vault gate_pool without self-ref repos[] rejected" test_loader_vault_gate_pool_no_self_ref_fails
 run_test "unresolved agent id fails closed exit 4" test_loader_unresolved_agent_exit_4
 run_test "extended shared fixtures present" test_shared_fixtures_extended
 run_test "validate_scope defaults to per-task when field absent" test_loader_validate_scope_default_per_task

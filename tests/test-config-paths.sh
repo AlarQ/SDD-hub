@@ -9,7 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PATHS_SCRIPT="$REPO_ROOT/scripts/config-paths.sh"
 FIXTURES="$REPO_ROOT/tests/fixtures/config"
-GATES_FILE="$REPO_ROOT/knowledge-base/gates.yml"
+# Inline gate_pool now lives in .workflow.yml (ADR-0002). Schema tests run
+# against the canonical fixture's inline `.gate_pool[]`.
+GATES_FILE="$REPO_ROOT/tests/fixtures/config/workflow-valid.yml"
 
 # Fix B: single top-level source
 source "$PATHS_SCRIPT"
@@ -114,20 +116,20 @@ test_wf_with_timeout_returns_124_on_timeout() {
   [[ "$rc" == "124" ]]
 }
 
-# --- gates.yml schema ---
+# --- inline gate_pool schema ---
 
 test_gates_yml_parses_and_has_required_fields() {
   command -v yq >/dev/null 2>&1 || { echo "    SKIP: yq not installed" >&2; return 0; }
   # Every entry has id, command, applies_to, category, blocking.
   local missing
-  missing="$(yq e '.gates[] | [.id, .command, .applies_to, .category, .blocking] | any_c(. == null)' "$GATES_FILE" | grep -c '^true$' || true)"
+  missing="$(yq e '.gate_pool[] | [.id, .command, .applies_to, .category, .blocking] | any_c(. == null)' "$GATES_FILE" | grep -c '^true$' || true)"
   [[ "$missing" == "0" ]]
 }
 test_gates_yml_ids_unique() {
   command -v yq >/dev/null 2>&1 || { echo "    SKIP: yq not installed" >&2; return 0; }
   local total unique
-  total="$(yq e '.gates | length' "$GATES_FILE")"
-  unique="$(yq e '[.gates[].id] | unique | length' "$GATES_FILE")"
+  total="$(yq e '.gate_pool | length' "$GATES_FILE")"
+  unique="$(yq e '[.gate_pool[].id] | unique | length' "$GATES_FILE")"
   [[ "$total" == "$unique" ]]
 }
 
@@ -155,8 +157,8 @@ run_test "validate_id rejects ; rm -rf ~" test_validate_id_rejects_shell_injecti
 run_test "validate_id rejects 65-char id" test_validate_id_rejects_65_char_id
 run_test "validate_id labeled error message format (I1)" test_validate_id_labeled_error_message_format
 run_test "wf_with_timeout returns 124 on timeout (D3)" test_wf_with_timeout_returns_124_on_timeout
-run_test "gates.yml parses with yq; all entries have required fields" test_gates_yml_parses_and_has_required_fields
-run_test "gates.yml ids are unique" test_gates_yml_ids_unique
+run_test "inline gate_pool parses with yq; all entries have required fields" test_gates_yml_parses_and_has_required_fields
+run_test "inline gate_pool ids are unique" test_gates_yml_ids_unique
 run_test "config-paths.sh sources no workflow script" test_config_paths_sources_no_workflow_script
 run_test "shared fixtures under tests/fixtures/config/ exist" test_shared_fixtures_created
 

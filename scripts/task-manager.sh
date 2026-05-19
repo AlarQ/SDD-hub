@@ -424,8 +424,10 @@ cmd_create_followup() {
   else next_id=$(printf "%03d" $((10#$last_id + 1))); fi
 
   local rules
+  # Bare $WF_GENERAL_KB-relative paths (ADR-0002); legacy general:/project:/repo:
+  # prefixes still accepted (stripped at resolve time by the migration shim).
   rules=$(awk '/^## Applicable Ground Rules/{flag=1; next} /^## /{flag=0} flag' "$spec_md" \
-    | grep -oE '`(general|project):[^`]+`' \
+    | grep -oE '`[^`]+\.md`' \
     | tr -d '`' \
     | awk '!seen[$0]++')
   [ -n "$rules" ] || die "No ground_rules parsed from '## Applicable Ground Rules' in $spec_md"

@@ -5,7 +5,7 @@ status: todo
 blocked_by: []
 empty_intersection_ok: true
 ground_rules:
-  - general:documentation/general.md
+  - documentation/general.md
 ---
 
 Fixture for T004 doc-only empty-OK test.
