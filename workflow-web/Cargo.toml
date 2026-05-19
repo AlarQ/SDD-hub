@@ -1,0 +1,9 @@
+# Minimal placeholder so the workspace resolves. The real Axum + Leptos SSR
+# scaffold lands in task 002 (web-crate-scaffold-cli-startup).
+[package]
+name = "workflow-web"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+workflow-core = { path = "../workflow-core" }

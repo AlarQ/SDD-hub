@@ -1,4 +1,6 @@
-gates:
+# Inline gate_pool fixture (post-ADR-0002 single-KB model).
+# Shape mirrors a .workflow.yml gate_pool: block.
+gate_pool:
   - id: rust-clippy
     command: "cargo clippy -- -D warnings"
     applies_to: [rust]

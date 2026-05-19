@@ -10,8 +10,21 @@
 #   name comes from per-spec config.yml `project:` or `--project` on first
 #   /explore. Loader exits 4 if `{project}` is present but unresolved.
 
-# gate_pool: knowledge-base/gates.yml
-#   Location of the canonical gate registry.
+# gate_pool: []
+#   Inline gate registry — the canonical list of deterministic gates for this
+#   repo (ADR-0002). NOT a path; an array. Each entry:
+#     - id:         ^[a-zA-Z0-9_-]{1,64}$  (unique within this file)
+#       command:    string, <=256 chars
+#       applies_to: list, each in {any, rust, typescript, javascript,
+#                                  python, go, shell, markdown}
+#       category:   one of {lint, test, security, format, build, docs}
+#       blocking:   bool (default true)
+#   Example:
+#     gate_pool:
+#       - { id: rust-clippy, command: "cargo clippy -- -D warnings",
+#           applies_to: [rust], category: lint, blocking: true }
+#       - { id: rust-test,   command: "cargo test --workspace",
+#           applies_to: [rust], category: test, blocking: true }
 
 # agent_pool: ~/.claude/agents
 #   Directory containing agent definitions referenced by per-spec config.
@@ -43,11 +56,12 @@
 #   Used as the default for repos[] on new specs; per-spec config.yml may
 #   override or extend.
 
-# --- Vault thin-pointer example (master-brain holds specs; no gates/KB here) ---
-# A vault .workflow.yml owns ONLY workflow settings + general_kb_path. It has
-# NO gate_pool / knowledge-base/ — gates and project-KB live in each target
-# code repo and resolve per-task from the spec's repos[]. Run `/bootstrap`
-# (repo-gate-init) once inside each target repo to create its gates.yml + KB.
+# --- Vault thin-pointer example (master-brain holds specs; gateless) ---
+# A vault .workflow.yml owns ONLY workflow settings + general_kb_path. It
+# carries NO gate_pool — gates live in each target code repo and resolve
+# per-task from the spec's repos[]. (Exception: self-hosting — if a repos[]
+# entry points at the vault dir itself, the vault MAY carry gate_pool.)
+# There is a single KB now: $WF_GENERAL_KB (ADR-0002, single-KB model).
 #
 # spec_storage_mode: vault
 # spec_storage: projects/{project}/specs
@@ -59,3 +73,14 @@
 #   large:  { tasks: null, files: null, agent_skip: [] }   # null = unbounded
 # default_repos:
 #   - { name: app, path: ~/Desktop/projects/app, role: primary }
+#
+# --- Per-repo thin gate-pool file (vault mode) ---
+# Each bound code repo gets its own thin .workflow.yml carrying ONLY a
+# kind marker + gate_pool. The config loader's walk-up skips any
+# .workflow.yml with this marker and keeps ascending to the real config.
+# Created once per repo by `/bootstrap` (repo-gate-init).
+#
+# kind: repo-gate-pool
+# gate_pool:
+#   - { id: rust-clippy, command: "cargo clippy -- -D warnings",
+#       applies_to: [rust], category: lint, blocking: true }

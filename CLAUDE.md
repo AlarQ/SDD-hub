@@ -4,24 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, agents, hooks, and templates get installed globally to `~/.claude/` via `setup.sh`. Target projects get a project-specific `knowledge-base/` and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, agents, hooks, and templates get installed globally to `~/.claude/` via `setup.sh`. Target projects get a `.workflow.yml` (with an inline `gate_pool:`) and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
 
-**This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust TUI dashboard. No application code lives here.
+**This repo is not a typical codebase** — it's markdown command definitions, shell scripts, and a Rust web dashboard. No application code lives here.
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, config, grill, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-rules, promote-tier, capture-rule)
+- `commands/*.md` — Slash command definitions (bootstrap, config, grill, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-tier, capture-rule)
 - `skills/` — Reusable skill prompts (e.g. `bash-scripting/SKILL.md`). Installed to `~/.claude/skills/` by `setup.sh`.
 - `tests/` — Bash test suite for scripts (task-manager, config-loader, monitor, validate-impl, tier-check, etc.). Run individual tests directly: `bash tests/test-task-manager.sh`.
-- `knowledge-base/` — General knowledge base (security, architecture, testing, style rules). Lives in this repo; not installed globally.
-- `scripts/knowledge-base-rules.md` — Shared KB prerequisites, prefix convention, and resolution rules (incl. single-repo vault implicit default). Installed globally to `~/.claude/scripts/` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
+- `scripts/knowledge-base-rules.md` — Shared KB prerequisites and single-KB resolution rules (bare `$WF_GENERAL_KB`-relative paths; legacy prefixes stripped + deprecation-warned). Installed globally to `~/.claude/scripts/` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, create-followup, check-unvalidated, status). Requires `yq`. `create-followup <feature> <fr-id> <description>` auto-generates a `status: todo` task from a `/validate-impl` spec-audit accepted finding; FR id is validated against `spec.md` (fail-closed on unknown ids) and ground_rules are inherited from the spec's `## Applicable Ground Rules` section.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `scripts/monitor.sh` — Event logger for spec implementation monitoring; appends JSONL events to `specs/<feature>/.monitor.jsonl`
 - `hooks/` — Claude Code hook scripts for enforcement and monitoring (block-git-hook-bypass, block-dismissive-language, monitor-tool-calls). Installed to `~/.claude/hooks/` by `setup.sh`.
 - `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
 - `templates/` — CLAUDE.md template, settings.json hook wiring template for target projects
-- `workflow-tui/` — Rust TUI dashboard for viewing spec/task status
+- `Cargo.toml` — root Cargo workspace (`members = ["workflow-core", "workflow-web"]`)
+- `workflow-core/` — shared Rust library: `model/`, `parse/`, `WatchSource`/`WatchEvent`
+- `workflow-web/` — Rust web dashboard (Axum + Leptos SSR) for viewing spec/task status
 - `onboarding.md` — Full workflow documentation
 - `plan.md` — Original design document
 
@@ -34,31 +35,31 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 ./setup.sh --force  # overwrite existing files
 ```
 
-### Workflow TUI (Rust)
+### Workflow web dashboard (Rust)
+
+Root Cargo workspace. Run all cargo commands with `--workspace` from the repo root.
 
 ```bash
-cd workflow-tui
-cargo build
-cargo run -- /path/to/project   # project must contain specs/ directory
+cargo check --workspace
+cargo test --workspace
+cargo web -- /path/to/master-brain-root   # alias for `cargo run -p workflow-web --`
 ```
 
-Dependencies: ratatui, crossterm, notify (file watcher), serde_yml, clap, anyhow. Edition 2024.
+Edition 2024. Shared `[workspace.dependencies]`: serde, serde_yml, serde_json, anyhow, tokio, tracing.
 
 ### Prerequisites
 
 `yq` (`brew install yq`), `gh` (`brew install gh`)
 
-## Workflow TUI Architecture
+## Workspace Architecture
 
-Elm-like architecture with file-system watching for live reload:
+Two-crate Cargo workspace (ADR-001, ADR-002):
 
-- `main.rs` — CLI parsing (clap), terminal setup, event loop
-- `app.rs` — Application state and update logic
-- `event.rs` — Event polling (keyboard, terminal resize)
-- `watcher.rs` — File system watcher (notify) for live-reloading specs
-- `model/` — Domain types: `spec.rs`, `task.rs`, `report.rs`
-- `parse/` — File parsers: `scanner.rs` (directory scanning), `task_parser.rs`, `report_parser.rs`, `frontmatter.rs` (generic YAML frontmatter)
-- `ui/` — Ratatui widgets: `layout.rs`, `spec_list.rs`, `progress.rs`, `reports.rs`, `dep_graph.rs`, `styles.rs`
+- `workflow-core/` — shared library, builds standalone (`cargo check -p workflow-core`):
+  - `model/` — domain types: `spec.rs`, `task.rs`, `report.rs`, `monitor_event.rs`
+  - `parse/` — file parsers: `scanner.rs`, `task_parser.rs`, `report_parser.rs`, `monitor_parser.rs`, `frontmatter.rs`, `warning.rs`
+  - `watch.rs` — `WatchSource` trait + `WatchEvent` enum (notify-backed impls live in `workflow-web`)
+- `workflow-web/` — web dashboard (Axum + Leptos SSR); the only `WatchSource` implementor. Consumes `workflow-core`; no terminal UI.
 
 ## Slash Command Conventions
 
@@ -68,23 +69,29 @@ Elm-like architecture with file-system watching for live reload:
 - Explicit per-step invocation: each command is invoked separately by the user. After finishing, every command prints the next command to run (e.g. `/implement` → "Draft PR opened. Run `/pr-review $ARGUMENTS` after commenting, or `/validate $ARGUMENTS` if no comments."). No command auto-invokes another. Sequence per task: `/implement` (opens draft PR) → `/pr-review` (loop until PR comments resolved; optional if none) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks draft PR ready). After the last task transitions to `done`, the user runs `/validate-impl` for the final spec-completion audit.
 - Serial execution only — one task in flight at a time
 
-## Dual Knowledge Base
+## Single Knowledge Base (ADR-0002)
 
-Two-layer knowledge base architecture:
+One knowledge base. The dual (Project KB + General KB) layer was collapsed —
+see `docs/adr/0002-collapse-to-single-knowledge-base.md`.
 
-- **General KB** — lives at the path configured by `general_kb_path` in each repo's `.workflow.yml`, exported as `$WF_GENERAL_KB` by `scripts/config-loader.sh`. Recommended location: a master-brain / Obsidian vault (e.g. `~/Desktop/projects/master-brain/general-knowledge-base/`). Contains universal rules: security, architecture, testing, style. Key is **required** — loader exits 2 if missing.
-- **Project KB** — created by `/bootstrap` at `knowledge-base/` inside each code repo (repo mode: `repo`; vault mode: `repo-gate-init`). Never in the vault. Contains project-specific rules: language files and conventions discovered via `/review-findings`.
+- **General KB** — lives at the path configured by `general_kb_path` in each repo's `.workflow.yml`, exported as `$WF_GENERAL_KB` by `scripts/config-loader.sh`. Recommended location: a master-brain / Obsidian vault (e.g. `~/Desktop/projects/master-brain/general-knowledge-base/`). Contains all KB rules: security, architecture, testing, style, plus learned language/convention rules. Key is **required** — loader exits 2 if missing.
 
-All workflow commands read from both. Project rules override general rules on the same topic. New rules from `/review-findings` always go to the project KB. In vault mode `WF_PROJECT_KB`/`WF_GATE_POOL` are empty; project KB + gates resolve **per task** from the bound repo (`multi-repo-resolution.md`).
+The feedback loop (`/review-findings`, `/learn-from-reports`, `/capture-rule`)
+writes learned rules **to the general KB**. There is no per-repo `knowledge-base/`
+directory and no project-KB override layer.
 
-Task `ground_rules` use prefix convention: `general:security/general.md` (resolves under `$WF_GENERAL_KB`), `project:languages/rust.md`, `repo:<name>:` (vault/multi-repo). Unprefixed defaults to `project:`. In vault mode: a **single** bound repo is the implicit default (unprefixed/`project:` resolve to it); **two+** bound repos require `general:` or `repo:<name>:` (bare rejected, exit 7).
+Task `ground_rules` are **bare `$WF_GENERAL_KB`-relative paths** (e.g.
+`security/general.md`). Legacy `general:`/`project:`/`repo:<name>:` prefixes are
+stripped by a migration shim in `resolve_ground_rule_path` (one-time
+per-process deprecation warning) and resolved under `$WF_GENERAL_KB`. Missing
+`$WF_GENERAL_KB` → exit 7.
 
 ## Configurable Workflow
 
 The configurable-workflow feature externalizes gate and agent selection into YAML config. Three files form the config layer:
 
-- **`.workflow.yml`** (repo root in repo mode; vault root in vault mode) — `spec_storage`, `gate_pool`, `agent_pool`, `validate_scope`. In vault mode it is a **thin pointer**: no `gate_pool` (absent/ignored — gates resolve per-task from each bound repo's `knowledge-base/gates.yml`), plus `spec_storage_mode: vault` + `default_repos:`. Required for any active invocation. Missing → loader exit 2; run `/bootstrap`.
-- **`knowledge-base/gates.yml`** (gate registry) — canonical list of deterministic gates with `id`, `command`, `applies_to`, `category`, `blocking`. Sole source of truth for executable gates.
+- **`.workflow.yml`** (repo root in repo mode; vault root in vault mode) — `spec_storage`, inline `gate_pool:` array, `agent_pool`, `validate_scope`. In vault mode it is a **thin pointer**: no `gate_pool` (absent/ignored — gates resolve per-task from each bound repo's own `.workflow.yml gate_pool`), plus `spec_storage_mode: vault` + `default_repos:`. A bound code repo gets a thin `.workflow.yml` (`kind: repo-gate-pool`, only `gate_pool:`). Required for any active invocation. Missing → loader exit 2; run `/bootstrap`.
+- **`.workflow.yml gate_pool:`** (inline gate registry) — array of deterministic gates with `id`, `command`, `applies_to`, `category`, `blocking`. Sole source of truth for executable gates; no standalone `gates.yml`.
 - **`specs/<feature>/config.yml`** (per-spec config) — `tags`, `gates` (the **ceiling**), and `agents` per phase. Written by `/explore` step 0 after inferencer approval. Required on all active processing paths; missing → exit 4.
 
 **Key terms.** Canonical definitions of **ceiling**, **effective-set**, **spec-union** live in `scripts/workflow-glossary.md` (installed to `~/.claude/scripts/workflow-glossary.md`). Commands link there. One additional cadence term defined here:
@@ -159,11 +166,11 @@ change. It is not a separate command or storage namespace.
 
 ## Multi-Repo Specs (Vault Mode)
 
-**Vault mode is the going-forward path** (all specs live in the master-brain vault). `.workflow.yml spec_storage_mode: vault` makes the vault `.workflow.yml` a **thin pointer**: it owns workflow settings + `general_kb_path` only — **no `gate_pool`, no `knowledge-base/` in the vault**. Each target code repo owns its own `knowledge-base/` + `gates.yml`, created once by `/bootstrap` repo-gate-init inside that repo (vault itself: `/bootstrap` vault-init, once). There is **no "primary repo for config"** — `role: primary` only selects default git/PR context.
+**Vault mode is the going-forward path** (all specs live in the master-brain vault). `.workflow.yml spec_storage_mode: vault` makes the vault `.workflow.yml` a **thin pointer**: it owns workflow settings + `general_kb_path` only — **no `gate_pool` in the vault** (except the self-hosting exception: a `repos[]` entry pointing at the vault dir itself). Each target code repo owns a thin `.workflow.yml` (`kind: repo-gate-pool`, only an inline `gate_pool:`), created once by `/bootstrap` repo-gate-init inside that repo (vault itself: `/bootstrap` vault-init, once). There is **no "primary repo for config"** — `role: primary` only selects default git/PR context.
 
-`spec_storage` uses a `{project}` token (e.g. `projects/{project}/specs`) → specs at `<vault>/projects/<proj>/specs/<feature>/`. Project segment comes from `--project` (first `/explore`) or per-spec `config.yml project:`; loader exports `WF_SPEC_PROJECT`, exit 4 on mismatch/unresolved. Per-spec `config.yml repos[]` maps `name → path → role`; loader exports `WF_REPO_NAMES`/`WF_REPO_PATHS` (empty `WF_GATE_POOL`/`WF_PROJECT_KB`); helpers `wf_repo_path`/`wf_for_each_repo`. Spec `gates:` validated against the **union** of bound repos' `gates.yml` (exit 4 unknown id). Gate/KB commands pass `--require-spec` (no-spec under vault → exit 4). Exit 7 on bad repo path.
+`spec_storage` uses a `{project}` token (e.g. `projects/{project}/specs`) → specs at `<vault>/projects/<proj>/specs/<feature>/`. Project segment comes from `--project` (first `/explore`) or per-spec `config.yml project:`; loader exports `WF_SPEC_PROJECT`, exit 4 on mismatch/unresolved. Per-spec `config.yml repos[]` maps `name → path → role`; loader exports `WF_REPO_NAMES`/`WF_REPO_PATHS` (empty `WF_GATE_POOL`); helpers `wf_repo_path`/`wf_for_each_repo`. Spec `gates:` validated against the **union** of bound repos' `.workflow.yml gate_pool` (exit 4 unknown id). Gate/KB commands pass `--require-spec` (no-spec under vault → exit 4). Exit 7 on bad repo path.
 
-Per-task `repo:` required when `repos[]` has 2+ entries; optional for a single-repo spec. `task-manager.sh validate` enforces membership. Hard rule: one task = one repo. Ground-rule prefix `repo:<name>:` resolves to that repo's `knowledge-base/`; single-repo spec resolves bare `project:`/unprefixed to the sole repo. `multi-repo-resolution.md` also exports `WF_TASK_GATE_POOL` (bound repo's `gates.yml`) consumed by `gate-ceiling.sh`/`validate-impl.sh`.
+Per-task `repo:` required when `repos[]` has 2+ entries; optional for a single-repo spec. `task-manager.sh validate` enforces membership. Hard rule: one task = one repo. `ground_rules` are bare `$WF_GENERAL_KB`-relative paths (legacy prefixes stripped + deprecation-warned). `multi-repo-resolution.md` also exports `WF_TASK_GATE_POOL` (bound repo's `.workflow.yml`) consumed by `gate-ceiling.sh`/`validate-impl.sh`.
 
 `/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`, `/quick-ship` resolve `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and run git/gates/PR creation against that path. `/validate-impl` emits per-repo diff sections for Odium. Gates may declare `applies_to_repos: [<name>,…]` to scope.
 
@@ -201,12 +208,12 @@ defined for the ambiguity check.
 
 - `/ship` is separate from `/implement` — commit/push/PR creation happens after validation
 - `/implement` checks for unmerged PRs — previous task's PR must be merged before starting next
-- Gates listed in `knowledge-base/gates.yml` with `blocking: true` are mandatory for tasks whose `ground_rules` match — skipping is not allowed
+- Gates listed in `.workflow.yml gate_pool` with `blocking: true` are mandatory for tasks whose `ground_rules` match — skipping is not allowed
 - `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition
 - `/grill` (optional, before `/explore`) sharpens the domain model into `CONTEXT.md` + repo-level `docs/adr/` before requirements work — see "Domain Docs" above
-- Senior Project Manager decomposition uses a **tracer-bullet lens**: each task is the thinnest slice that still ships end-to-end demoable behavior (balanced against the grouping bias, not a contradiction). Every task carries an `interaction: hitl|afk` frontmatter field — `hitl` needs a human-in-the-loop decision, `afk` is autonomously implementable+mergeable (prefer `afk`). `task-manager.sh` validates the value; absent → defaults to `afk` (backward compatible). Surfaced as a badge in the workflow TUI.
+- Senior Project Manager decomposition uses a **tracer-bullet lens**: each task is the thinnest slice that still ships end-to-end demoable behavior (balanced against the grouping bias, not a contradiction). Every task carries an `interaction: hitl|afk` frontmatter field — `hitl` needs a human-in-the-loop decision, `afk` is autonomously implementable+mergeable (prefer `afk`). `task-manager.sh` validates the value; absent → defaults to `afk` (backward compatible). Surfaced as a badge in the workflow web dashboard.
 - `to-issues` (external tracer-bullet skill) is intentionally **not** wired as a tracker command: redundant with the Senior PM task decomposition and incompatible with the file-based, no-tracker, PR-first flow. Its genuinely-new ideas (tracer-bullet thin-slice lens + HITL/AFK classification) were harvested into the `project-manager-senior` agent + the `interaction` task field instead.
 - `/implement` is **test-driven** (governed by the `tdd` skill at `~/.claude/skills/tdd/SKILL.md`): steps 9–11 are pre-loop backlog settle (Test Strategist refinement moved *before* code; HITL interface/priority approval only for `interaction: hitl` tasks — `afk` treats spec.md BDD + test-strategy.md as pre-approval) → red-green-refactor loop (one failing test → minimal code → repeat, vertical slices; horizontal "all tests then all code" prohibited) → post-loop refactor. Per-cycle `tdd_red`/`tdd_green` monitor events. Applies to **all tiers, no exemption**. `/validate-impl` Step 3a appends per-task TDD evidence; tasks lacking a red→green pair get an **advisory** finding (does not by itself force `reopen`)
 - `/implement` auto-spawns `Ultrathink Debugger` on errors/test failures (inside the GREEN phase) for root cause analysis; spawns `Code Quality Pragmatist` post-implementation for pre-validation sanity check (high/critical issues go through human accept/reject)
@@ -215,8 +222,8 @@ defined for the ambiguity check.
 - `/review-findings` groups related findings (same file + overlapping/nearby lines, or same file + same category) into review units for single accept/reject decisions — reduces redundant decisions across gates
 - `/review-findings` cards render `rationale`, `impact`, `references`, and (for LLM findings) `confidence` alongside `description` / `code_snippet` / `fix_proposal` so users can decide without follow-up prompts. Per-group `Elaborate` option spawns a sub-agent that reads the cited files and returns deeper analysis on demand (single-use per group to bound the flow)
 - Accepted finding groups spawn background sub-agents for parallel fix application; file-level mutual exclusion prevents concurrent edits to the same file
-- Rejected findings can become new project knowledge-base rules (feedback loop) — never modify the general KB
-- `/learn-from-reports` runs after `/review-findings` (or after `/validate` zero-findings) and mines reports for cross-finding patterns — recurring categories, clustered LLM findings, rejection reasoning, generalizable accepted fixes — proposing new project-KB rules in a single batched review. Report deletion is centralized in this command so both paths converge through mining before `/ship`. Complements inline rule creation in `/review-findings` (which catches one-off rules) by catching patterns that span findings.
+- Rejected findings can become new general knowledge-base rules (feedback loop writes to `$WF_GENERAL_KB`)
+- `/learn-from-reports` runs after `/review-findings` (or after `/validate` zero-findings) and mines reports for cross-finding patterns — recurring categories, clustered LLM findings, rejection reasoning, generalizable accepted fixes — proposing new general-KB rules in a single batched review. Report deletion is centralized in this command so both paths converge through mining before `/ship`. Complements inline rule creation in `/review-findings` (which catches one-off rules) by catching patterns that span findings.
 - **PR-first review loop**: `/implement` opens a **draft PR** immediately after marking the task `implemented` so the user can review the diff on GitHub before validation. `/pr-review` reads PR comments, LLM-classifies each as `question | task | nit | already-addressed`, posts threaded replies prefixed `[claude]` (questions get answers grounded in code; tasks get applied + replied with the resulting short-sha + what/how), and marks each addressed comment with an `eyes` reaction by the current `gh` user. The reaction is the idempotency token — re-running `/pr-review` only processes comments without a Claude-authored `eyes` reaction. `/ship` then marks the existing draft PR ready-for-review via `gh pr ready` instead of creating a new PR.
 - PreToolUse hook blocks `--no-verify` and `--no-gpg-sign` — enforces fixing failing hooks rather than bypassing them
 - Stop hook blocks dismissive language ("pre-existing", "not our code") and bypass language ("temporarily disable", "skip the hook") — forces unconditional issue resolution

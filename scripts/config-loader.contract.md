@@ -6,7 +6,7 @@ Single source of truth for `wf_load_config` exported env vars and exit codes. Ea
 
 ```bash
 source ~/.claude/scripts/config-loader.sh
-wf_load_config                       # repo-level only (.workflow.yml + gates.yml)
+wf_load_config                       # repo-level only (.workflow.yml, inline gate_pool)
 wf_load_config --spec <feature>      # also loads <spec_storage>/<feature>/config.yml
 wf_load_config --project <name>      # vault: resolve {project} in spec_storage
 wf_load_config --require-spec        # vault: fail (exit 4) if no --spec given
@@ -32,8 +32,7 @@ Idempotent: re-sourcing is a no-op unless `WF_RELOAD=1`.
 | `WF_REPO_ROOT` | abs path | always | Dir containing `.workflow.yml` (walk-up from CWD). In vault mode this is the vault dir itself (not a code repo). |
 | `WF_CONFIG_FILE` | abs path | always | `$WF_REPO_ROOT/.workflow.yml`. |
 | `WF_SPEC_STORAGE` | abs path | always | Resolved `spec_storage` dir (default `specs/`). A `{project}` token is substituted with the resolved project segment (vault mode). |
-| `WF_GATE_POOL` | abs path or empty | always | Resolved `gate_pool` file (default `knowledge-base/gates.yml`) in **repo mode**. **Empty in vault mode** — no single pool; gates resolve per-task from the bound repo (see `WF_TASK_GATE_POOL` in `multi-repo-resolution.md`). |
-| `WF_PROJECT_KB` | abs path or empty | always | `$WF_REPO_ROOT/knowledge-base` in **repo mode**. **Empty in vault mode** — project KB resolves per-task from the bound repo. |
+| `WF_GATE_POOL` | abs path or empty | always | Path to the `.workflow.yml` whose inline `.gate_pool[]` array is the gate pool (`= $WF_CONFIG_FILE`) in **repo mode**. **Empty in vault mode** — no single pool; gates resolve per-task from the bound repo's `.workflow.yml` (see `WF_TASK_GATE_POOL` in `multi-repo-resolution.md`). Non-empty in vault mode **only** under the self-hosting exception (a `repos[]` entry resolves to the vault root), where it points at the vault `.workflow.yml`. |
 | `WF_SPEC_PROJECT` | name | only with resolved `{project}` | The project segment substituted into `spec_storage`. Consistency-checked against per-spec `config.yml project:` (mismatch → exit 4). |
 | `WF_AGENT_POOL` | abs path | always | Resolved `agent_pool` dir (default `~/.claude/agents`). |
 | `WF_GENERAL_KB` | abs path | always | Resolved `general_kb_path` dir — host of the general (cross-repo) knowledge base. **Required**: no default, missing/empty key → exit 2. Path may live outside `WF_REPO_ROOT` (e.g. inside a master-brain Obsidian vault). `general:` ground-rule prefix resolves under this dir. |
@@ -52,6 +51,8 @@ Idempotent: re-sourcing is a no-op unless `WF_RELOAD=1`.
 | `WF_REPO_PATHS` | newline-sep abs paths | `--spec` only, when `repos[]` declared | Absolute repo paths matching `WF_REPO_NAMES` (same index). Each verified to be a git work tree at load time. |
 | `WF_VAULT_ROOT` | abs path | when `spec_storage_mode: vault` | The vault dir (== `WF_REPO_ROOT`), set on normal walk-up discovery of a `.workflow.yml` declaring `spec_storage_mode: vault`. Unset in repo mode. |
 
+**Walk-up discriminator:** a thin per-repo `.workflow.yml` carrying `kind: repo-gate-pool` (written by `/bootstrap repo-gate-init`) is a gate-pool marker, not a real workflow config. The loader skips it and keeps ascending until a real config (no `kind: repo-gate-pool`) or the filesystem root (exit 2).
+
 All variables unset on any failure path (no partial state).
 
 ## Exit codes
@@ -60,25 +61,26 @@ All variables unset on any failure path (no partial state).
 |---|---|---|---|
 | 0 | success | — | — |
 | 2 | `.workflow.yml` not found walking up from CWD, malformed, or has invalid `spec_storage`/`gate_pool`/`agent_pool`/`general_kb_path`/`validate_scope`/`spec_storage_mode`. `general_kb_path` is **required** — missing/empty value also returns 2. | `ERROR: .workflow.yml ...` / `ERROR: ... general_kb_path is required ...` | Run `/bootstrap` (vault-init in the vault dir, or repo mode in a code repo); or fix the offending value. |
-| 3 | `gates.yml` malformed or has duplicate gate IDs | `ERROR: <pool>: malformed` / `duplicate gate ids: ...` | Fix `knowledge-base/gates.yml`. |
-| 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, unresolved agent id, missing/invalid `tier`; **or** (vault) `--require-spec` with no `--spec`; **or** `{project}` token unresolved (no `--project`, ambiguous spec dir); **or** invalid project id; **or** per-spec `config.yml project:` ≠ resolved spec-path project; **or** (vault) spec gate id not found in any bound repo's `gates.yml` | `ERROR: per-spec config missing: ...` / `vault mode requires <feature> ...` / `spec_storage uses {project} but no project resolved ...` / `project '<a>' != resolved spec path project '<b>'` / `gate ids not found in any bound repo's gates.yml: ...` | Run `/config <feature>` or `/explore <feature>`; pass `--project`; align `config.yml project:`; fix gate ids in a bound repo's `gates.yml`. |
+| 3 | inline `gate_pool` has duplicate gate IDs (repo mode); **or** a vault `.workflow.yml` carries `gate_pool` but no `repos[]` entry resolves to the vault root (self-hosting exception not satisfied) | `ERROR: <.workflow.yml>: duplicate gate_pool ids: ...` / `ERROR: <.workflow.yml>: vault .workflow.yml carries gate_pool but no repos[] entry resolves to the vault root ...` | Fix `gate_pool:` in `.workflow.yml`; or add the vault-root `repos[]` self-entry. |
+| 4 | per-spec `config.yml` missing/malformed, invalid feature id, unknown gate id, unknown phase, unresolved agent id, missing/invalid `tier`; **or** (vault) `--require-spec` with no `--spec`; **or** `{project}` token unresolved (no `--project`, ambiguous spec dir); **or** invalid project id; **or** per-spec `config.yml project:` ≠ resolved spec-path project; **or** (vault) spec gate id not found in any bound repo's `.workflow.yml gate_pool` | `ERROR: per-spec config missing: ...` / `vault mode requires <feature> ...` / `spec_storage uses {project} but no project resolved ...` / `project '<a>' != resolved spec path project '<b>'` / `gate ids not found in any bound repo's .workflow.yml gate_pool: ...` | Run `/config <feature>` or `/explore <feature>`; pass `--project`; align `config.yml project:`; fix gate ids in a bound repo's `.workflow.yml gate_pool`. |
 | 5 | `yq` timeout (5s) or JSON extraction failure | `ERROR: <file>: yq timeout` | Retry; investigate filesystem/`yq` perf. |
 | 6 | `yq` not installed, or unknown loader argument | `ERROR: yq not installed` | `brew install yq`. |
 | 7 | per-spec `repos[]` entry has missing/invalid path (missing, `..` escape, non-directory, not a git work tree, **or path is a subdirectory of a different repo's toplevel**); **or** task `ground_rules` references a `repo:<name>:` prefix whose `<name>` is not in `repos[]`; **or** a task `ground_rule` uses bare `project:`/unprefixed path under `spec_storage_mode: vault` **with 2+ bound repos** (single-repo vault resolves bare/unprefixed to the sole repo; only multi-repo rejects — `task-manager.sh resolve_ground_rule_path`) | `ERROR: <spec.yml>: repos[i] (<name>) ...` / `ERROR: <spec.yml>: ground_rules reference unknown repo names ...` / `ERROR: vault mode rejects ground_rule ...` | Fix `path:` in `specs/<f>/config.yml`; fix the offending task `ground_rules` entry / add the missing repo binding; or convert bare `project:` rules to `repo:<name>:`. Same exit code is also returned by `task-manager.sh` (`resolve_ground_rule_path`) for symmetry. |
 
-Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `gates.yml` modifications in repo mode) without failing.
+Loader emits `WARN:` for non-fatal conditions (e.g. uncommitted `.workflow.yml` modifications in repo mode) without failing.
 
 ## Vault mode
 
 `spec_storage_mode: vault` (in the vault's own `.workflow.yml`, found by normal walk-up):
 
-1. The vault `.workflow.yml` is a **thin pointer** — it owns workflow settings + `general_kb_path` only. It declares no `gate_pool` and the vault holds no `knowledge-base/`.
-2. Loader sets `WF_VAULT_ROOT = WF_REPO_ROOT = <vault dir>`, leaves `WF_GATE_POOL` and `WF_PROJECT_KB` **empty**.
+1. The vault `.workflow.yml` is a **thin pointer** — it owns workflow settings + `general_kb_path` only. It declares no `gate_pool` (single KB; no `knowledge-base/` anywhere), **except** the self-hosting exception (#8 below).
+2. Loader sets `WF_VAULT_ROOT = WF_REPO_ROOT = <vault dir>`, leaves `WF_GATE_POOL` **empty** (set to the vault `.workflow.yml` only under the self-hosting exception).
 3. `spec_storage` may contain `{project}` — substituted from `--project` (pre-config.yml) or, for `--spec` runs, the unique existing spec dir. Result exported as `WF_SPEC_PROJECT`.
 4. With `--spec`, per-spec `config.yml repos[]` is **required** (exit 4 if empty); each path validated as a git work tree (exit 7). `WF_REPO_NAMES`/`WF_REPO_PATHS` exported.
-5. Spec `gates:` ids are validated against the **union** of every bound repo's `knowledge-base/gates.yml` (fail-closed, exit 4 on unknown id) — there is no single pool.
-6. Gates and project-KB resolve **per task** from the bound repo: `multi-repo-resolution.md` derives `WF_TASK_REPO_PATH` and `WF_TASK_GATE_POOL` (`= <repo>/knowledge-base/gates.yml`). `role: primary` only selects default git/PR context — it is **not** a config source.
-7. Repo mode (`spec_storage_mode: repo` or absent) is unaffected; `WF_VAULT_ROOT`/`WF_SPEC_PROJECT` stay unset, `WF_GATE_POOL`/`WF_PROJECT_KB` populated as before.
+5. Spec `gates:` ids are validated against the **union** of every bound repo's inline `.workflow.yml gate_pool` ids (fail-closed, exit 4 on unknown id) — there is no single pool.
+6. Gates resolve **per task** from the bound repo: `multi-repo-resolution.md` derives `WF_TASK_REPO_PATH` and `WF_TASK_GATE_POOL` (`= <repo>/.workflow.yml`). `role: primary` only selects default git/PR context — it is **not** a config source.
+7. Repo mode (`spec_storage_mode: repo` or absent) is unaffected; `WF_VAULT_ROOT`/`WF_SPEC_PROJECT` stay unset, `WF_GATE_POOL` = `$WF_CONFIG_FILE` (inline `.gate_pool[]`).
+8. **Self-hosting exception:** a vault `.workflow.yml` MAY carry an inline `gate_pool` iff a `repos[]` entry resolves to the vault root dir itself (this repo's dogfood case). When satisfied, `WF_GATE_POOL` = the vault `.workflow.yml`; otherwise a vault `gate_pool` is rejected (exit 3).
 
 ## CLI mode
 

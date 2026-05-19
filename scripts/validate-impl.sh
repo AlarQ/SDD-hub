@@ -130,7 +130,7 @@ wf_vi_run_union_gates() {
   local feature="$1" spec_dir="$2" log_file="$3"
   : > "$log_file"
   # Vault mode: caller (per scripts/multi-repo-resolution.md) sets
-  # WF_TASK_GATE_POOL to the bound repo's gates.yml before invoking; repo
+  # WF_TASK_GATE_POOL to the bound repo's .workflow.yml before invoking; repo
   # mode uses the single WF_GATE_POOL.
   local pool="${WF_TASK_GATE_POOL:-${WF_GATE_POOL:?WF_TASK_GATE_POOL or WF_GATE_POOL must be set}}"
   local ceiling="${WF_SPEC_GATES:-}"

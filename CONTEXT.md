@@ -27,7 +27,7 @@ _Avoid_: subtask, slice (when used loosely).
 ### Validation
 
 **Gate**:
-A deterministic, executable check listed in `gates.yml` that reports a pass/fail `status`; tool-sourced (`source: tool`).
+A deterministic, executable check listed in `.workflow.yml gate_pool` that reports a pass/fail `status`; tool-sourced (`source: tool`).
 _Avoid_: "agent gate", calling an LLM check a gate.
 
 **Validation agent**:
@@ -48,30 +48,26 @@ _Avoid_: required, hard gate.
 
 ### Knowledge base
 
-**General KB**:
-The universal rule-set (security, architecture, testing, style) living in the master-brain vault; required, resolved via `$WF_GENERAL_KB`.
-_Avoid_: global rules, shared KB.
-
-**Project KB**:
-A per-repo rule-set at `knowledge-base/` holding project-specific rules; never in the vault.
-_Avoid_: local KB, repo rules.
+**Knowledge base** (single; was "General KB"):
+The one rule-set (security, architecture, testing, style, plus learned language/convention rules) living in the master-brain vault; required, resolved via `$WF_GENERAL_KB`. The dual Project KB / General KB layer was collapsed — see ADR-0002.
+_Avoid_: global rules, shared KB, "Project KB" (removed term).
 
 **Ground rule**:
-A prefixed pointer in a Task's `ground_rules:` (`general:`, `project:`, `repo:<name>:`) that resolves to a KB rule file.
-_Avoid_: using it for the rule's content (that is "a KB rule").
+A bare `$WF_GENERAL_KB`-relative path in a Task's `ground_rules:` (e.g. `security/general.md`) that resolves to a KB rule file. Legacy `general:`/`project:`/`repo:<name>:` prefixes are stripped + deprecation-warned.
+_Avoid_: using it for the rule's content (that is "a KB rule"); the legacy prefix grammar.
 
 **Gate registry**:
-`gates.yml` — the sole source of truth for executable Gates; distinct from KB rules.
-_Avoid_: gate KB, gate config.
+The inline `gate_pool:` array in `.workflow.yml` — the sole source of truth for executable Gates; distinct from KB rules.
+_Avoid_: gate KB, gate config, standalone `gates.yml`.
 
 ### Modes & repo binding
 
 **Repo mode**:
-Workflow config and specs live inside the code repo; `.workflow.yml` at repo root carries `gate_pool`.
+Workflow config and specs live inside the code repo; `.workflow.yml` at repo root carries an inline `gate_pool:` array.
 _Avoid_: local mode, single-repo mode.
 
 **Vault mode**:
-Going-forward path — specs live in the master-brain vault; the vault `.workflow.yml` is a thin pointer (no `gate_pool`); gates resolve per-Task from each Bound repo.
+Going-forward path — specs live in the master-brain vault; the vault `.workflow.yml` is a thin pointer (no `gate_pool`, except the self-hosting exception); gates resolve per-Task from each Bound repo's thin `.workflow.yml` (`kind: repo-gate-pool`).
 _Avoid_: multi-repo mode (multi-repo is a consequence, not the name).
 
 **Bound repo**:
@@ -131,7 +127,8 @@ _Avoid_: final validation, impl validation.
 - "project" vs "feature" vs "repo" — resolved: **Project** is the vault grouping, **Feature** is the work unit, repo is the code location a Task targets.
 - "agent gate" / "Phase-2 agent gates" — resolved: a **Gate** is deterministic only; LLM checks are **Validation agents**. The two are never merged under "gate".
 - "primary repo" implying config/KB authority — resolved: **Primary repo** is git/PR default context **only**. There is no primary repo for config; gates and KB resolve per-Task from each Bound repo.
-- "ground rule" vs "KB rule" — resolved: a **Ground rule** is a prefixed pointer in task frontmatter; the content it resolves to is "a KB rule".
+- "ground rule" vs "KB rule" — resolved: a **Ground rule** is a bare `$WF_GENERAL_KB`-relative pointer in task frontmatter; the content it resolves to is "a KB rule".
+- "Project KB" vs "General KB" / prefix grammar / vault `exit 7` ambiguity — **resolved by ADR-0002**: the dual KB collapsed to one **Knowledge base** (`$WF_GENERAL_KB`); `gates.yml` folded into inline `.workflow.yml gate_pool:`; `ground_rules` are bare paths (legacy prefixes stripped + deprecation-warned); the feedback loop writes to the general KB; `/promote-rules` deleted.
 - "review" — overloaded across the `review` Task state, `/review-findings` (triage Findings), and `/pr-review` (handle PR comments). Resolved: keep distinct; "review" bare = the Task state.
 - "validate" — shared root across `/validate-spec`, `/validate`, `/validate-impl`. Resolved: **Spec audit** (pre-impl), **Task validation** (per-Task), **Spec-completion audit** (terminal). Never "validate" bare in docs.
 

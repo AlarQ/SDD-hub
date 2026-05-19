@@ -16,7 +16,6 @@ TEST_TMPDIR=""
 setup() {
   TEST_TMPDIR="$(mktemp -d)"
   mkdir -p "$TEST_TMPDIR/specs/test-feature/tasks"
-  mkdir -p "$TEST_TMPDIR/knowledge-base"
   printf 'spec_storage: specs/\n' > "$TEST_TMPDIR/.workflow.yml"
   cd "$TEST_TMPDIR"
 }
@@ -270,46 +269,65 @@ EOF
   [[ "$out" == *"circular_dependency"* ]]
 }
 
-# --- resolve_ground_rule_path (vault single/multi-repo) ---
+# --- resolve_ground_rule_path (single-KB model, ADR-0002) ---
 
-test_vault_single_repo_unprefixed_resolves_to_that_repo() {
+test_bare_path_resolves_under_general_kb() {
   local out
-  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES="app" WF_REPO_PATHS="/code/app" \
-         WF_GENERAL_KB=/gkb bash -c \
-         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "style/general.md"')"
-  assert_eq "/code/app/knowledge-base/style/general.md" "$out" "single-repo unprefixed"
+  out="$(WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "style/general.md"' 2>/dev/null)"
+  assert_eq "/gkb/style/general.md" "$out" "bare path → \$WF_GENERAL_KB"
 }
 
-test_vault_single_repo_project_prefix_resolves() {
-  local out
-  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES="app" WF_REPO_PATHS="/code/app" \
-         WF_GENERAL_KB=/gkb bash -c \
-         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "project:languages/ts.md"')"
-  assert_eq "/code/app/knowledge-base/languages/ts.md" "$out" "single-repo project:"
+test_bare_path_emits_no_warning() {
+  local err
+  err="$(WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "style/general.md"' 2>&1 1>/dev/null)"
+  [[ -z "$err" ]]
 }
 
-test_vault_general_prefix_always_resolves() {
-  local out
-  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES="app" WF_REPO_PATHS="/code/app" \
-         WF_GENERAL_KB=/gkb bash -c \
-         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "general:security/general.md"')"
-  assert_eq "/gkb/security/general.md" "$out" "general:"
+test_general_prefix_stripped_and_warned() {
+  local out err
+  out="$(WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "general:security/general.md" 2>/dev/null')"
+  assert_eq "/gkb/security/general.md" "$out" "general: stripped"
+  err="$(WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "general:security/general.md"' 2>&1 1>/dev/null)"
+  [[ "$err" == *"deprecated"* ]]
 }
 
-test_vault_multi_repo_unprefixed_rejected() {
+test_project_prefix_stripped_and_warned() {
+  local out err
+  out="$(WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "project:languages/ts.md" 2>/dev/null')"
+  assert_eq "/gkb/languages/ts.md" "$out" "project: stripped"
+  err="$(WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "project:languages/ts.md"' 2>&1 1>/dev/null)"
+  [[ "$err" == *"deprecated"* ]]
+}
+
+test_repo_named_prefix_stripped_and_warned() {
+  local out
+  out="$(WF_GENERAL_KB=/gkb bash -c \
+         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "repo:b:languages/go.md" 2>/dev/null')"
+  assert_eq "/gkb/languages/go.md" "$out" "repo:<name>: stripped"
+}
+
+test_missing_general_kb_exits_7() {
   local rc=0
-  ( WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES=$'a\nb' WF_REPO_PATHS=$'/x\n/y' \
-    WF_GENERAL_KB=/gkb bash -c \
+  ( unset WF_GENERAL_KB; bash -c \
     'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "style/general.md"' ) >/dev/null 2>&1 || rc=$?
   [[ "$rc" == "7" ]]
 }
 
-test_vault_multi_repo_named_prefix_resolves() {
-  local out
-  out="$(WF_SPEC_STORAGE_MODE=vault WF_REPO_NAMES=$'a\nb' WF_REPO_PATHS=$'/x\n/y' \
-         WF_GENERAL_KB=/gkb bash -c \
-         'source "'"$TASK_MANAGER"'"; resolve_ground_rule_path "repo:b:languages/go.md"')"
-  assert_eq "/y/knowledge-base/languages/go.md" "$out" "repo:<name>:"
+test_deprecation_warn_once_per_process() {
+  local err
+  err="$(WF_GENERAL_KB=/gkb bash -c \
+    'source "'"$TASK_MANAGER"'"
+     resolve_ground_rule_path "general:a.md" >/dev/null
+     resolve_ground_rule_path "project:b.md" >/dev/null' 2>&1 1>/dev/null)"
+  local n
+  n="$(printf '%s\n' "$err" | grep -c "deprecated")"
+  assert_eq "1" "$n" "warn emitted once per process"
 }
 
 echo "Running test-task-manager.sh tests..."
@@ -322,11 +340,13 @@ run_test "vault: tasks under WF_SPEC_STORAGE are accessible to next command" tes
 run_test "set-status works from a nested subdir with absolute task path" test_set_status_works_from_nested_subdir
 run_test "validate parses frontmatter with markdown HR in body" test_validate_frontmatter_with_markdown_hr_in_body
 run_test "status detects diamond-shaped dependency cycle (C2)" test_status_detects_diamond_cycle
-run_test "vault single-repo: unprefixed → sole repo KB" test_vault_single_repo_unprefixed_resolves_to_that_repo
-run_test "vault single-repo: project: → sole repo KB" test_vault_single_repo_project_prefix_resolves
-run_test "vault: general: always resolves" test_vault_general_prefix_always_resolves
-run_test "vault multi-repo: unprefixed rejected (exit 7)" test_vault_multi_repo_unprefixed_rejected
-run_test "vault multi-repo: repo:<name>: resolves" test_vault_multi_repo_named_prefix_resolves
+run_test "resolve: bare path → \$WF_GENERAL_KB" test_bare_path_resolves_under_general_kb
+run_test "resolve: bare path emits no warning" test_bare_path_emits_no_warning
+run_test "resolve: general: stripped + warned" test_general_prefix_stripped_and_warned
+run_test "resolve: project: stripped + warned" test_project_prefix_stripped_and_warned
+run_test "resolve: repo:<name>: stripped + warned" test_repo_named_prefix_stripped_and_warned
+run_test "resolve: missing WF_GENERAL_KB → exit 7" test_missing_general_kb_exits_7
+run_test "resolve: deprecation warn once per process" test_deprecation_warn_once_per_process
 run_test "validate accepts technical_acceptance absent" test_validate_technical_acceptance_absent_ok
 run_test "validate accepts technical_acceptance array" test_validate_technical_acceptance_array_accepted
 run_test "validate rejects technical_acceptance scalar" test_validate_technical_acceptance_scalar_rejected

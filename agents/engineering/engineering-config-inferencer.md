@@ -23,7 +23,7 @@ Language signal files (for language detection):
 - `requirements.txt`, `pyproject.toml` → python
 
 Registry and pool files:
-- `knowledge-base/gates.yml` — full list of valid gate IDs and their `applies_to` tags
+- inline `gate_pool:` from `.workflow.yml` — full list of valid gate IDs and their `applies_to` tags (vault mode: unioned across bound repos)
 - `agent_pool` directory listing — full list of valid agent IDs (resolved as `<category>/<name>`)
 - Spec PRD / description provided in the prompt
 
@@ -46,7 +46,7 @@ tier: small | medium | large    # required
 track: feature | technical       # optional, default feature
 tags: [list of 1-5 relevant tags, each ^[a-zA-Z0-9_-]{1,32}$]
 gates:
-  - <gate-id>          # each must exist in gates.yml
+  - <gate-id>          # each must exist in the provided gate_pool
 agents:
   explore:    [list of fully-qualified agent IDs]
   propose:    [list of fully-qualified agent IDs]
@@ -107,7 +107,7 @@ Signals for `technical`: PRD/description phrased as "refactor X", "decouple A fr
 
 ### ID Validation Rules
 
-**Gate IDs:** must match `^[a-zA-Z0-9_-]{1,64}$` AND exist in the provided `gates.yml`.
+**Gate IDs:** must match `^[a-zA-Z0-9_-]{1,64}$` AND exist in the provided `gate_pool`.
 
 **Agent IDs (fully qualified):** two forms allowed:
 - `<category>/<name>` → resolves to `<agent_pool>/<category>/<category>-<name>.md`
@@ -118,7 +118,7 @@ Only emit IDs that resolve to files actually listed in the agent_pool. Never inv
 ### Gate Selection Logic
 
 1. Detect languages present from signal files.
-2. From `gates.yml`, collect all gates where `applies_to` contains the detected language OR `applies_to: [any]`.
+2. From the `gate_pool`, collect all gates where `applies_to` contains the detected language OR `applies_to: [any]`.
 3. Include only gates that are relevant to the spec's scope (e.g., skip `rust-clippy` for a shell-only spec).
 4. List gate IDs under `gates:`.
 
@@ -169,11 +169,11 @@ agents:
 
 When exactly one registry is available, emit what you can and note FALLBACK only for the missing section:
 
-**agent_pool empty, gates.yml populated:**
+**agent_pool empty, gate_pool populated:**
 Emit gates normally. Set all agent phases to `[]`. Include in reasoning:
 `FALLBACK (agents): agent_pool is empty — all phases set to [].`
 
-**gates.yml empty or missing, agent_pool populated:**
+**gate_pool empty or missing, agent_pool populated:**
 Emit agents normally. Set `gates: []`. Include in reasoning:
 `FALLBACK (gates): no gates in registry — gates set to [].`
 

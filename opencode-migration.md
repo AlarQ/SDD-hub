@@ -14,7 +14,7 @@ Supersedes earlier draft (had errors: plugin API shape, permission-key list, fil
 - **Agent descriptions: postpone rewrite.** Use existing Claude descriptions as-is in v1. Revisit only if smoke testing shows OpenCode auto-delegation misfires.
 - **Knowledge-base → OpenCode skills** required v1 (`~/.config/opencode/skills/<name>/SKILL.md`).
 - **Drop dismissive-language hook in OpenCode** — `Stop`-equivalent block-on-output not available.
-- **Drop workflow-tui** from migration scope (already runtime-agnostic).
+- **Rust dashboard** out of migration scope — the `workflow-core` + `workflow-web` workspace is runtime-agnostic.
 - **Drop custom tools** (`tools/*.ts`) from v1.
 - **Project instructions** auto-loaded from `~/.config/opencode/AGENTS.md` (no `instructions:` array — auto-discovery handles it).
 - **Parallel subagent spawn**: assumed supported (General subagent docs imply); runtime-verified during smoke test. If sequential-only — accept perf hit, do not block v1.
@@ -224,7 +224,7 @@ User's existing `opencoder` proves the pattern: one primary agent, 6-stage workf
 2. **Workflow slash commands shrink to ~10 lines** — `/explore`, `/propose`, `/validate-spec`, `/implement`, `/validate`, `/review-findings`, `/learn-from-reports`, `/ship`, `/validate-impl`, `/pr-review`. Frontmatter: `agent: SpecDriver`, `subtask: true`. Body: phase hint + `$ARGUMENTS`.
 3. **20 existing subagents port as-is** — already `mode: subagent` shape (Odium, config-inferencer, software-architect, code-reviewer, ultrathink-debugger, etc.). SpecDriver invokes via task tool. Parallel dispatch (validate Phase 2) happens inside SpecDriver, not from command body.
 4. **AGENTS.md richer than CLAUDE.md** — centralizes content currently inlined across command bodies: KB prefix convention, gate-skip semantics, triple-gate rule, hook bypass policy, task state machine.
-5. **Utility commands stay plain** (no agent wrapper): `/spec-status`, `/workflow-summary`, `/config`, `/bootstrap`, `/quick-ship`, `/promote-rules`, `/continue-task`, `/research`. Pure utilities, no orchestration.
+5. **Utility commands stay plain** (no agent wrapper): `/spec-status`, `/workflow-summary`, `/config`, `/bootstrap`, `/quick-ship`, `/continue-task`, `/research`. Pure utilities, no orchestration.
 
 ### Plan deltas
 

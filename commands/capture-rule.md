@@ -2,9 +2,9 @@ Capture an ad-hoc rule from the current conversation into the general knowledge 
 
 ## Purpose
 
-Lets the user crystallize an insight that emerged organically — from a code review, a cross-repo pattern, a PR discussion, files just read, a correction the user just made — into a durable rule in the **general KB** (`$WF_GENERAL_KB/`). Fills the gap left by `/review-findings` and `/learn-from-reports` (project KB only) and `/promote-rules` (requires existing project KB rule). This is the **second command permitted to write to the general KB** (alongside `/promote-rules`).
+Lets the user crystallize an insight that emerged organically — from a code review, a cross-repo pattern, a PR discussion, files just read, a correction the user just made — into a durable rule in the **general KB** (`$WF_GENERAL_KB/`). Unlike `/review-findings` and `/learn-from-reports` (which write general-KB rules mined from spec validation reports), this command captures an ad-hoc rule directly from the current conversation, with no active spec required.
 
-> **Durability note:** Changes to `$WF_GENERAL_KB/` are local to this machine. Running `setup.sh --force` from the dev-workflow repo will overwrite them. To make a captured rule permanent, open a PR in the dev-workflow repo adding it to its `knowledge-base/` directory.
+> **Durability note:** Changes to `$WF_GENERAL_KB/` are local to this machine. Running `setup.sh --force` from the dev-workflow repo will overwrite them. To make a captured rule permanent, commit it to the general-KB source (the vault/repo backing `$WF_GENERAL_KB`).
 
 ## Invocation
 
@@ -17,7 +17,7 @@ Lets the user crystallize an insight that emerged organically — from a code re
 ## Prerequisites
 
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for general KB prerequisites.
-2. Read `$WF_GENERAL_KB/_index.md` to understand existing coverage, categories, and file layout. Do **not** read the project KB — this command is general-only.
+2. Read `$WF_GENERAL_KB/_index.md` to understand existing coverage, categories, and file layout.
 
 ## Steps
 
@@ -97,7 +97,7 @@ a. **File.** If the target file exists, read it first, then append `## <Section>
 
 b. **Index.** Update `$WF_GENERAL_KB/_index.md` — preserve the existing table format. Add a new row `| <category>/<file>.md | <Category Title> | <one-line description> |` for new files, or leave existing rows untouched when appending to an existing file. If the description for an existing file is now stale because the appended section materially expands its scope, update the description in place.
 
-c. **No project KB writes.** This command never touches `knowledge-base/` (project) regardless of cwd.
+c. **General KB only.** This command only ever writes under `$WF_GENERAL_KB/`, regardless of cwd.
 
 ### Step 6 — Report and next step
 
@@ -114,10 +114,10 @@ Open a PR in the dev-workflow repo to make it permanent.
 
 ## Constraints
 
-- **General KB only.** Never write to a project's `knowledge-base/`.
+- **General KB only.** Only ever write under `$WF_GENERAL_KB/`.
 - **No spec/feature coupling.** Runs from any cwd, any repo, with or without an active spec.
 - **No frontmatter** on rule files.
 - **No agent spawning** — main command does synthesis directly.
 - **No monitor events** — this is not part of spec flow.
 - **All prompts use `AskUserQuestion`** per `~/.claude/scripts/ask-user-protocol.md`. No plain-text menus.
-- **Universal phrasing only.** Reject (or revise during Edit) rules that reference project-specific names, paths, internal systems, or team process. If the candidate cannot be made universal, suggest the user run a project-KB capture flow (`/review-findings` from a relevant spec) instead.
+- **Universal phrasing only.** Reject (or revise during Edit) rules that reference project-specific names, paths, internal systems, or team process. If the candidate cannot be made universal, suggest the user capture it via `/review-findings` / `/learn-from-reports` from a relevant spec instead.

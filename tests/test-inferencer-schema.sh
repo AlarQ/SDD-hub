@@ -33,13 +33,31 @@ run_test() {
   teardown || true
 }
 
-# Build a minimal agent_pool and gates.yml in $TEST_TMPDIR.
+# Build a minimal agent_pool + inline gate_pool registry (.workflow.yml) in
+# $TEST_TMPDIR. gate_pool is the LAST key so tests can append entries.
 mk_env() {
   local repo="$TEST_TMPDIR/repo"
-  mkdir -p "$repo/knowledge-base" \
-            "$repo/agent_pool/engineering" \
+  mkdir -p "$repo/agent_pool/engineering" \
             "$repo/agent_pool/design"
-  cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
+  cat > "$repo/.workflow.yml" <<'EOF'
+spec_storage: specs/
+gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true
+EOF
   # Seed agent pool matching agent ID grammar from design.md.
   touch "$repo/agent_pool/engineering/engineering-security-engineer.md"
   touch "$repo/agent_pool/engineering/engineering-software-architect.md"
@@ -133,11 +151,11 @@ YAML
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Test: all emitted gate IDs resolve in gates.yml
+# Test: all emitted gate IDs resolve in .workflow.yml gate_pool
 # ──────────────────────────────────────────────────────────────────────────────
 test_gate_ids_resolve_in_registry() {
   local repo; repo="$(mk_env)"
-  local gates_file="$repo/knowledge-base/gates.yml"
+  local gates_file="$repo/.workflow.yml"
   local out_file="$TEST_TMPDIR/config-gates.yml"
   # Given: output with gates from the registry
   cat > "$out_file" <<'YAML'
@@ -152,11 +170,11 @@ agents:
   validate: []
   pr-review: []
 YAML
-  # When: we extract gate IDs and check each against gates.yml
+  # When: we extract gate IDs and check each against .workflow.yml gate_pool
   local fail=0
   while IFS= read -r gate_id; do
     [[ -z "$gate_id" ]] && continue
-    local found; found="$(yq e ".gates[] | select(.id == \"$gate_id\") | .id" "$gates_file")"
+    local found; found="$(yq e ".gate_pool[] | select(.id == \"$gate_id\") | .id" "$gates_file")"
     if [[ -z "$found" ]]; then
       echo "  gate ID not in registry: $gate_id" >&2
       fail=1
@@ -170,7 +188,7 @@ YAML
 # ──────────────────────────────────────────────────────────────────────────────
 test_invalid_gate_id_rejected() {
   local repo; repo="$(mk_env)"
-  local gates_file="$repo/knowledge-base/gates.yml"
+  local gates_file="$repo/.workflow.yml"
   local out_file="$TEST_TMPDIR/config-bad-gate.yml"
   # Given: output with a gate ID that does not exist in the registry
   cat > "$out_file" <<'YAML'
@@ -186,7 +204,7 @@ agents:
 YAML
   # When: we check the gate against registry
   # Then: validation detects the unknown ID
-  local found; found="$(yq e ".gates[] | select(.id == \"nonexistent-gate\") | .id" "$gates_file")"
+  local found; found="$(yq e ".gate_pool[] | select(.id == \"nonexistent-gate\") | .id" "$gates_file")"
   [[ -z "$found" ]] || { echo "  nonexistent gate should not resolve" >&2; return 1; }
 }
 
@@ -231,7 +249,7 @@ YAML
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Test: partial input — agent_pool empty, gates.yml populated
+# Test: partial input — agent_pool empty, gate_pool populated
 # Output must include gates, agent phases must be empty lists
 # ──────────────────────────────────────────────────────────────────────────────
 test_partial_input_empty_agent_pool() {
@@ -255,16 +273,16 @@ YAML
   [[ -z "$all_agents" ]] || { echo "  expected empty agent lists for empty-pool partial output" >&2; return 1; }
 
   local gate_count; gate_count="$(yq e '.gates | length' "$out_file")"
-  [[ "$gate_count" -ge 1 ]] || { echo "  gates should be non-empty when gates.yml is populated" >&2; return 1; }
+  [[ "$gate_count" -ge 1 ]] || { echo "  gates should be non-empty when gate_pool is populated" >&2; return 1; }
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Test: partial input — gates.yml empty, agent_pool populated
+# Test: partial input — gate_pool empty, agent_pool populated
 # Output must include agents, gates must be empty list
 # ──────────────────────────────────────────────────────────────────────────────
 test_partial_input_empty_gates() {
   local out_file="$TEST_TMPDIR/config-partial-gates.yml"
-  # Given: inferencer output when gates.yml has no entries (partial fallback)
+  # Given: inferencer output when gate_pool has no entries (partial fallback)
   cat > "$out_file" <<'YAML'
 tags: [rust]
 gates: []
@@ -324,7 +342,7 @@ test_partial_input_fallback_documented() {
 test_negative_shape_rust_only_signals() {
   local repo; repo="$(mk_env)"
   # Extend gates fixture with python-only and js-only entries so grep can actually detect them.
-  cat >> "$repo/knowledge-base/gates.yml" <<'YAML'
+  cat >> "$repo/.workflow.yml" <<'YAML'
   - id: pylint
     command: "pylint src/"
     applies_to: [python]
@@ -408,7 +426,7 @@ run_test "inferencer output parses as valid spec config.yml (full happy path)" \
 run_test "minimal valid output (empty lists) parses as valid" \
   test_minimal_output_valid
 
-run_test "all emitted gate IDs resolve in gates.yml" \
+run_test "all emitted gate IDs resolve in .workflow.yml gate_pool" \
   test_gate_ids_resolve_in_registry
 
 run_test "invalid gate ID not in registry is detectable" \
@@ -420,7 +438,7 @@ run_test "all emitted agent IDs resolve under agent_pool" \
 run_test "partial input: empty agent_pool — gates populated, agents all empty" \
   test_partial_input_empty_agent_pool
 
-run_test "partial input: empty gates.yml — agents populated, gates empty" \
+run_test "partial input: empty gate_pool — agents populated, gates empty" \
   test_partial_input_empty_gates
 
 run_test "inferencer prompt forbids reading .env*, *.pem, id_*, .git/config" \

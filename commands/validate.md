@@ -24,11 +24,11 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 
 ### Multi-repo task resolution
 
-Before Phase 1, resolve task repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH` and, in vault mode, `WF_TASK_GATE_POOL` (the bound repo's `knowledge-base/gates.yml`; `WF_GATE_POOL` is empty in vault mode — `gate-ceiling.sh` uses `WF_TASK_GATE_POOL` when set). Every gate command in Phase 1 runs as `(cd "$WF_TASK_REPO_PATH" && <gate command>)`. Phase 2 advisory agents receive `WF_TASK_REPO_PATH` and a scoped diff (`git -C "$WF_TASK_REPO_PATH" diff feat/$ARGUMENTS...HEAD`) instead of repo-root diff.
+Before Phase 1, resolve task repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH` and, in vault mode, `WF_TASK_GATE_POOL` (the bound repo's `.workflow.yml`; `WF_GATE_POOL` is empty in vault mode — `gate-ceiling.sh` uses `WF_TASK_GATE_POOL` when set, querying its inline `.gate_pool[]`). Every gate command in Phase 1 runs as `(cd "$WF_TASK_REPO_PATH" && <gate command>)`. Phase 2 advisory agents receive `WF_TASK_REPO_PATH` and a scoped diff (`git -C "$WF_TASK_REPO_PATH" diff feat/$ARGUMENTS...HEAD`) instead of repo-root diff.
 
 ### `applies_to_repos` filter
 
-For each gate in the effective set, check its `applies_to_repos` field in `gates.yml`. If present and the task's `repo:` is not in the list, skip the gate and emit:
+For each gate in the effective set, check its `applies_to_repos` field in the gate pool (`.workflow.yml .gate_pool[]`). If present and the task's `repo:` is not in the list, skip the gate and emit:
 ```bash
 $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
   "$(printf '{"gate":"%s","reason":"applies_to_repos","repo":"%s"}' "<id>" "$task_repo")"
@@ -95,7 +95,7 @@ For each task with `status: implemented`:
    effective="$(wf_compute_effective_set "<task-file>")"; rc=$?
    ```
 
-   Semantics: extracts language tags from the task's `ground_rules` (paths matching `languages/<lang>.md`), reads the gate pool, and returns `WF_SPEC_GATES` (ceiling) ∩ {gates whose `applies_to` matches a task tag or contains `any`} — sorted, unique. Gate pool source: `WF_TASK_GATE_POOL` when set (vault mode — the per-task bound repo's `knowledge-base/gates.yml`, resolved in "Multi-repo task resolution" above), else `WF_GATE_POOL` (repo mode). `gate-ceiling.sh` applies this precedence internally; in vault mode `WF_GATE_POOL` is empty and must not be relied on here.
+   Semantics: extracts language tags from the task's `ground_rules` (paths matching `languages/<lang>.md`), reads the gate pool, and returns `WF_SPEC_GATES` (ceiling) ∩ {gates whose `applies_to` matches a task tag or contains `any`} — sorted, unique. Gate pool source: `WF_TASK_GATE_POOL` when set (vault mode — the per-task bound repo's `.workflow.yml`, resolved in "Multi-repo task resolution" above), else `WF_GATE_POOL` (repo mode). Both point at a `.workflow.yml`; gate lookups query its inline `.gate_pool[]`. `gate-ceiling.sh` applies this precedence internally; in vault mode `WF_GATE_POOL` is empty and must not be relied on here.
 2. On rc 3 (empty effective set on code-bearing task without `empty_intersection_ok: true`) record the critical finding from step 5 below before continuing. On rc 90 abort with "yq required".
 3. **Effective set** is the value printed by the helper.
 
@@ -120,7 +120,7 @@ After computing the effective set above and before step 4 below, branch on `WF_V
    - Read task frontmatter `empty_intersection_ok` field (default `false`).
    - If `empty_intersection_ok: true`: emit `gate_skip` event with `reason: empty_intersection_ok`, record 0 gates executed, treat as pass — skip to Phase 2.
    - If `false` (default): record a `critical` error finding (`"Empty effective gate set on code-bearing task — ceiling ∩ ground_rules yielded no gates. Verify spec config.yml gates and task ground_rules."`), set gate status to `error`, block transition to `done`.
-6. Run **every** gate in the effective set using its `command` from `gates.yml` — skipping is not allowed.
+6. Run **every** gate in the effective set using its `command` from the gate pool (`.workflow.yml .gate_pool[]`) — skipping is not allowed.
    - If a gate command is missing or fails to install, record it as an error finding.
 7. Collect all gate outputs and convert findings into the report schema.
 
@@ -133,7 +133,7 @@ Spawn agents **in parallel** to analyze code against knowledge-base rules. Agent
 Each spawned agent receives:
 - The task file path and changed files (from `estimated_files` or git diff)
 - All `ground_rules` files referenced in the task (per `knowledge-base-rules.md`)
-- The project's `CLAUDE.md` and relevant knowledge-base files from both general and project KBs
+- The project's `CLAUDE.md` and relevant rule files from the general KB (`$WF_GENERAL_KB`)
 
 Resolve each agent ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`:
 - `<category>/<name>` → `<agent_pool>/<category>/<category>-<name>.md`

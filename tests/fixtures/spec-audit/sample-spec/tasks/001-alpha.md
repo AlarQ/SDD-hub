@@ -4,7 +4,7 @@ name: "alpha"
 status: done
 blocked_by: []
 ground_rules:
-  - general:languages/shell/_index.md
+  - languages/shell/_index.md
 ---
 
 Alpha task.

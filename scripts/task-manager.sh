@@ -180,79 +180,42 @@ read_frontmatter() {
   _wf_yq --front-matter=extract eval "$expression" "$file"
 }
 
-# Resolve a prefixed ground_rules path to a real file path (absolute).
+# One-time-per-process deprecation warning for legacy ground_rule prefixes.
+# Single general KB now — `general:`/`project:`/`repo:<name>:` prefixes are
+# stripped and the remainder resolved under $WF_GENERAL_KB (ADR-0002).
+_WF_GR_PREFIX_WARNED=""
+_wf_ground_rule_deprecation_warn() {
+  [[ -n "$_WF_GR_PREFIX_WARNED" ]] && return 0
+  _WF_GR_PREFIX_WARNED=1
+  echo "WARN: ground_rule prefixes (general:/project:/repo:<name>:) are deprecated (ADR-0002) — use bare \$WF_GENERAL_KB-relative paths. Prefix stripped; resolved under \$WF_GENERAL_KB." >&2
+}
+
+# Resolve a ground_rules path to a real file path (absolute) under the single
+# general KB. Legacy prefixes are stripped + deprecation-warned (ADR-0002).
 resolve_ground_rule_path() {
   local prefixed_path="$1"
-  local project_kb="${_WF_TM_REPO_ROOT}/knowledge-base"
-  # Vault mode: no project KB sits next to a vault-hosted spec.
-  #  - exactly ONE bound repo  → that repo is the implicit default; bare
-  #    `project:` / unprefixed rules resolve to its knowledge-base/.
-  #  - TWO+ bound repos         → ambiguous; require `general:` or `repo:<n>:`.
-  #  - ZERO bound repos         → nothing to resolve against; reject.
-  if [[ "${WF_SPEC_STORAGE_MODE:-repo}" == "vault" ]]; then
-    local -a _vn=()
-    local _v
-    while IFS= read -r _v; do [[ -n "$_v" ]] && _vn+=("$_v"); done <<<"${WF_REPO_NAMES:-}"
-    case "$prefixed_path" in
-      general:*|repo:*) ;;
-      *)
-        if [[ "${#_vn[@]}" -eq 1 ]]; then
-          local _sp=""
-          while IFS= read -r _v; do [[ -n "$_v" ]] && { _sp="$_v"; break; }; done <<<"${WF_REPO_PATHS:-}"
-          [[ -n "$_sp" ]] || { echo "ERROR: vault single-repo default unresolved (WF_REPO_PATHS empty)" >&2; return 7; }
-          project_kb="$_sp/knowledge-base"
-        elif [[ "${#_vn[@]}" -ge 2 ]]; then
-          echo "ERROR: vault multi-repo rejects ground_rule '$prefixed_path' — use 'general:' or 'repo:<name>:' prefix" >&2
-          return 7
-        else
-          echo "ERROR: vault mode rejects ground_rule '$prefixed_path' — no bound repos[] (use 'general:' or bind repos)" >&2
-          return 7
-        fi ;;
-    esac
+  if [[ -z "${WF_GENERAL_KB:-}" ]]; then
+    echo "ERROR: WF_GENERAL_KB not set — source config-loader.sh and run wf_load_config first (or set general_kb_path in .workflow.yml)" >&2
+    return 7
   fi
+  local stripped="$prefixed_path"
   case "$prefixed_path" in
     general:*)
-      if [[ -z "${WF_GENERAL_KB:-}" ]]; then
-        echo "ERROR: WF_GENERAL_KB not set — source config-loader.sh and run wf_load_config first (or set general_kb_path in .workflow.yml)" >&2
-        return 7
-      fi
-      echo "$WF_GENERAL_KB/${prefixed_path#general:}"
-      ;;
-    project:*) echo "$project_kb/${prefixed_path#project:}" ;;
+      stripped="${prefixed_path#general:}"
+      _wf_ground_rule_deprecation_warn ;;
+    project:*)
+      stripped="${prefixed_path#project:}"
+      _wf_ground_rule_deprecation_warn ;;
+    repo:*:*)
+      # repo:<name>:<rel-path> — drop repo:<name>: segment.
+      local rest="${prefixed_path#repo:}"
+      stripped="${rest#*:}"
+      _wf_ground_rule_deprecation_warn ;;
     repo:*)
-      # repo:<name>:<rel-path> — resolves under that bound repo's knowledge-base/
-      local rest repo_name rel
-      rest="${prefixed_path#repo:}"; repo_name="${rest%%:*}"; rel="${rest#*:}"
-      local repo_root=""
-      if command -v wf_repo_path >/dev/null 2>&1; then
-        repo_root="$(wf_repo_path "$repo_name" 2>/dev/null || true)"
-      fi
-      if [[ -z "$repo_root" ]]; then
-        # Best-effort: search WF_REPO_NAMES / WF_REPO_PATHS directly. Build
-        # parallel arrays once and assert lengths match (mismatch = corrupted
-        # env from out-of-band edits — fail loud rather than silently misalign).
-        if [[ -n "${WF_REPO_NAMES:-}" && -n "${WF_REPO_PATHS:-}" ]]; then
-          local -a _names=() _paths=()
-          local _n _p
-          while IFS= read -r _n; do [[ -n "$_n" ]] && _names+=("$_n"); done <<<"$WF_REPO_NAMES"
-          while IFS= read -r _p; do [[ -n "$_p" ]] && _paths+=("$_p"); done <<<"$WF_REPO_PATHS"
-          if [[ "${#_names[@]}" -ne "${#_paths[@]}" ]]; then
-            echo "ERROR: WF_REPO_NAMES/WF_REPO_PATHS length mismatch (${#_names[@]} vs ${#_paths[@]})" >&2
-            return 7
-          fi
-          local _i
-          for _i in "${!_names[@]}"; do
-            if [[ "${_names[$_i]}" == "$repo_name" ]]; then
-              repo_root="${_paths[$_i]}"; break
-            fi
-          done
-        fi
-      fi
-      [[ -n "$repo_root" ]] || { echo "ERROR: unresolved repo:$repo_name (not in WF_REPO_NAMES)" >&2; return 7; }
-      echo "$repo_root/knowledge-base/$rel"
-      ;;
-    *)         echo "$project_kb/$prefixed_path" ;;
+      stripped="${prefixed_path#repo:}"
+      _wf_ground_rule_deprecation_warn ;;
   esac
+  echo "$WF_GENERAL_KB/$stripped"
 }
 
 # Update a field in the YAML frontmatter of a markdown file.
@@ -461,8 +424,10 @@ cmd_create_followup() {
   else next_id=$(printf "%03d" $((10#$last_id + 1))); fi
 
   local rules
+  # Bare $WF_GENERAL_KB-relative paths (ADR-0002); legacy general:/project:/repo:
+  # prefixes still accepted (stripped at resolve time by the migration shim).
   rules=$(awk '/^## Applicable Ground Rules/{flag=1; next} /^## /{flag=0} flag' "$spec_md" \
-    | grep -oE '`(general|project):[^`]+`' \
+    | grep -oE '`[^`]+\.md`' \
     | tr -d '`' \
     | awk '!seen[$0]++')
   [ -n "$rules" ] || die "No ground_rules parsed from '## Applicable Ground Rules' in $spec_md"

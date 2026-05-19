@@ -21,15 +21,14 @@ Distinct from `/validate-impl` (post-implementation Odium audit of claimed-vs-ac
 Spawn the `Spec Reviewer` agent (`engineering-spec-reviewer`) using the Agent tool. The agent receives:
 
 - The feature path: `specs/$ARGUMENTS/`
-- General KB path: `$WF_GENERAL_KB/`
-- Project KB path: `knowledge-base/`
+- General KB path: `$WF_GENERAL_KB/` (single KB — no project-KB layer, ADR-0002)
 - The project's `CLAUDE.md`
 - The repository root for grep/glob verification of referenced paths and symbols
 - When `WF_REPO_NAMES` is non-empty (vault mode): pass `WF_REPO_NAMES` + `WF_REPO_PATHS` so the Spec Reviewer resolves file/symbol references against each bound repo (not the vault). The reviewer must verify each task's `repo:` field is a member of `WF_REPO_NAMES` and that referenced files actually live under that repo's tree.
 
 Instruct the agent with this directive:
 
-> "Audit `specs/$ARGUMENTS/` before implementation starts. Inspect every artifact under the directory (prd.md, spec.md, design.md, test-strategy.md, config.yml, tasks/*.md) and surface findings across four pillars: contract directions, logic gaps, missing pieces (traceability: FR→scenario→task→test), and repo misalignment (every file path, function reference, reuse target, and ground_rules prefix must resolve against the actual repo via Glob / `git ls-files` / Grep). Additional checks: knowledge-base rule compliance against both knowledge bases, task graph sanity (DAG, ground_rules prefix convention, ordering), ambiguity (undefined terms used before glossary), testability of acceptance criteria, and traceability of Security Scenarios to a STRIDE threat (if a threat model is present).
+> "Audit `specs/$ARGUMENTS/` before implementation starts. Inspect every artifact under the directory (prd.md, spec.md, design.md, test-strategy.md, config.yml, tasks/*.md) and surface findings across four pillars: contract directions, logic gaps, missing pieces (traceability: FR→scenario→task→test), and repo misalignment (every file path, function reference, reuse target, and ground_rules prefix must resolve against the actual repo via Glob / `git ls-files` / Grep). Additional checks: KB rule compliance against the general KB (`$WF_GENERAL_KB`; `ground_rules` are bare general-KB-relative paths), task graph sanity (DAG, ordering), ambiguity (undefined terms used before glossary), testability of acceptance criteria, and traceability of Security Scenarios to a STRIDE threat (if a threat model is present).
 >
 > The repo-root `docs/adr/` (and `CONTEXT.md`) are authoritative for durable, cross-spec decisions and canonical glossary terms. A `design.md` ADR that references an existing `docs/adr/` entry by id (instead of inlining it) is correct by design — do NOT flag the referenced-but-not-inlined decision as a missing piece or gap. Glossary terms defined in `CONTEXT.md` count as defined for the ambiguity check.
 >

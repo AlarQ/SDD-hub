@@ -46,15 +46,29 @@ run_test() {
 mk_repo_with_spec() {
   local feature="${1:-demo}"
   local repo="$TEST_TMPDIR/repo"
-  mkdir -p "$repo/specs/$feature/tasks" "$repo/knowledge-base" "$repo/agents"
+  mkdir -p "$repo/specs/$feature/tasks" "$repo/agents"
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
+gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true
 general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 validate_scope: per-task
 EOF
-  cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"  # fixture from T002
   # Minimal spec config with rust-clippy + shellcheck ceiling
   cat > "$repo/specs/$feature/config.yml" <<EOF
 tags: [test]
@@ -76,14 +90,28 @@ EOF
 t_missing_spec_config_exit4() {
   # Given: repo without spec config.yml
   local repo="$TEST_TMPDIR/repo"
-  mkdir -p "$repo/specs/demo" "$repo/knowledge-base" "$repo/agents"
+  mkdir -p "$repo/specs/demo" "$repo/agents"
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
+gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true
 general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
-  cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
 
   # When: loader invoked with --spec demo
   (
@@ -104,7 +132,7 @@ run_test "Missing config.yml → loader exits 4" t_missing_spec_config_exit4
 # scripts/gate-ceiling.sh. Tests exercise the production code path rather
 # than a parallel re-implementation.
 _compute_effective_set() {
-  local gates_file="$1"   # path to gates.yml
+  local gates_file="$1"   # path to .workflow.yml (inline gate_pool)
   local spec_gates="$2"   # newline-separated ceiling gate IDs
   local lang_tags="$3"    # space-separated language tags (e.g. "rust shell")
 
@@ -132,14 +160,28 @@ run_test "Ceiling intersection: rust task → only rust-clippy in effective set"
 t_ceiling_intersection_semgrep_any_tag() {
   # Given: spec ceiling includes semgrep-security (applies_to: any)
   local repo="$TEST_TMPDIR/repo"
-  mkdir -p "$repo/specs/demo" "$repo/knowledge-base" "$repo/agents"
+  mkdir -p "$repo/specs/demo" "$repo/agents"
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
+gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true
 general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
-  cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
   cat > "$repo/specs/demo/config.yml" <<EOF
 tier: small
 gates:
@@ -160,16 +202,30 @@ EOF
 run_test "Ceiling intersection: 'any' applies_to gate runs for any language" t_ceiling_intersection_semgrep_any_tag
 
 t_gate_outside_ceiling_excluded() {
-  # Given: gates.yml has shellcheck but spec ceiling only has rust-clippy
+  # Given: gate_pool has shellcheck but spec ceiling only has rust-clippy
   local repo="$TEST_TMPDIR/repo"
-  mkdir -p "$repo/specs/demo" "$repo/knowledge-base" "$repo/agents"
+  mkdir -p "$repo/specs/demo" "$repo/agents"
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
+gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true
 general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
-  cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
   cat > "$repo/specs/demo/config.yml" <<EOF
 tier: small
 gates:
@@ -286,14 +342,28 @@ run_test "Snapshot: identical gates → no drift" t_snapshot_no_drift_identical
 t_unknown_agent_id_exit4() {
   # Given: spec config references agent id "nonexistent-agent" not in agent pool
   local repo="$TEST_TMPDIR/repo"
-  mkdir -p "$repo/specs/demo" "$repo/knowledge-base" "$repo/agents"
+  mkdir -p "$repo/specs/demo" "$repo/agents"
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
-gate_pool: knowledge-base/gates.yml
+gate_pool:
+  - id: rust-clippy
+    command: "cargo clippy -- -D warnings"
+    applies_to: [rust]
+    category: lint
+    blocking: true
+  - id: shellcheck
+    command: "shellcheck scripts/*.sh"
+    applies_to: [shell]
+    category: lint
+    blocking: true
+  - id: semgrep-security
+    command: "semgrep --config auto ."
+    applies_to: [any]
+    category: security
+    blocking: true
 general_kb_path: $REPO_ROOT/tests/fixtures
 agent_pool: agents
 EOF
-  cp "$FIXTURES/gates-valid.yml" "$repo/knowledge-base/gates.yml"
   cat > "$repo/specs/demo/config.yml" <<EOF
 tier: small
 gates:

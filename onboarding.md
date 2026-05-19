@@ -1,6 +1,6 @@
 # Spec-Driven Dev Workflow: Onboarding Guide
 
-A file-based, spec-driven development workflow for Claude Code that adds validation gates, interactive finding review, and a knowledge-base feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
+A file-based, spec-driven development workflow for Claude Code that adds validation gates, interactive finding review, and a knowledge-base (single general KB) feedback loop on top of standard AI-assisted coding. One external dependency: `yq` for YAML parsing.
 
 ## Prerequisites
 
@@ -31,12 +31,12 @@ Run from the dev-workflow repository root:
 
 This installs:
 - Slash commands to `~/.claude/commands/`:
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-spec`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `promote-rules`, `fix`, `promote-tier`
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-spec`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `fix`, `promote-tier`
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 - 35+ agent definitions to `~/.claude/agents/`
 
-These are global — they work across every project that has a knowledge-base bootstrapped.
+These are global — they work across every project that has been bootstrapped with `/bootstrap`.
 
 Verify:
 ```bash
@@ -48,18 +48,18 @@ ls ~/.claude/commands/*.md
 
 Do these steps once in each project you want to use the workflow with.
 
-### 1. Bootstrap the knowledge-base
+### 1. Bootstrap the workflow config
 
 Open the project in Claude Code and run:
 ```
 /bootstrap
 ```
 
-This creates the project-specific `knowledge-base/` with:
-- `languages/` — per-language validation tool definitions (asks which languages the project uses)
-- `conventions/` — empty directory for project-specific rules discovered over time
-
-General rules (security, architecture, testing, style) live in the dev-workflow repo under `knowledge-base/`. The `/bootstrap` command only creates project-specific content.
+This writes `.workflow.yml` with an inline `gate_pool:` array (asks which
+languages the project uses to seed the gates). There is no per-repo
+`knowledge-base/` directory — all KB rules (security, architecture, testing,
+style, plus learned rules) live in the single general KB at `$WF_GENERAL_KB`
+(see ADR-0002).
 
 ### 2. Add project instructions
 
@@ -82,7 +82,7 @@ This runs `task-manager.sh validate` on any changed task files at commit time, c
 
 ### 4. Install language validation tools
 
-Check `knowledge-base/languages/` for which tools are listed in `validation_tools` frontmatter, then install them. Examples:
+Check the `command` fields in `.workflow.yml gate_pool` for which tools the gates invoke, then install them. Examples:
 
 **Rust:**
 ```bash
@@ -102,10 +102,7 @@ pip install semgrep
 ```
 project-root/
 ├── CLAUDE.md
-├── knowledge-base/
-│   ├── _index.md                    # project-specific rule index
-│   ├── languages/                   # project-specific language files
-│   └── conventions/                 # project-specific conventions
+├── .workflow.yml                    # config + inline gate_pool: array
 ├── specs/           (created later by /propose)
 └── .git/hooks/pre-commit
 ```
@@ -120,11 +117,10 @@ The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/con
 
 ### Stage 0: `/bootstrap` (once per project)
 
-**What it does:** Creates the project-specific `knowledge-base/` with language files and a `conventions/` directory. Also writes `.workflow.yml` at the repo root — the config layer entry point. General rules (security, architecture, testing, style) live in the dev-workflow repo. Asks which languages the project uses and generates language files.
+**What it does:** Writes `.workflow.yml` at the repo root — the config layer entry point — with an inline `gate_pool:` array. Asks which languages the project uses to seed the gate pool. All KB rules live in the single general KB at `$WF_GENERAL_KB` (ADR-0002); no per-repo `knowledge-base/`.
 
 **Produces:**
-- `knowledge-base/` directory with `_index.md`, `languages/`, and `conventions/`
-- `.workflow.yml` at repo root (`spec_storage`, `gate_pool`, `agent_pool`, `validate_scope`)
+- `.workflow.yml` at repo root (`spec_storage`, inline `gate_pool:`, `agent_pool`, `validate_scope`)
 
 **Idempotent:** On an existing repo with `.workflow.yml` already present, `/bootstrap` prints the current config and exits without modifying it.
 
@@ -136,8 +132,8 @@ The configurable-workflow feature adds a three-file config layer that controls w
 
 | File | Written by | Purpose |
 |------|-----------|---------|
-| `.workflow.yml` | `/bootstrap` | Repo-wide defaults: `spec_storage`, `gate_pool`, `agent_pool`, `validate_scope` |
-| `knowledge-base/gates.yml` | dev-workflow install | Canonical gate registry with `id`, `command`, `applies_to`, `blocking` |
+| `.workflow.yml` | `/bootstrap` | Repo-wide defaults: `spec_storage`, inline `gate_pool:`, `agent_pool`, `validate_scope` |
+| `.workflow.yml gate_pool:` | `/bootstrap` | Inline gate registry: array of `id`, `command`, `applies_to`, `blocking` |
 | `specs/<name>/config.yml` | `/explore` step 0 | Per-spec ceiling: which gates + which agents per phase |
 
 **Ceiling semantics:** `config.yml gates:` is the *ceiling* — the eligible gate set. Per task, `/validate` computes `ceiling ∩ gates applicable to task ground_rules` (the *effective set*). Gates outside the ceiling are skipped and emit `gate_skip` events. This means a spec about Rust auth never accidentally runs a Go linter, even if the gate registry has one.
@@ -156,7 +152,7 @@ See `CLAUDE.md §Configurable Workflow` and `specs/configurable-workflow/design.
 **What it does:** Two sub-steps run before any conversation:
 
 **Step 0 — Config inferencer (automatic):**
-1. Spawns `config-inferencer` agent with repo signal files (`Cargo.toml`, `package.json`, etc.), `gates.yml`, `agents/` listing, and spec description.
+1. Spawns `config-inferencer` agent with repo signal files (`Cargo.toml`, `package.json`, etc.), `.workflow.yml gate_pool`, `agents/` listing, and spec description.
 2. Displays a one-screen summary: proposed gates (ceiling) + agents per phase + reasoning.
 3. You press a single key to approve, or run `/config <name>` to edit manually.
 4. Writes `specs/<name>/config.yml` and emits `config_inferred` + `config_approved` monitor events.
@@ -170,20 +166,20 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 - Shared understanding of what to build
 - Optionally `specs/<name>/prd.md`
 
-**Requires:** `knowledge-base/` and `.workflow.yml` must exist (run `/bootstrap` first).
+**Requires:** `.workflow.yml` must exist (run `/bootstrap` first).
 
 **Next:** `/propose <name>`
 
 ### Stage 2: `/propose <name>` (spec generation)
 
-**What it does:** Generates the full spec package from the PRD (or conversation context). Reads applicable knowledge-base rules and references them throughout.
+**What it does:** Generates the full spec package from the PRD (or conversation context). Reads applicable KB rules from `$WF_GENERAL_KB` and references them throughout.
 
 **Produces:**
 - `specs/<name>/spec.md` — functional spec with BDD scenarios (Given/When/Then)
 - `specs/<name>/design.md` — architectural decisions with rule references and rationale
 - `specs/<name>/tasks/NNN-task-name.md` — task files with `ground_rules`, `test_cases`, `blocked_by`, status (`todo` or `blocked`)
 
-**Requires:** `knowledge-base/` must exist.
+**Requires:** `.workflow.yml` must exist.
 
 **Next:** Spec review (stage 3)
 
@@ -215,7 +211,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 **Produces:** Code changes on a task branch, task status updated to `implemented`.
 
-**Requires:** `knowledge-base/`, no unvalidated tasks.
+**Requires:** `.workflow.yml`, no unvalidated tasks.
 
 **Next:** the user runs `/validate <name>` — do NOT skip this step.
 
@@ -228,10 +224,10 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 **Produces:** YAML reports in `specs/<name>/reports/NNN-gate.yaml` for each gate.
 
 **5 gates:**
-- **security** — semgrep + language audit tools + `Security Engineer` agent (general + project security rules)
+- **security** — semgrep + language audit tools + `Security Engineer` agent (KB security rules)
 - **code-quality** — language lint tools + `code-quality-pragmatist` agent (DRY, function size, modularity)
-- **architecture** — `Software Architect` agent (general + project architecture rules)
-- **compliance** — `claude-md-compliance-checker` agent (CLAUDE.md + project KB conventions)
+- **architecture** — `Software Architect` agent (KB architecture rules)
+- **compliance** — `claude-md-compliance-checker` agent (CLAUDE.md + general KB conventions)
 - **testing** — language test/coverage tools (deterministic only — no agent gate)
 
 **Status update:**
@@ -246,7 +242,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 - **Actionable findings** — presented individually with severity, title, description, code snippet, fix proposal, and source. You decide: Accept or Reject.
   - **Accept:** Fix is applied (files re-read between fixes to avoid conflicts). `review_status` set to `accepted`.
-  - **Reject:** You provide reasoning. `review_status` set to `rejected` with `review_notes`. Optionally creates a new rule in the project `knowledge-base/` (sets `rule_added: true`).
+  - **Reject:** You provide reasoning. `review_status` set to `rejected` with `review_notes`. Optionally creates a new rule in the general KB at `$WF_GENERAL_KB` (sets `rule_added: true`).
 - **Informational findings** — auto-acknowledged with `review_status: noted`. Displayed as a summary list (title, file, description) at the end. No action required.
 
 **Status update:**
@@ -267,7 +263,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 **Produces:** A PR from the task branch into the integration branch.
 
-**Requires:** `knowledge-base/`, at least one `done` task without a PR.
+**Requires:** `.workflow.yml`, at least one `done` task without a PR.
 
 **Key detail:** `/ship` does NOT merge the PR — you review and merge it manually. The previous task's PR must be merged before `/implement` will start the next task.
 
@@ -275,7 +271,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 ### Stage 8: `/pr-review` (PR comment loop)
 
-**What it does:** Fetches unresolved PR comments via `gh`, reads referenced files and applicable knowledge-base rules, generates fix proposals. You accept or reject each proposal. Accepted fixes are committed with a reference to the comment.
+**What it does:** Fetches unresolved PR comments via `gh`, reads referenced files and applicable KB rules from `$WF_GENERAL_KB`, generates fix proposals. You accept or reject each proposal. Accepted fixes are committed with a reference to the comment.
 
 **Key detail:** PR review fixes do NOT trigger re-validation. The PR reviewer is the safety net at this stage. Task status stays `done`.
 
@@ -380,7 +376,7 @@ Scaffold via `task-manager.sh init-fix <slug>`.
 7. Lint + ground-rule-matched gates run. Phase-2 agent gates are skipped by default unless the diff touches auth/crypto/migrations.
 8. `/ship` with PR title prefix `fix:`.
 
-**Not run:** `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants `/promote-rules`).
+**Not run:** `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants a new general-KB rule).
 
 Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 
@@ -390,7 +386,7 @@ When specs live in a master-brain Obsidian vault and span multiple code repos (e
 
 **Setup.** Run `/bootstrap` from inside the vault directory (which must not itself be a git repo). Pick `vault` mode and add bindings (`name`, `path`, `role`) for each code repo. Default bindings land in `default_repos[]` and pre-populate every new spec's `repos[]`.
 
-**Per-task `repo:` field.** Hard rule: one task = one repo. `task-manager.sh validate` enforces membership in `repos[].name`. Cross-repo work splits into sibling tasks under the same spec. `repo:<name>:` ground-rule prefix references that repo's `knowledge-base/`. Each command (`/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`) resolves `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and runs git/gates/PR creation inside that path.
+**Per-task `repo:` field.** Hard rule: one task = one repo. `task-manager.sh validate` enforces membership in `repos[].name`. Cross-repo work splits into sibling tasks under the same spec. `ground_rules` are bare `$WF_GENERAL_KB`-relative paths (legacy prefixes stripped + deprecation-warned). Each command (`/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`) resolves `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and runs git/gates/PR creation inside that path.
 
 **Gate filter.** Gates may set `applies_to_repos: [<name>, …]` to restrict to specific repos (e.g. `eslint` only on `frontend`). Default = applies everywhere.
 
@@ -449,17 +445,17 @@ test_cases:
   - "should return user by ID when user exists"
   - "should return error when user not found"
 ground_rules:
-  - general:architecture/general.md
-  - general:testing/principles.md
-  - project:languages/rust.md
+  - architecture/general.md
+  - testing/principles.md
+  - languages/rust.md
 ---
 
 ## Description
 Implement the user repository trait and Postgres implementation.
 
 ## Ground Rules Applied
-- general:architecture/general.md — domain layer owns the trait, infrastructure implements
-- general:testing/principles.md — BDD test structure, Given/When/Then
+- architecture/general.md — domain layer owns the trait, infrastructure implements
+- testing/principles.md — BDD test structure, Given/When/Then
 
 ## Implementation Notes
 (AI fills this in during /implement)
@@ -473,10 +469,10 @@ Required fields: `id`, `name`, `status`, `ground_rules`, `test_cases`, `blocked_
 
 | Gate | Deterministic tools | LLM analysis (agent) |
 |------|-------------------|--------------|
-| **security** | semgrep, language audit tools | general + project security rules (`Security Engineer`) |
+| **security** | semgrep, language audit tools | KB security rules (`Security Engineer`) |
 | **code-quality** | language lint tools | DRY, function size, modularity (`code-quality-pragmatist`) |
-| **architecture** | none | general + project architecture rules (`Software Architect`) |
-| **compliance** | none | CLAUDE.md + project knowledge-base conventions (`claude-md-compliance-checker`) |
+| **architecture** | none | KB architecture rules (`Software Architect`) |
+| **compliance** | none | CLAUDE.md + general KB conventions (`claude-md-compliance-checker`) |
 | **testing** | test runner, coverage tools | none (deterministic only) |
 
 ### Source types
@@ -542,60 +538,53 @@ main
 
 ## Knowledge Base
 
-### Dual Knowledge Base
+### Single Knowledge Base (ADR-0002)
 
-Two knowledge bases work together:
+One knowledge base — the dual Project KB / General KB layer was collapsed.
+See `docs/adr/0002-collapse-to-single-knowledge-base.md`.
 
-**General KB** — universal rules that live in the dev-workflow repo at `knowledge-base/`. Contains: security, architecture, testing, style, documentation, code-review, and language rules.
-
-**Project KB** — project-specific rules at `knowledge-base/`:
-- Created by `/bootstrap`
-- Contains: `languages/` (validation tools), `conventions/` (project-specific rules)
+**General KB** — all rules live at `$WF_GENERAL_KB` (path configured by
+`general_kb_path`; recommended: the master-brain vault). Contains: security,
+architecture, testing, style, documentation, code-review, language rules, and
+learned convention rules. There is no per-repo `knowledge-base/` directory.
 
 ### Structure
 
 ```
-<dev-workflow-repo>/knowledge-base/   # General KB (in repo)
+$WF_GENERAL_KB/
 ├── _index.md
 ├── security/general.md
-├── architecture/
-│   ├── general.md
-│   ├── api-design.md
-│   └── code-analysis.md
+├── architecture/{general.md, api-design.md, code-analysis.md}
 ├── testing/principles.md
 ├── style/general.md
 ├── documentation/general.md
 ├── code-review/general.md
-└── languages/
-    ├── rust/{_index.md, …topic files}
-    ├── typescript/{_index.md, type-safety.md, patterns.md, react-query.md, anti-patterns.md}
-    ├── nextjs/{_index.md, server-vs-client.md, data-fetching.md, app-router.md, anti-patterns.md}
-    ├── scala/{_index.md, idioms.md, error-handling.md, …}
-    └── shell/{_index.md, tooling.md, module-api.md}
-
-knowledge-base/                  # Project KB (per-repo)
-├── _index.md
-├── languages/rust.md            # with validation_tools frontmatter
+├── languages/
+│   ├── rust/{_index.md, …topic files}
+│   ├── typescript/{_index.md, type-safety.md, patterns.md, …}
+│   ├── nextjs/{_index.md, …}
+│   ├── scala/{_index.md, idioms.md, error-handling.md, …}
+│   └── shell/{_index.md, tooling.md, module-api.md}
 └── conventions/                 # grows via /review-findings feedback
 ```
 
-### ground_rules Prefix Convention
+### ground_rules — bare paths
 
-Task `ground_rules` use prefixes to reference rules from either KB:
-- `general:security/general.md` → resolves to general KB
-- `project:languages/rust.md` → resolves to project KB
-- Unprefixed paths default to `project:` (backward compatibility)
+Task `ground_rules` are bare `$WF_GENERAL_KB`-relative paths:
+- `security/general.md` → resolves under `$WF_GENERAL_KB`
+- `languages/rust.md` → resolves under `$WF_GENERAL_KB`
+- Legacy `general:`/`project:`/`repo:<name>:` prefixes are stripped by a
+  migration shim with a one-time per-process deprecation warning.
 
 ### Rule flow
 
-1. **General KB** — lives in the dev-workflow repo (security, architecture, testing, style, documentation, code-review, languages)
-2. **`/bootstrap`** — creates project-specific rules (languages, conventions)
-3. **`/explore`** — reads both `_index.md` files to identify relevant rules conversationally
-4. **`/propose`** — selects rules from both KBs and writes them into each task's `ground_rules` field with prefixes
-5. **`/implement` + `/validate`** — `ground_rules` is the single source of truth for which rules apply
-6. **`/review-findings`** — rejected findings can become new rules in the **project** KB (feedback loop)
+1. **General KB** — single KB at `$WF_GENERAL_KB` (security, architecture, testing, style, documentation, code-review, languages, conventions)
+2. **`/explore`** — reads `$WF_GENERAL_KB/_index.md` to identify relevant rules conversationally
+3. **`/propose`** — selects rules and writes bare paths into each task's `ground_rules` field
+4. **`/implement` + `/validate`** — `ground_rules` is the single source of truth for which rules apply
+5. **`/review-findings`, `/learn-from-reports`, `/capture-rule`** — rejected findings / mined patterns become new rules in the **general** KB (feedback loop)
 
-The project knowledge base grows organically. General rules are shared across all projects; project rules capture conventions unique to the codebase.
+The general knowledge base grows organically and is shared across all projects.
 
 ### Language files
 
@@ -644,11 +633,11 @@ gh pr create --base main --head feat/<feature>
 | Command | When | Requires |
 |---------|------|----------|
 | `/bootstrap` | Once per project | General KB installed (`setup.sh`), `yq` |
-| `/explore` | Start of new feature | Both KBs |
-| `/propose <name>` | After requirements clear | Both KBs |
-| `/implement <name>` | After spec review | Both KBs, no unvalidated tasks, previous PR merged |
-| `/validate <name>` | After each implementation | Both KBs, task at `implemented` |
-| `/review-findings <name>` | After validation with findings | Both KBs, task at `review` |
+| `/explore` | Start of new feature | General KB |
+| `/propose <name>` | After requirements clear | General KB |
+| `/implement <name>` | After spec review | General KB, no unvalidated tasks, previous PR merged |
+| `/validate <name>` | After each implementation | General KB, task at `implemented` |
+| `/review-findings <name>` | After validation with findings | General KB, task at `review` |
 | `/ship <name>` | After task reaches `done` | `done` task without PR |
 | `/pr-review` | After PR gets comments | Active PR on current branch |
 | `/spec-status <name>` | Anytime | `specs/<name>/tasks/` |

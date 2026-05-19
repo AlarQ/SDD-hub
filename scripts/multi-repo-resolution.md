@@ -4,7 +4,7 @@ Canonical snippet for resolving a task's bound repo path under `spec_storage_mod
 
 ## Vault invocation
 
-Under `spec_storage_mode: vault`, the vault dir owns a thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only — no gates.yml, no knowledge-base/). The loader sets `WF_VAULT_ROOT=WF_REPO_ROOT=<vault>`, leaves `WF_GATE_POOL` / `WF_PROJECT_KB` empty, and binds `WF_REPO_NAMES` / `WF_REPO_PATHS` from the per-spec `config.yml repos[]`. Gates and project-KB therefore resolve **per task** from the bound repo (below). There is no "primary repo for config" — `role: primary` only selects the default git/PR context. See `config-loader.contract.md` for full semantics.
+Under `spec_storage_mode: vault`, the vault dir owns a thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only — no `gate_pool`). The loader sets `WF_VAULT_ROOT=WF_REPO_ROOT=<vault>`, leaves `WF_GATE_POOL` empty, and binds `WF_REPO_NAMES` / `WF_REPO_PATHS` from the per-spec `config.yml repos[]`. Gates therefore resolve **per task** from the bound repo's `.workflow.yml gate_pool` (below). There is no "primary repo for config" — `role: primary` only selects the default git/PR context. See `config-loader.contract.md` for full semantics.
 
 ## When this applies
 
@@ -42,12 +42,12 @@ else
 fi
 export WF_TASK_REPO_PATH
 
-# Vault mode: gates + project-KB live in the bound repo, not the vault.
-# Resolve the per-task gate pool so gate-ceiling.sh / validate-impl.sh use it.
+# Vault mode: the gate pool lives inline in the bound repo's .workflow.yml,
+# not the vault. Resolve it so gate-ceiling.sh / validate-impl.sh use it.
 if [[ "${WF_SPEC_STORAGE_MODE:-repo}" == "vault" ]]; then
-  WF_TASK_GATE_POOL="$WF_TASK_REPO_PATH/knowledge-base/gates.yml"
+  WF_TASK_GATE_POOL="$WF_TASK_REPO_PATH/.workflow.yml"
   if [[ ! -f "$WF_TASK_GATE_POOL" ]]; then
-    echo "ERROR: bound repo missing knowledge-base/gates.yml: $WF_TASK_GATE_POOL (run /bootstrap repo-gate-init in that repo)" >&2
+    echo "ERROR: bound repo missing .workflow.yml: $WF_TASK_GATE_POOL (run /bootstrap repo-gate-init in that repo)" >&2
     exit 1
   fi
   export WF_TASK_GATE_POOL
@@ -59,7 +59,7 @@ fi
 All git, gate, lint, test, edit, and PR operations for this task run inside `WF_TASK_REPO_PATH`:
 
 - `git -C "$WF_TASK_REPO_PATH" <cmd>` — preferred over `cd` (no shell state mutation).
-- Gate commands from `gates.yml`: `(cd "$WF_TASK_REPO_PATH" && <gate command>)`.
+- Gate commands from the bound repo's `.workflow.yml gate_pool`: `(cd "$WF_TASK_REPO_PATH" && <gate command>)`.
 - Branch + PR creation: scoped to that repo's remote only.
 - Phase-2 advisory agents: pass `WF_TASK_REPO_PATH` + scoped diff (`git -C "$WF_TASK_REPO_PATH" diff …`) instead of repo-root diff.
 
@@ -69,7 +69,7 @@ One task = one repo. Cross-repo work splits into sibling tasks (one per repo) sh
 
 ## Gate filtering
 
-If a gate in `gates.yml` declares `applies_to_repos: [<name>, …]`, skip it for tasks whose `repo:` is not in that list. Emit `gate_skip` with `{"reason":"applies_to_repos","gate":"<id>","repo":"<task_repo>"}`. Default (no `applies_to_repos`) = applies to every repo.
+If a gate in the bound repo's `.workflow.yml gate_pool` declares `applies_to_repos: [<name>, …]`, skip it for tasks whose `repo:` is not in that list. Emit `gate_skip` with `{"reason":"applies_to_repos","gate":"<id>","repo":"<task_repo>"}`. Default (no `applies_to_repos`) = applies to every repo.
 
 ## Monitor events
 

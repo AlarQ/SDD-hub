@@ -1,56 +1,44 @@
 # Knowledge-Base Rules
 
-Shared prerequisites, the `ground_rules` prefix convention, and path-resolution
-rules. Linked from every workflow command (`/explore`, `/propose`, `/implement`,
-`/validate`, `/pr-review`, `/review-findings`, `/learn-from-reports`) instead of
-duplicating KB instructions inline. Canonical resolver: `scripts/task-manager.sh`
-`resolve_ground_rule_path`. Multi-repo machinery: `scripts/multi-repo-resolution.md`.
+Shared prerequisites and `ground_rules` path-resolution rules. Linked from every
+workflow command (`/explore`, `/propose`, `/implement`, `/validate`, `/pr-review`,
+`/review-findings`, `/learn-from-reports`) instead of duplicating KB instructions
+inline. Canonical resolver: `scripts/task-manager.sh` `resolve_ground_rule_path`.
+Multi-repo machinery: `scripts/multi-repo-resolution.md`.
 
-## Two-layer knowledge base
+## Single knowledge base
 
-- **General KB** — universal rules (security, architecture, testing, style).
-  Root: `$WF_GENERAL_KB` (from `general_kb_path` in `.workflow.yml`). Required —
-  loader exits 2 if absent. Never modified by the workflow feedback loop.
-- **Project KB** — project-specific rules and conventions. Lives at
-  `<repo>/knowledge-base/` inside each target code repo (never in the vault).
-  New rules from `/review-findings` and `/learn-from-reports` always land here.
+One KB: the **general KB** at `$WF_GENERAL_KB` (from `general_kb_path` in
+`.workflow.yml`). Required — loader exits 2 if absent. Holds all rules: security,
+architecture, testing, style, language, and project conventions. The workflow
+feedback loop (`/review-findings`, `/learn-from-reports`, `/capture-rule`) writes
+learned rules **here** (ADR-0002 — single KB replaces the old dual layer).
 
-Project rules override general rules on the same topic.
+There is no separate project KB and no `knowledge-base/` directory in any repo
+or in the vault. Gates fold inline into `.workflow.yml` (`gate_pool:`); see
+`scripts/config-loader.contract.md`.
 
-## Prefix convention
+## ground_rules paths
 
-Task `ground_rules` entries use a prefix that selects the resolution root:
+Task `ground_rules` entries are **bare paths relative to `$WF_GENERAL_KB`**:
 
-| Prefix | Resolves under | Example |
-|---|---|---|
-| `general:` | `$WF_GENERAL_KB` | `general:security/general.md` |
-| `project:` | the project KB root (see below) | `project:languages/rust.md` |
-| `repo:<name>:` | that bound repo's `knowledge-base/` | `repo:backend:style/api.md` |
-| *(unprefixed)* | same as `project:` | `style/general.md` |
+```
+security/general.md   →  $WF_GENERAL_KB/security/general.md
+languages/rust.md     →  $WF_GENERAL_KB/languages/rust.md
+```
 
-New project-KB files use the path shape `knowledge-base/<category>/<file>.md`.
+New rule files use the path shape `<category>/<file>.md` under `$WF_GENERAL_KB`.
 
-## Project-KB resolution
+### Legacy prefixes (deprecated, ADR-0002)
 
-**Repo mode** (`spec_storage_mode: repo`): `project:`/unprefixed →
-`<WF_REPO_ROOT>/knowledge-base/`. `WF_PROJECT_KB` carries this root.
+Old specs may carry `general:` / `project:` / `repo:<name>:` / `repo:<name>` prefixes.
+`resolve_ground_rule_path` strips any such prefix, resolves the remainder under
+`$WF_GENERAL_KB`, and emits a once-per-process deprecation warning. No spec
+rewrites are required — the strip-prefix shim keeps old specs working. Migrate
+entries to bare paths when convenient; the warning is the only signal.
 
-**Vault mode** (`spec_storage_mode: vault`): the vault holds no `knowledge-base/`.
-`WF_PROJECT_KB`/`WF_GATE_POOL` are empty; project KB + gates resolve **per task**
-from the bound repo(s) in the per-spec `config.yml repos[]`. Resolution of a
-bare `project:`/unprefixed rule depends on the bound-repo count:
-
-- **Exactly one bound repo** — that repo is the implicit default; bare
-  `project:`/unprefixed rules resolve to `<that-repo>/knowledge-base/`.
-- **Two or more bound repos** — ambiguous; bare `project:`/unprefixed is
-  **rejected (exit 7)**. Use `general:` or an explicit `repo:<name>:` prefix.
-- **Zero bound repos** — nothing to resolve against; **rejected (exit 7)**.
-
-`general:` always resolves regardless of repo count. `repo:<name>:` resolves
-to that named repo's `knowledge-base/` (exit 7 if `<name>` not in `repos[]`).
-
-`task-manager.sh validate` returns the same exit 7 for these rejections so the
-loader and task validator stay symmetric (see `config-loader.contract.md`).
+`task-manager.sh validate` returns exit 7 if `WF_GENERAL_KB` is unset, keeping
+the loader and task validator symmetric (see `config-loader.contract.md`).
 
 ## Prerequisites
 

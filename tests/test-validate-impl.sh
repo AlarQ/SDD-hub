@@ -17,7 +17,7 @@ setup() {
   TMPDIR_T="$(mktemp -d)"
   mkdir -p "$TMPDIR_T/specs"
   cp -R "$FIXTURE" "$TMPDIR_T/specs/sample-spec"
-  printf 'spec_storage: specs/\ngate_pool: knowledge-base/gates.yml\nagent_pool: agents/\nvalidate_scope: per-task\n' > "$TMPDIR_T/.workflow.yml"
+  printf 'spec_storage: specs/\nagent_pool: agents/\nvalidate_scope: per-task\ngate_pool:\n  - id: rust-clippy\n    command: "cargo clippy -- -D warnings"\n    applies_to: [rust]\n    category: lint\n    blocking: true\n' > "$TMPDIR_T/.workflow.yml"
   cd "$TMPDIR_T"
   # Init a minimal git repo with main + feat/sample-spec so wf_vi_diff_range
   # can resolve a real merge-base (T6 — no silent HEAD~1 fallback).

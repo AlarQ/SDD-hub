@@ -28,9 +28,9 @@ graph LR
     subgraph Setup["One-time setup"]
         BOOT["/bootstrap"]
         STORAGE{mode?}
-        REPO_MODE["repo<br/>.workflow.yml + knowledge-base/ + gates.yml in repo"]
-        VAULT_INIT["vault-init<br/>thin-pointer .workflow.yml only<br/>spec_storage projects/{project}/specs<br/>+ default_repos[] · NO gates/KB"]
-        REPO_GATE["repo-gate-init (per target repo)<br/>knowledge-base/ + gates.yml<br/>NO .workflow.yml"]
+        REPO_MODE["repo<br/>.workflow.yml with inline gate_pool: in repo"]
+        VAULT_INIT["vault-init<br/>thin-pointer .workflow.yml only<br/>spec_storage projects/{project}/specs<br/>+ default_repos[] · NO gate_pool/KB"]
+        REPO_GATE["repo-gate-init (per target repo)<br/>thin .workflow.yml<br/>kind: repo-gate-pool · gate_pool: only"]
         BOOT --> STORAGE
         STORAGE -->|repo| REPO_MODE
         STORAGE -->|vault-init| VAULT_INIT
@@ -155,7 +155,7 @@ stateDiagram-v2
 
 `/validate` fans out gates in parallel. Four are agent-driven (via `Agent` tool); the `testing` gate is deterministic (language tools only, no agent). All-gates rule: every gate must report `status: pass` before task eligible for `done`. Any finding → task moves to `review`.
 
-**Phase 1** computes the effective gate set as `WF_SPEC_GATES ∩ language-applicable gates from gates.yml` (ceiling intersection). Gates outside the intersection emit a `gate_skip` event and are not run.
+**Phase 1** computes the effective gate set as `WF_SPEC_GATES ∩ language-applicable gates from .workflow.yml gate_pool` (ceiling intersection). Gates outside the intersection emit a `gate_skip` event and are not run.
 
 **Phase 2** reads the agent list from `WF_SPEC_AGENTS_VALIDATE` (set by config.yml) — not a hardcoded list. Each entry spawns one agent.
 
@@ -167,7 +167,7 @@ graph TD
     APPR -->|cancel| STOP_V
     APPR -->|approve| SCOPE{validate_scope}
     SCOPE -->|per-spec| PASS[write zero-gates pass report]
-    SCOPE -->|per-task / both| CEIL["Phase 1: WF_SPEC_GATES ∩ gates.yml applicable ∩ applies_to_repos"]
+    SCOPE -->|per-task / both| CEIL["Phase 1: WF_SPEC_GATES ∩ .workflow.yml gate_pool applicable ∩ applies_to_repos"]
     CEIL -->|skipped gates| SKIP[gate_skip event]
     CEIL -->|effective gates| AGT["Phase 2: agents from WF_SPEC_AGENTS_VALIDATE (config-driven, may be empty)"]
 
@@ -185,7 +185,7 @@ graph TD
 
 ## 4. Artifact Flow
 
-Shows which command produces and consumes each artifact. Two knowledge-base layers (general + project) feed every command. Git branches fan out one PR per task into the feature integration branch.
+Shows which command produces and consumes each artifact. One knowledge base (`$WF_GENERAL_KB`) feeds every command. Git branches fan out one PR per task into the feature integration branch.
 
 ```mermaid
 graph TB
@@ -208,8 +208,7 @@ graph TB
     end
 
     subgraph KB["Knowledge Base"]
-        GKB["$WF_GENERAL_KB (general · from vault .workflow.yml)"]
-        PKB["knowledge-base/ project (per bound repo; empty WF_PROJECT_KB in vault)"]
+        GKB["$WF_GENERAL_KB (single KB · from .workflow.yml general_kb_path)"]
     end
 
     subgraph Git
@@ -223,7 +222,7 @@ graph TB
         REPOS["config.yml repos[] + project:"]
         TASK_REPO[task.repo: name]
         WTRP[WF_TASK_REPO_PATH]
-        WTGP["WF_TASK_GATE_POOL<br/>= repo/knowledge-base/gates.yml"]
+        WTGP["WF_TASK_GATE_POOL<br/>= repo/.workflow.yml gate_pool"]
         THIN --> REPOS
         REPOS --> TASK_REPO
         TASK_REPO --> WTRP
@@ -252,7 +251,6 @@ graph TB
 
     TASKS --> IM["/implement"]
     GKB -.-> IM
-    PKB -.-> IM
     IM --> TBR
     IM --> CTX
     IM --> JSONL
@@ -261,9 +259,9 @@ graph TB
     TBR --> VA["/validate"]
     VA --> REPORTS
     REPORTS --> RF["/review-findings"]
-    RF -.->|inline new rules| PKB
+    RF -.->|inline new rules| GKB
     REPORTS --> LFR["/learn-from-reports"]
-    LFR -.->|mined new rules| PKB
+    LFR -.->|mined new rules| GKB
 
     TBR --> SH["/ship"]
     SNAP -.->|drift check| SH
@@ -368,7 +366,7 @@ Step 10 is a vertical red-green loop: exactly one test then minimal code per beh
 graph LR
     VA["/validate"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_VA[stop]
-    CFG0 -->|loaded| CEIL["WF_SPEC_GATES ∩ gates.yml ceiling"]
+    CFG0 -->|loaded| CEIL["WF_SPEC_GATES ∩ .workflow.yml gate_pool ceiling"]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| SE[engineering-security-engineer]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| CQP[code-quality-pragmatist]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| SA[engineering-software-architect]
@@ -449,10 +447,10 @@ Notes:
 - **Serial execution** — one task `in-progress` at a time
 - **Per-task sequence** — `/implement` (opens draft PR) → `/pr-review` (optional loop) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks PR ready), each invoked explicitly by the user
 - **All-gates** — all configured validation gates (from `WF_SPEC_AGENTS_VALIDATE` ∩ ceiling) must pass before `done`
-- **Dual KB** — general (`$WF_GENERAL_KB`) + project (`knowledge-base/`), project overrides general
+- **Single KB** — one knowledge base (`$WF_GENERAL_KB`); no project-KB layer (ADR-0002). Feedback loop writes learned rules here.
 - **One PR per task** — target is `feat/$FEATURE`, not `main`
-- **Ground rules prefix** — `general:...` / `project:...` / `repo:<name>:...`. Vault single-repo: unprefixed/`project:` → the sole bound repo. Vault 2+ repos: bare rejected (exit 7), require `general:`/`repo:<name>:`.
-- **Vault mode** — `spec_storage_mode: vault` + thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only; no vault gates/KB). `spec_storage` uses `{project}` token. Per-spec `repos[]` bind code repos; gates/KB resolve per-task from the bound repo (`WF_TASK_REPO_PATH`, `WF_TASK_GATE_POOL`). One task = one repo. PR opens in that repo's remote only. `/bootstrap`: vault-init once + repo-gate-init per target repo.
+- **Ground rules** — bare `$WF_GENERAL_KB`-relative paths (e.g. `security/general.md`). Legacy `general:`/`project:`/`repo:<name>:` prefixes stripped by migration shim + one-time-per-process deprecation warn. Missing `$WF_GENERAL_KB` → exit 7.
+- **Vault mode** — `spec_storage_mode: vault` + thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only; no vault `gate_pool` except self-hosting exception). `spec_storage` uses `{project}` token. Per-spec `repos[]` bind code repos; gates resolve per-task from the bound repo's thin `.workflow.yml gate_pool` (`WF_TASK_REPO_PATH`, `WF_TASK_GATE_POOL`). One task = one repo. PR opens in that repo's remote only. `/bootstrap`: vault-init once + repo-gate-init per target repo.
 - **No YAML edits** — all status changes via `task-manager.sh`
 - **No bypass** — PreToolUse hook blocks `--no-verify` / `--no-gpg-sign`
 

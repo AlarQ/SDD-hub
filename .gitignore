@@ -1,4 +1,4 @@
 initial-thoughts.md
-workflow-tui/target
+target/
 specs/*/reports/
 .monitor-context

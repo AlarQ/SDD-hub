@@ -24,12 +24,12 @@ bash -c '
   source ~/.claude/scripts/config-loader.sh
   wf_load_config --spec <feature> --require-spec
   if [[ "$WF_SPEC_STORAGE_MODE" == "vault" ]]; then
-    # No single pool: union the bound repos knowledge-base/gates.yml ids.
+    # No single pool: union the bound repos' .workflow.yml inline gate_pool ids.
     while IFS= read -r p; do
-      [[ -f "$p/knowledge-base/gates.yml" ]] && yq ".gates[].id" "$p/knowledge-base/gates.yml" 2>/dev/null
+      [[ -f "$p/.workflow.yml" ]] && yq ".gate_pool[].id" "$p/.workflow.yml" 2>/dev/null
     done <<< "$WF_REPO_PATHS"
   else
-    yq ".gates[].id" "$WF_GATE_POOL" 2>/dev/null
+    yq ".gate_pool[].id" "$WF_GATE_POOL" 2>/dev/null
   fi
 '
 ```
@@ -74,7 +74,7 @@ Edit the config to remove or replace these IDs, then re-run `/config <feature>`.
    - The feature name
    - Current `$WF_SPEC_STORAGE/<feature>/config.yml` contents (so the agent can use it as a baseline)
    - Any PRD available at `$WF_SPEC_STORAGE/<feature>/prd.md` (read if it exists; omit if not)
-   - Gate registry contents: in repo mode, the full contents of `$WF_GATE_POOL` (if it exists). In vault mode (`WF_SPEC_STORAGE_MODE=vault`, `WF_GATE_POOL` empty), the concatenated contents of each bound repo's `knowledge-base/gates.yml` (iterate `$WF_REPO_PATHS`, label each block by repo name) — never pass an empty pool, the inferencer needs the gate list to choose a ceiling.
+   - Gate registry contents: in repo mode, the full contents of `$WF_GATE_POOL` (if it exists). In vault mode (`WF_SPEC_STORAGE_MODE=vault`, `WF_GATE_POOL` empty), the concatenated `.gate_pool` blocks of each bound repo's `.workflow.yml` (iterate `$WF_REPO_PATHS`, label each block by repo name) — never pass an empty pool, the inferencer needs the gate list to choose a ceiling.
    - Listing of all agent files under `$WF_AGENT_POOL`
    - The project's `CLAUDE.md`
 

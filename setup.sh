@@ -311,7 +311,7 @@ fi
 echo ""
 echo -e "${BOLD}Next steps:${RESET}"
 echo -e "  1. Open a target project in Claude Code"
-echo -e "  2. Run ${CYAN}/bootstrap${RESET} to create the knowledge-base"
+echo -e "  2. Run ${CYAN}/bootstrap${RESET} to configure gates"
 echo -e "  3. To activate hooks, copy the settings template to your project:"
 echo -e "     ${DIM}cp ~/.claude/templates/settings.json <project>/.claude/settings.json${RESET}"
 echo -e "  4. Follow the workflow: ${CYAN}/explore${RESET} -> ${CYAN}/propose${RESET} -> ${CYAN}/implement${RESET} -> ${CYAN}/validate${RESET} -> ${CYAN}/review-findings${RESET} -> ${CYAN}/ship${RESET}"

@@ -13,7 +13,9 @@
 #   Free-form spec tags. Each matches ^[a-zA-Z0-9_-]{1,32}$.
 
 # gates: []
-#   Gate ceiling for this spec. Each id must exist in knowledge-base/gates.yml.
+#   Gate ceiling for this spec. Each id must exist in the bound repo's
+#   `.workflow.yml gate_pool` (vault: union across repos[]; repo mode: the
+#   repo's own .workflow.yml gate_pool).
 #   /validate runs the intersection of these and the task's ground_rules
 #   eligible set (ADR-003).
 

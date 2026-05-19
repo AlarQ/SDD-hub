@@ -4,15 +4,16 @@
 # /validate-impl (spec-wide). Inputs come from env vars exported by config-loader.sh.
 #
 # Required env (caller must source config-loader.sh + wf_load_config first):
-#   WF_GATE_POOL       absolute path to gates.yml (repo mode)
-#   WF_TASK_GATE_POOL  per-task bound-repo gates.yml (vault mode; overrides
+#   WF_GATE_POOL       absolute path to .workflow.yml carrying inline
+#                      gate_pool: (repo mode)
+#   WF_TASK_GATE_POOL  per-task bound-repo .workflow.yml (vault mode; overrides
 #                      WF_GATE_POOL). Resolve via scripts/multi-repo-resolution.md.
 #   WF_SPEC_GATES      newline-separated ceiling gate IDs (spec eligible set)
 #
 # Public helpers:
 #   wf_gc_task_languages <task_md>            -> language tags from one task
 #   wf_gc_union_languages <tasks_dir>         -> union of tags across all tasks
-#   wf_gc_gate_field <pool> <id> <field>      -> field value from gates.yml
+#   wf_gc_gate_field <pool> <id> <field>      -> field value from gate_pool[]
 #   wf_compute_effective_set <task_file>      -> per-task intersection (one id per line)
 #   wf_compute_union_set <spec_dir>           -> spec-wide union (one id per line)
 #
@@ -55,7 +56,7 @@ wf_gc_union_languages() {
 wf_gc_gate_field() {
   local pool="$1" id="$2" field="$3"
   command -v yq >/dev/null 2>&1 || return 90
-  yq e -r ".gates[] | select(.id == \"$id\") | .$field" "$pool" 2>/dev/null
+  yq e -r ".gate_pool[] | select(.id == \"$id\") | .$field" "$pool" 2>/dev/null
 }
 
 # Internal: ceiling ∩ {g | g.applies_to ∩ langs ≠ ∅ ∨ "any" ∈ g.applies_to}
@@ -67,7 +68,7 @@ wf_gc__intersect() {
   local id applies_json tag
   while IFS= read -r id; do
     [[ -z "$id" ]] && continue
-    applies_json="$(yq e -r ".gates[] | select(.id == \"$id\") | .applies_to[]" "$pool" 2>/dev/null)" || continue
+    applies_json="$(yq e -r ".gate_pool[] | select(.id == \"$id\") | .applies_to[]" "$pool" 2>/dev/null)" || continue
     [[ -z "$applies_json" ]] && continue
     while IFS= read -r tag; do
       [[ -z "$tag" ]] && continue
@@ -83,7 +84,7 @@ wf_gc__intersect() {
 # `empty_intersection_ok: true` AND the task is code-bearing (has language tags).
 wf_compute_effective_set() {
   local task_file="$1"
-  # Vault mode: caller resolves the bound repo's gates.yml into
+  # Vault mode: caller resolves the bound repo's .workflow.yml into
   # WF_TASK_GATE_POOL (see scripts/multi-repo-resolution.md). Repo mode:
   # WF_GATE_POOL from the single pool. One must be set.
   local pool="${WF_TASK_GATE_POOL:-${WF_GATE_POOL:?WF_TASK_GATE_POOL or WF_GATE_POOL must be set}}"
