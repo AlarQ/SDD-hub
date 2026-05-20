@@ -248,3 +248,76 @@ User's existing `opencoder` proves the pattern: one primary agent, 6-stage workf
 - **Description rewrite quality**: bad descriptions break OpenCode auto-delegation silently. Mitigation: each rewritten description gets a one-line "should trigger when:" comment for review.
 - **Skill discoverability**: agents must call `skill({name})` to load full content; only name+description visible at session start. Mitigation: invest in tight skill descriptions (1–1024 chars, action-oriented); command bodies that need KB context include prose instruction "Load the `<name>` skill before proceeding."
 - **Plugin path resolution**: `tool.execute.after` plugin needs cwd-relative spec resolution. Mitigation: use plugin context `directory` field (verified in docs).
+
+---
+
+## Discussion notes — 2026-05-19 (not decisions; open threads)
+
+A grilling session reframed *why* this migration exists and surfaced open
+questions. Nothing below is locked — these are conversation updates for the next
+person (or future self) picking this up.
+
+### Motivation (reframed)
+
+Two distinct problems, not one:
+
+1. **Leave Claude Code** — for the stated reasons: Anthropic-model token
+   consumption/cost, and the heavy built-in workflow system prompts injected
+   every session.
+2. **Regain control of the workflow itself** — commands grew by accretion
+   ("adding here and there"); several are now overloaded/huge; quality is
+   unverified. This is *loss of control*, not size for its own sake.
+
+Implication still under consideration: the problems may want **sequencing** —
+de-bloat / regain control *first*, then port the smaller understood thing —
+rather than this plan's current 1:1 dual-target port of the workflow as-is.
+Open: this plan ports the bloat 1:1; that tension is unresolved.
+
+### "In control" — working definition (discussed, not ratified)
+
+Candidate ranking that felt right in conversation, for later validation:
+**B > A > C** where —
+- **B = predictable flow**: can draw the exact path a feature will take before
+  running it.
+- **A = comprehension**: can read any command/agent in one sitting and predict
+  what it does/spawns.
+- **C = trustworthy output**: ships correct work without full re-review.
+
+### Fork space — identified, unresolved
+
+Root of unpredictable flow: multiplicative axes decided at `/explore` step 0 —
+`Tier{small,medium,large}` × `Track{feature,technical}` ×
+`Branch{per-task,single-branch}` × `Mode{repo,vault}` ≈ **24 paths** (before
+HITL/AFK and the audit reopen-cycle). Open question deferred by the user: which
+forks survive (freeze to one path / collapse to ~2 axes / keep all + add a
+dry-run resolver). Specifically flagged for later: is the `technical` track and
+`single-branch` actually used, or speculative accretion?
+
+### Runtime research (informational — does not change this plan's target)
+
+Compared terminal agents on: custom commands, parallel subagents, per-tool-call
+hooks, skills, multi-model/OpenRouter, observability, footprint.
+
+- **"Pi Terminus" is not a product.** It is **Pi** (badlogic) — minimal TS
+  agent, author rejects parallel subagents by design — likely conflated with
+  Terminal Trove (directory site). Serious fork: **omp / oh-my-pi** (can1357,
+  Rust single binary, MIT).
+- **OpenCode** remains the only researched runtime that *natively* owns
+  per-tool-call interception (`tool.execute.before/after`, `permission.ask`) —
+  which is simultaneously the observability mechanism (tool call → JSONL) and
+  the bypass guardrail. Native commands, parallel subagents, skills, OpenRouter.
+- **omp/oh-my-pi**: lighter, MIT single binary, superior per-role model routing
+  (direct token-cost lever) and broad programmatic observability — **but no
+  first-class block-every-tool-call hook**, single-maintainer bus-factor.
+- **Codex CLI**: good subagent concurrency knobs; hook = sandbox/approval policy
+  only, no JSONL event log, OpenAI-biased multi-model.
+- Crush / Goose / Gemini CLI / Aider: each fails ≥1 hard requirement
+  (hooks, parallel subagents, or multi-provider).
+
+Open trade-off (not resolved): **lightweight single binary vs hook fidelity**.
+omp's per-role model routing directly attacks the token-cost pain that is
+reason #1 for leaving Claude Code; OpenCode wins on native hook-based
+observability + guardrail. If observability is reframed to come from the
+runtime's own structured run log instead of a self-written JSONL hook, the
+hook requirement weakens and the lightest tool could win. Unresolved.
+
