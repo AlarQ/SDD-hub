@@ -44,7 +44,6 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    For each group:
    - List all findings in the group as structured cards. Visually separate findings within the group (horizontal rule between cards) but present them as one review unit. Card format per finding:
 
-     ~~~
      [<severity>] <title>  (gate: <gate>, source: <tool|llm>[, confidence: <high|medium|low>])
      File: <file>:<lines>
 
@@ -60,7 +59,6 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
      <fix_proposal>
      ```
      References: <comma-joined references>   # omit line entirely if empty
-     ~~~
 
      Finding schema (including `rationale`, `impact`, `references`, `confidence`) lives in `~/.claude/scripts/report-schema.md`.
 
