@@ -44,7 +44,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    For each group:
    - List all findings in the group as structured cards. Visually separate findings within the group (horizontal rule between cards) but present them as one review unit. Card format per finding:
 
-     ```
+     ~~~
      [<severity>] <title>  (gate: <gate>, source: <tool|llm>[, confidence: <high|medium|low>])
      File: <file>:<lines>
 
@@ -52,13 +52,37 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
      Why:     <rationale OR "(not provided — pick Elaborate for deeper analysis)">
      Impact:  <impact OR "(not provided)">
      Code:
-       <code_snippet>
-     Fix:
-       <fix_proposal>
-     References: <comma-joined references>   # omit line entirely if empty
+     ```<lang>
+     <code_snippet>
      ```
+     Fix:                                    # omit Fix: label + block entirely if fix_proposal empty/absent
+     ```<lang>
+     <fix_proposal>
+     ```
+     References: <comma-joined references>   # omit line entirely if empty
+     ~~~
 
      Finding schema (including `rationale`, `impact`, `references`, `confidence`) lives in `~/.claude/scripts/report-schema.md`.
+
+     **`<lang>` inference** — derive from the finding's `file` extension (case-insensitive). Use the same `<lang>` for both `Code:` and `Fix:` blocks since `fix_proposal` targets the same file. Mapping:
+
+     | Extension | `<lang>` |
+     |-----------|----------|
+     | `.rs` | `rust` |
+     | `.ts`, `.tsx` | `ts` |
+     | `.js`, `.jsx`, `.mjs`, `.cjs` | `js` |
+     | `.py` | `python` |
+     | `.sh`, `.bash` | `bash` |
+     | `.go` | `go` |
+     | `.md` | `markdown` |
+     | `.yml`, `.yaml` | `yaml` |
+     | `.json` | `json` |
+     | `.toml` | `toml` |
+     | anything else / no extension / no `file` | `text` |
+
+     **Sentinel & empty handling** — fenced blocks are for code only:
+     - If `code_snippet` equals one of the hydration sentinels (`(snippet unavailable: …)` or `(no file:lines on finding)`), render it as a plain italicised line (e.g. `Code:    _(snippet unavailable: …)_`) — do **not** wrap in a fenced block.
+     - If `fix_proposal` is empty/absent, omit the `Fix:` label and block entirely — do not emit an empty fence.
    - If the group has multiple findings, show a brief note: "These N findings target the same code region in `<file>` and are grouped for a single decision."
    - Invoke the `AskUserQuestion` tool (per `~/.claude/scripts/ask-user-protocol.md`) with one question per group: **"Accept, reject, or elaborate this group?"** options: `Accept all`, `Reject all`, `Elaborate`. Do NOT offer partial accept within a group — the fixes are interrelated. Do NOT render the prompt as a plain markdown question.
    - **Stop and wait for the tool result before continuing to the next group.**
