@@ -129,7 +129,7 @@ get_allowed_transitions() {
     todo)        echo "in-progress" ;;
     in-progress) echo "implemented" ;;
     implemented) echo "review done" ;;
-    review)      echo "implemented done" ;;
+    review)      echo "done" ;;
     done)        echo "" ;;
     *)           echo "" ;;
   esac

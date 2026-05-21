@@ -83,7 +83,4 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 
 Reports are NOT deleted here — `/learn-from-reports` mines them first and owns deletion.
 
-- If any fixes were applied (accepted actionable findings — informational findings do not count): invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Re-run validation now?" options: `Re-validate`, `Skip and proceed to mining`.
-  - If user wants re-validation: archive existing reports out of the active path so `/validate` regenerates fresh ones without losing the prior batch (mining input). Run `mv specs/$ARGUMENTS/reports specs/$ARGUMENTS/reports.archived-$(date +%s)`. Do **not** `rm -rf` — report deletion is owned solely by `/learn-from-reports`. Then run `~/.claude/scripts/task-manager.sh set-status <task-file> implemented`. Stop and instruct the user: "Fixes applied. Run `/validate $ARGUMENTS` next."
-  - If user wants to skip: run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS` next."
-- If no fixes were applied (all findings rejected or already clean): run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS` next."
+- Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS` next."

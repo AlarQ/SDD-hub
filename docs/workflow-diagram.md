@@ -94,8 +94,7 @@ graph LR
     VAL -->|zero findings| LEARN
     VAL -.->|small: lint+tests only| LEARN
     VAL -.->|scope=per-spec: zero-gates pass report| LEARN
-    REV -->|re-validate| VAL
-    REV -->|skip| LEARN
+    REV --> LEARN
     LEARN --> SHIP
     SHIP -.->|per-task: PR merged| IMPL
     SHIP -->|single-branch: non-last task, push only| IMPL
@@ -151,8 +150,7 @@ stateDiagram-v2
     in_progress --> implemented: code written
     implemented --> review: /validate (findings)
     implemented --> done: /validate (zero findings)
-    review --> implemented: /review-findings (re-validate)
-    review --> done: /review-findings (skip)
+    review --> done: /review-findings
     done --> [*]: /ship PR merged
 ```
 

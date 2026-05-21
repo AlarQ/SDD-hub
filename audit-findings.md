@@ -43,9 +43,8 @@ Scope: `/Users/ernestbednarczyk/Desktop/projects/dev-workflow` — commands, age
 - `templates/settings.json` registers only `block-git-hook-bypass` + `block-dismissive-language`.
 - Monitor never fires on install.
 
-### review→implemented transition undocumented
-- `task-manager.sh:56` permits it (for re-validation after fixes).
-- `validate.md` + `review-findings.md` use it without explaining why.
+### review→implemented transition undocumented — RESOLVED
+- Transition removed. `/review-findings` revalidation branch deleted; `task-manager.sh` `review)` now allows only `done`.
 
 ## Medium
 
@@ -57,10 +56,8 @@ Scope: `/Users/ernestbednarczyk/Desktop/projects/dev-workflow` — commands, age
 - Security Engineer invocation duplicated across `explore.md` + `propose.md` with diverging contracts.
 - Report schema restated in `validate.md` + `implement.md` + `review-findings.md` — extract to schema file.
 
-### Zero-finding path ambiguity
-- `validate.md:74` chains directly to `/ship`, skipping review.
-- `review-findings.md:43` routes through review.
-- Unclear if `implemented → done` bypasses `review` state.
+### Zero-finding path ambiguity — RESOLVED
+- Confirmed: zero findings = `implemented → done` directly; non-zero = `implemented → review → done` via `/review-findings`. No revalidation loop.
 
 ## Low
 

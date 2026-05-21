@@ -246,8 +246,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 - **Informational findings** — auto-acknowledged with `review_status: noted`. Displayed as a summary list (title, file, description) at the end. No action required.
 
 **Status update:**
-- Fixes applied -> user is asked whether to re-run validation. If yes, task returns to `implemented` and the user runs `/validate <name>`. If skipped, task moves to `done` and the user runs `/learn-from-reports <name>` then `/ship <name>`.
-- No fixes applied (all rejected) -> task moves to `done`, blocked tasks unblocked. The user runs `/learn-from-reports <name>` then `/ship <name>`.
+- Findings processed (any mix of accepted/rejected) -> task moves to `done`, blocked tasks unblocked. The user runs `/learn-from-reports <name>` then `/ship <name>`. No revalidation — PR review + (medium/large) `/validate-impl` are the downstream safety nets.
 
 **Next:** the user invokes the next command per the status update above.
 
@@ -403,7 +402,6 @@ Monitor events: `repo_bound`, `repo_missing`, `gate_repo_switch`.
 ```
 blocked -> todo -> in-progress -> implemented -> review -> done
                                               \-> done (zero findings)
-                                  review -> implemented (fixes applied, re-validate)
 ```
 
 | Status | Set by | Meaning |
@@ -606,7 +604,7 @@ Edit spec/design/task files conversationally during stage 3. No need to re-run `
 
 ### Validation finds real issues
 
-Accept findings in `/review-findings`. Fixes are applied, task returns to `implemented`. Re-run `/validate` to confirm the fixes pass.
+Accept findings in `/review-findings`. Fixes are applied and the task moves to `done`. No revalidation — PR review + (medium/large) `/validate-impl` are the safety nets.
 
 ### Validation false positives
 
