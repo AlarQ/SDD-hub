@@ -18,6 +18,7 @@ Lets the user crystallize an insight that emerged organically — from a code re
 
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for general KB prerequisites.
 2. Read `$WF_GENERAL_KB/_index.md` to understand existing coverage, categories, and file layout.
+3. Read and follow `~/.claude/scripts/universal-rule-authoring.md` — the captured rule MUST conform to its phrasing, snippet, and rejection criteria.
 
 ## Steps
 
@@ -80,7 +81,7 @@ Invoke `AskUserQuestion` with options (one tool call):
 
 ### Step 4 — Confirm rule body
 
-Display the final rule preview (title, target path, body bullets, rationale, citations) and invoke `AskUserQuestion`:
+Display the final rule preview (title, target path, body bullets, optional synthetic snippet per the snippet policy, rationale, citations) plus a **Universal-check** line (`pass` or a list of specific concerns from re-auditing the draft against `~/.claude/scripts/universal-rule-authoring.md`) and invoke `AskUserQuestion`:
 - `Accept` — apply Step 5
 - `Edit` — open-ended `AskUserQuestion` for revised title/body, then re-confirm
 - `Reject` — discard and exit
@@ -120,4 +121,4 @@ Open a PR in the dev-workflow repo to make it permanent.
 - **No agent spawning** — main command does synthesis directly.
 - **No monitor events** — this is not part of spec flow.
 - **All prompts use `AskUserQuestion`** per `~/.claude/scripts/ask-user-protocol.md`. No plain-text menus.
-- **Universal phrasing only.** Reject (or revise during Edit) rules that reference project-specific names, paths, internal systems, or team process. If the candidate cannot be made universal, suggest the user capture it via `/review-findings` / `/learn-from-reports` from a relevant spec instead.
+- **Universal phrasing only.** Follow `~/.claude/scripts/universal-rule-authoring.md` for phrasing, snippet, and rejection criteria. If the candidate cannot be made universal, drop it and suggest a repo-local capture (`docs/adr/`, `CONTEXT.md`, or `specs/<feature>/design.md` per that doc's rejection criterion).

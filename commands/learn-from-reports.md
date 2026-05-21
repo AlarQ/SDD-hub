@@ -9,6 +9,7 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules.
 2. Read `$WF_GENERAL_KB/_index.md` to understand existing rule coverage before proposing new rules.
+3. Read and follow `~/.claude/scripts/universal-rule-authoring.md` — all candidate rules MUST conform to its phrasing, snippet, and rejection criteria.
 
 ## Steps
 
@@ -23,11 +24,13 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
    - **Accepted with generalizable fix:** `review_status: accepted` where the `fix_proposal` reads as a reusable convention rather than a one-off bug fix. Be conservative — default to skipping unless the fix clearly generalizes.
    - **Zero-findings path:** if all gates passed, still scan `source: llm` advisory notes (any borderline observations an agent recorded even without flagging) for convention signals.
 
-4. **Present candidates as a single batched review.** For each candidate, display:
+4. **Present candidates as a single batched review.** Draft each candidate per `~/.claude/scripts/universal-rule-authoring.md` (universal phrasing, synthetic-only snippets, snippet-inclusion criterion, pre-write checklist). For each candidate, display:
    - Signal type (rejected-reasoning / recurring-category / recurring-llm / accepted-generalizable)
-   - Source findings: id, file, lines, severity, one-line description each
+   - Source findings: id, file, lines, severity, one-line description each (shown for user context only — these tokens MUST NOT leak into the rule body or snippet)
    - Proposed general KB file path (use `knowledge-base-rules.md` resolution: `$WF_GENERAL_KB/<category>/<file>.md`)
-   - Proposed rule text (concise, imperative, fits the existing KB voice)
+   - Proposed rule text (concise, imperative, fits the existing KB voice; no repo-specific names/paths/symbols)
+   - Optional synthetic code snippet (include only for code-pattern rules per the snippet policy; generic identifiers only, never derived from source findings)
+   - **Universal-check:** one line — `pass` or a list of specific concerns from re-auditing the draft against the guidance doc
    - Invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Add this candidate as a general KB rule?" options: `Accept`, `Reject`, `Edit`. One tool call per candidate.
      - **Accept:** apply in step 5
      - **Reject:** discard candidate, move on

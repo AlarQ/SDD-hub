@@ -4,6 +4,7 @@ Feature name: $ARGUMENTS
 
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
+2. Read and follow `~/.claude/scripts/universal-rule-authoring.md` — any rule written to the general KB from the reject path MUST conform to its phrasing, snippet, and rejection criteria
 
 ## Step 0 — Load Spec Config
 
@@ -71,7 +72,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
      - **File exclusivity rule:** Before spawning, check if another sub-agent is currently editing the same file. If so, wait for that sub-agent to complete first, then spawn. Groups targeting different files spawn immediately (parallel).
      - Do NOT wait for the sub-agent to finish before presenting the next group (unless the next group targets the same file — in that case, wait for the previous sub-agent first).
    - If Reject: invoke `AskUserQuestion` again with two questions in one call — (a) free-text "Reason for rejecting this group?" (open-ended), and (b) "Add reject reasoning as general KB rule?" with options `Yes`/`No`. Use answers to set review_notes on ALL findings in the group; review_status → "rejected".
-   - If the KB-rule answer was `Yes`: create/update the relevant file in the general knowledge base at `$WF_GENERAL_KB/<category>/<file>.md` (per `knowledge-base-rules.md`) and update `$WF_GENERAL_KB/_index.md`, set rule_added: true on the relevant finding(s).
+   - If the KB-rule answer was `Yes`: draft the rule per `~/.claude/scripts/universal-rule-authoring.md` (universal phrasing, synthetic-only snippets if any, pre-write checklist). Before writing, show a preview with the proposed target path, rule text, optional synthetic snippet, and a **Universal-check** line (`pass` or specific concerns). On confirm, create/update the relevant file at `$WF_GENERAL_KB/<category>/<file>.md` (per `knowledge-base-rules.md`) and update `$WF_GENERAL_KB/_index.md`, set rule_added: true on the relevant finding(s). If the draft cannot be made universal, drop it and apply the rejection criterion guidance (suggest repo-local capture).
    - After processing, show running tally: "X accepted, Y rejected so far (Z fixes in progress)"
 6. After all groups have been reviewed, wait for any in-flight fix sub-agents to complete. Report: "All N fix sub-agents completed." If any sub-agent errored, report which group/file failed and ask the user whether to retry or skip that fix (set review_status back to "pending" if retry, or "rejected" if skip).
 7. Set review_status to "noted" on all informational findings
