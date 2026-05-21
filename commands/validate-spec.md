@@ -54,6 +54,8 @@ On `status: error` (agent timeout/crash), re-run `/validate-spec $ARGUMENTS` bef
 
 `/implement` must refuse to start a task unless `specs/$ARGUMENTS/reports/spec-review.yaml` exists with `status: pass`. The preflight check in `commands/implement.md` enforces this. The error message points the user back here.
 
+`spec-review.yaml` is a **spec-level** report and persists across per-task cleanup: `/learn-from-reports` step 6 scopes its delete to per-task gate reports and preserves `spec-review.yaml` / `spec-audit-*.md`. Re-run `/validate-spec` only when `spec.md`, `design.md`, or `tasks/` are edited — not between tasks.
+
 ## Invocation
 
 Always invoked explicitly by the user — typically right after `/propose` finishes, and again after `/review-findings` resolves spec-review findings. Re-runs after manual edits to `spec.md` / `design.md` / `tasks/` are also supported.

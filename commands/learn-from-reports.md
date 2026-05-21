@@ -43,9 +43,18 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
    - Update `$WF_GENERAL_KB/_index.md` with the new or updated rule entry.
    - Set `rule_added: true` on all source findings in their report YAML files (use `yq` to preserve schema).
 
-6. **Delete reports.** `rm -rf specs/$ARGUMENTS/reports/` — deletion is centralized here so that both the `/review-findings` path and the `/validate` zero-findings path converge through mining first.
+6. **Delete per-task reports.** Scoped delete — preserve spec-level reports (`spec-review.yaml`, `spec-audit-*.md`) which audit the whole spec and remain valid across tasks; only rotate per-task gate reports:
 
-   **Guard.** If the reports dir was already missing or empty on entry to step 1 (i.e., this command had nothing to mine), warn before deleting: `WARNING: reports/ was empty on entry — possible rogue deletion upstream (only /learn-from-reports may delete reports). Check git/archived dirs before continuing.` Still proceed with the (no-op) cleanup, but surface the anomaly so the user can investigate.
+   ```bash
+   find specs/$ARGUMENTS/reports -maxdepth 1 -type f \
+     ! -name 'spec-review.yaml' \
+     ! -name 'spec-audit-*.md' \
+     -delete
+   ```
+
+   Deletion is centralized here so both the `/review-findings` path and the `/validate` zero-findings path converge through mining first. Spec-level reports are owned by the `/validate-spec` and `/validate-impl` lifecycles, not per-task cleanup — deleting them here would force a redundant `/validate-spec` re-run at the next task's `/implement` preflight even though nothing in the spec changed.
+
+   **Guard.** If no per-task reports existed on entry to step 1 (i.e., this command had nothing to mine — count files matching `<task-id>-<gate>.yaml`, excluding spec-level reports), warn before deleting: `WARNING: no per-task reports on entry — possible rogue deletion upstream (only /learn-from-reports may delete per-task reports). Check git/archived dirs before continuing.` Still proceed with the (no-op) cleanup, but surface the anomaly so the user can investigate.
 
 7. **Report summary.** "Mined N findings: C candidates proposed, A accepted, R rejected, E edited. Reports deleted."
 
