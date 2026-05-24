@@ -121,7 +121,7 @@ for agent_file in "$SCRIPT_DIR/agents/"*.md; do
   [ -f "$agent_file" ] || continue
   name=$(basename "$agent_file")
   # Skip non-agent files
-  case "$name" in CONTRIBUTING.md|INTEGRATION_PLAN.md|LICENSE|README.md) continue ;; esac
+  case "$name" in CONTRIBUTING.md|LICENSE|README.md) continue ;; esac
   if ! safe_copy "$agent_file" "$AGENTS_DIR/$name"; then
     conflicts=$((conflicts + 1))
     conflict_files+=("$name")
@@ -223,7 +223,7 @@ done
 for agent_file in "$SCRIPT_DIR/agents/"*.md; do
   [ -f "$agent_file" ] || continue
   name=$(basename "$agent_file" .md)
-  case "$name" in CONTRIBUTING|INTEGRATION_PLAN|LICENSE|README) continue ;; esac
+  case "$name" in CONTRIBUTING|LICENSE|README) continue ;; esac
   if [ -f "$AGENTS_DIR/$name.md" ]; then
     echo -e "${GREEN}[ok]${RESET} $name agent"
   else
