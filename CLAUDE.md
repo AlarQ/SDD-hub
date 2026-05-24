@@ -10,7 +10,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, config, grill, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-tier, capture-rule)
+- `commands/*.md` — Slash command definitions (bootstrap, config, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-tier, capture-rule)
 - `skills/` — Reusable skill prompts (e.g. `bash-scripting/SKILL.md`). Installed to `~/.claude/skills/` by `setup.sh`.
 - `tests/` — Bash test suite for scripts (task-manager, config-loader, monitor, validate-impl, tier-check, etc.). Run individual tests directly: `bash tests/test-task-manager.sh`.
 - `scripts/knowledge-base-rules.md` — Shared KB prerequisites and single-KB resolution rules (bare `$WF_GENERAL_KB`-relative paths; legacy prefixes stripped + deprecation-warned). Installed globally to `~/.claude/scripts/` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
@@ -117,9 +117,9 @@ Specs are tiered to right-size flow ceremony. Tier is inferred at `/explore` ste
 
 | Tier | Target tasks | Ceiling tasks | Ceiling files | Flow shape |
 |------|--------------|---------------|---------------|------------|
-| `small`  | 2–4         | 5             | 10            | (`/grill` optional) → `/explore` → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. Typically skip `/grill`. |
-| `medium` | 4–7         | 10            | 30            | (`/grill` optional) → `/explore` → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
-| `large`  | 7–12 typical | unbounded    | unbounded     | (`/grill` optional) → full unchanged flow. |
+| `small`  | 2–4         | 5             | 10            | `/explore` (incl. Step −1 grill pass) → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. |
+| `medium` | 4–7         | 10            | 30            | `/explore` (incl. Step −1 grill pass) → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
+| `large`  | 7–12 typical | unbounded    | unbounded     | `/explore` (incl. Step −1 grill pass) → full unchanged flow. |
 
 Defaults live in `.workflow.yml` under `tiers:`. Per-spec override via `tier_ceiling:` in `specs/<feature>/config.yml`.
 
@@ -139,10 +139,10 @@ deployment changes, dependency upgrades, tech-debt. It reuses the entire
 tier/task/TDD/validate/validate-impl pipeline — only the *input artifacts*
 change. It is not a separate command or storage namespace.
 
-| Track | `/propose` artifacts | Rationale source | `/grill` |
+| Track | `/propose` artifacts | Rationale source | Grill pass (in `/explore` Step −1) |
 |-------|----------------------|------------------|----------|
-| `feature` (default) | spec.md/design.md/test-strategy.md per tier + tasks/ | spec.md / design.md | optional |
-| `technical` | **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md) | `docs/adr/` + `CONTEXT.md` | optional `small`; **mandatory `medium`/`large`** |
+| `feature` (default) | spec.md/design.md/test-strategy.md per tier + tasks/ | spec.md / design.md | runs; ADRs optional |
+| `technical` | **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md) | `docs/adr/` + `CONTEXT.md` | runs; ≥1 ADR **mandatory** for `medium`/`large` (enforced by `/propose` hard-refuse) |
 
 - Inferred by `engineering-config-inferencer` at `/explore` step 0 (Track
   Inference Rubric), user-approved; `/explore --technical` forces it. Written to
@@ -152,7 +152,8 @@ change. It is not a separate command or storage namespace.
   in place of spec.md/design.md and emits a per-task `technical_acceptance`
   list (refactor tasks lead with a characterization assertion). **Grill gate:**
   `medium`/`large` technical specs hard-refuse `/propose` if `docs/adr/` is
-  empty — run `/grill` first; `small` is exempt (not ADR-worthy).
+  empty — re-run `/explore` (its Step −1 grill pass produces ADRs); `small`
+  is exempt (not ADR-worthy).
 - `/implement` prepends `technical_acceptance` to the TDD behavior backlog as
   acceptance criteria; characterization items get a behavior-preserving test
   written GREEN before the change and kept GREEN throughout. `afk` pre-approval
@@ -218,11 +219,15 @@ Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 
 ## Domain Docs (`CONTEXT.md` / `docs/adr/`)
 
-`/grill` is an **optional pre-`/explore` step** (skill vendored at
-`skills/grill-with-docs/`, installed by `setup.sh`). It runs a relentless
-one-question-at-a-time domain interview that sharpens terminology into a
-repo-root `CONTEXT.md` glossary (or per-context files via `CONTEXT-MAP.md`) and
-records durable decisions as `docs/adr/NNNN-*.md`. It writes no spec artifacts.
+The grill pass is **Step −1 of `/explore`** and runs unconditionally for
+every spec. It invokes the canonical `grill-with-docs` skill (vendored at
+`skills/grill-with-docs/`, installed to `~/.claude/skills/` by `setup.sh`),
+which runs a relentless one-question-at-a-time domain interview that
+sharpens terminology into a repo-root `CONTEXT.md` glossary (or per-context
+files via `CONTEXT-MAP.md`) and records durable decisions as
+`docs/adr/NNNN-*.md`. It writes no spec artifacts. There is no separate
+`/grill` command — substance lives in the skill, workflow coupling lives
+in `commands/explore.md` Step −1. Emits monitor event `grill_completed`.
 
 **ADR-home split:** `docs/adr/` = durable, cross-spec, repo-level
 domain/architecture decisions. `specs/<feature>/design.md
@@ -242,7 +247,7 @@ defined for the ambiguity check.
 - `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition
-- `/grill` (optional, before `/explore`) sharpens the domain model into `CONTEXT.md` + repo-level `docs/adr/` before requirements work — see "Domain Docs" above
+- `/explore` Step −1 grill pass (runs unconditionally; invokes the canonical `grill-with-docs` skill) sharpens the domain model into `CONTEXT.md` + repo-level `docs/adr/` before requirements work — see "Domain Docs" above
 - Senior Project Manager decomposition uses a **tracer-bullet lens**: each task is the thinnest slice that still ships end-to-end demoable behavior (balanced against the grouping bias, not a contradiction). Every task carries an `interaction: hitl|afk` frontmatter field — `hitl` needs a human-in-the-loop decision, `afk` is autonomously implementable+mergeable (prefer `afk`). `task-manager.sh` validates the value; absent → defaults to `afk` (backward compatible). Surfaced as a badge in the workflow web dashboard.
 - `to-issues` (external tracer-bullet skill) is intentionally **not** wired as a tracker command: redundant with the Senior PM task decomposition and incompatible with the file-based, no-tracker, PR-first flow. Its genuinely-new ideas (tracer-bullet thin-slice lens + HITL/AFK classification) were harvested into the `project-manager-senior` agent + the `interaction` task field instead.
 - `/implement` is **test-driven** (governed by the `tdd` skill at `~/.claude/skills/tdd/SKILL.md`): steps 9–11 are pre-loop backlog settle (Test Strategist refinement moved *before* code; HITL interface/priority approval only for `interaction: hitl` tasks — `afk` treats spec.md BDD + test-strategy.md as pre-approval) → red-green-refactor loop (one failing test → minimal code → repeat, vertical slices; horizontal "all tests then all code" prohibited) → post-loop refactor. Per-cycle `tdd_red`/`tdd_green` monitor events. Applies to **all tiers, no exemption**. `/validate-impl` Step 3a appends per-task TDD evidence; tasks lacking a red→green pair get an **advisory** finding (does not by itself force `reopen`)

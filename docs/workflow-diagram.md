@@ -21,7 +21,7 @@ Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and 
 
 `/explore` step 0 sets `WF_SPEC_TIER` (`small | medium | large`). Tier forks the flow: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl` (emits `validate_impl_skipped`); `medium` runs `/validate-spec` (only `small` exits early inside the command) plus full per-task gates and `/validate-impl`; `large` is the unchanged full flow. `/implement` step 0 runs `tier-check.sh`; on breach (exit 9) the user picks `Continue` (proceed) or `Abort` → `/promote-tier` → re-runs `/propose` at the next tier (preserved `done`/`implemented` tasks remain).
 
-`/explore` step 0 also sets `WF_SPEC_TRACK` (`feature` default | `technical`), orthogonal to tier. On the **technical track** `/propose` writes **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md; rationale comes from `docs/adr/` + `CONTEXT.md`), and hard-refuses for `medium`/`large` until `/grill` has produced a non-empty `docs/adr/` (`small` is exempt). Per-task `technical_acceptance` seeds the `/implement` TDD backlog; `/validate-impl` adds an advisory finding if those items lack red→green evidence. All other flow (validate gates, state machine, ship) is unchanged.
+`/explore` step 0 also sets `WF_SPEC_TRACK` (`feature` default | `technical`), orthogonal to tier. On the **technical track** `/propose` writes **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md; rationale comes from `docs/adr/` + `CONTEXT.md`), and hard-refuses for `medium`/`large` until the `/explore` Step −1 grill pass has produced a non-empty `docs/adr/` (`small` is exempt). Per-task `technical_acceptance` seeds the `/implement` TDD backlog; `/validate-impl` adds an advisory finding if those items lack red→green evidence. All other flow (validate gates, state machine, ship) is unchanged.
 
 `/explore` step 0 also sets `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`), orthogonal to tier/track. Under **per-task** the chain is unchanged: per-task sub-branch, draft PR, `/pr-review`, one PR per task into `feat/$FEATURE`. Under **single-branch** there is no per-task sub-branch and **no draft PR** — `/implement` → `tier-check` → `/validate` directly (no DPR/PRR node); commits accumulate on `feat/$FEATURE` with a per-task `task_base_sha`; the serial gate is "preceding task `done`". On a **non-last** task `/ship` only pushes (`/ship` → `/implement` next); on the **last** task `/ship` opens/readies **one spec PR with base `main`**. `/pr-review` mid-spec is an intended clean dead-end. See `docs/adr/0003-branch-strategy.md`. (ADR-0003)
 
@@ -41,8 +41,7 @@ graph LR
     end
 
     subgraph Core["Core spec-driven flow"]
-        GRILL["/grill<br/>(optional, pre-explore)<br/>→ CONTEXT.md + docs/adr/"]
-        EXP["/explore"]
+        EXP["/explore<br/>(Step −1: grill pass<br/>→ CONTEXT.md + docs/adr/)"]
         TIER{WF_SPEC_TIER}
         PROP["/propose"]
         VSPEC_PRE["/validate-spec"]
@@ -70,9 +69,7 @@ graph LR
         WS["/workflow-summary"]
     end
 
-    BOOT -.-> GRILL
     BOOT -.-> EXP
-    GRILL -.->|optional| EXP
     EXP --> TIER
     TIER -->|small / medium / large| PROP
     PROP -->|small: skip| IMPL
@@ -248,9 +245,9 @@ graph TB
         SNAP[.monitor-context-snapshot]
     end
 
-    GR["/grill (optional)"] --> CTXMD
-    GR --> ADR
-    CONV --> EX["/explore"]
+    CONV --> EX["/explore<br/>(Step −1: grill pass)"]
+    EX --> CTXMD
+    EX --> ADR
     CTXMD -.->|glossary terms| EX
     ADR -.->|respect decisions| EX
     EX --> PRD
@@ -295,29 +292,24 @@ graph TB
 
 One diagram per command. Solid arrow = always spawned. Dashed arrow = conditional (keyword/context-triggered or error-triggered). Agents listed only for commands that spawn them — other commands (`/bootstrap`, `/ship`, `/quick-ship`, `/spec-status`, `/continue-task`, `/research`, `/workflow-summary`) do not spawn agents directly. `/review-findings` spawns background sub-agents to apply accepted fix groups in parallel (not shown as a separate diagram — the agents are generic fix-appliers, not role-specialized).
 
-### 5a-pre. `/grill` — optional pre-explore domain sharpening
+### 5a. `/explore` — domain sharpening + requirements clarification
 
-No role-specialized agent spawn. `/grill` itself runs the relentless
-one-question-at-a-time interview, exploring the codebase to answer questions it
-can, and writes `CONTEXT.md` + `docs/adr/` inline. Optional; typically skipped
-for `small` tier. Feeds canonical vocabulary into `/explore` and `/propose`.
+Step −1 runs first, unconditionally: invokes the canonical `grill-with-docs`
+skill, which runs a relentless one-question-at-a-time domain interview,
+explores the codebase to answer what it can, and writes `CONTEXT.md` +
+`docs/adr/` inline. No role-specialized agent spawn. Emits
+`grill_completed`. Step 0 then runs: the `config-inferencer` agent drafts
+`config.yml` (gates + agents-per-phase) from repo signal files. User
+approves (single key) or edits via `/config`.
 
 ```mermaid
 graph LR
-    GR["/grill"] --> Q{interview loop<br/>one Q at a time}
+    EX["/explore"] --> SM1{Step −1: grill-with-docs skill}
+    SM1 --> Q{interview loop<br/>one Q at a time}
     Q -->|term resolved| CTXW["CONTEXT.md update (inline)"]
     Q -->|hard-to-reverse + surprising + real trade-off| ADRW["docs/adr/NNNN"]
     Q -->|answerable from code| CODE[explore codebase]
-    GR --> NEXT["Next: /explore"]
-```
-
-### 5a. `/explore` — requirements clarification
-
-Step 0 runs before any perspective questions: the `config-inferencer` agent drafts `config.yml` (gates + agents-per-phase) from repo signal files. User approves (single key) or edits via `/config`. `config.yml` is written before the normal explore flow begins.
-
-```mermaid
-graph LR
-    EX["/explore"] --> S0{Step 0: engineering-config-inferencer}
+    SM1 --> S0{Step 0: engineering-config-inferencer}
     S0 --> CI[engineering-config-inferencer]
     CI --> SUMMARY[one-screen summary\ngates + agents-per-phase]
     SUMMARY -.->|approve| WRITE[write config.yml\nemit config_inferred + config_approved]
@@ -344,7 +336,7 @@ graph LR
     TRK -->|feature| SA[engineering-software-architect]
     TRK -->|feature / technical| SPM[project-manager-senior<br/>tracer-bullet slices<br/>+ interaction: hitl/afk per task]
     TRK -->|technical| TGATE{tier ∈ medium/large<br/>& docs/adr empty?}
-    TGATE -->|yes| STOP_GR[hard-refuse:<br/>run /grill first]
+    TGATE -->|yes| STOP_GR[hard-refuse:<br/>re-run /explore<br/>Step −1 grill]
     TGATE -->|no / small| SPM
     SPM -.->|technical track| TA[emit per-task<br/>technical_acceptance]
     SA -.->|read docs/adr| ADRREF[reference ADR by id<br/>no dup in design.md]

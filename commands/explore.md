@@ -3,6 +3,25 @@ Explore and clarify requirements for a new feature or change.
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
 
+## Step −1 — Domain Sharpening (Grill)
+
+Before config inference or any requirements question, invoke the `grill-with-docs` skill (`~/.claude/skills/grill-with-docs/SKILL.md`). The skill runs a relentless one-question-at-a-time domain interview, updates `CONTEXT.md` (or per-context files via `CONTEXT-MAP.md`) inline, and creates `docs/adr/NNNN-*.md` entries when its triple gate fires (hard-to-reverse + surprising + real trade-off).
+
+Substance lives in the skill — this command does not restate the rules. Workflow-specific notes:
+
+- **ADR home split:** `docs/adr/` = durable, cross-spec, repo-level decisions. Spec-scoped decisions belong in `design.md ## Architecture Decision Records`, written later by `/propose`. Do not record feature-local decisions here.
+- The session output (updated `CONTEXT.md` + optional new ADRs) feeds Step 0's `Config Inferencer` and every later step. No spec artifacts are produced in this step.
+- This step runs **unconditionally** for every `/explore` invocation. There is no separate `/grill` command.
+
+After the session, emit a `grill_completed` monitor event:
+
+```bash
+$HOME/.claude/scripts/monitor.sh log_event "<feature>" "grill_completed" "" \
+  "$(printf '{"new_adrs":%s,"terms_touched":%s}' "$new_adrs_json" "$terms_json")"
+```
+
+If monitor.sh is not found or exits non-zero, log a warning and continue — event emission is best-effort and must not block the flow.
+
 ## Step 0 — Config Inference (runs before explore conversation)
 
 Run this step before asking the user any questions. It is non-blocking: failure routes to manual entry, never aborts explore.
@@ -158,13 +177,13 @@ config:
 
 `track` and `tier` are independent. A `technical` spec changes `/propose`
 shape (no spec.md/design.md/test-strategy.md at any tier; rationale from
-`docs/adr/` + `CONTEXT.md`; `/grill` mandatory for medium/large). Surface this
-in the approval summary so the user sees the consequence before approving:
-*"track: technical → /propose writes tasks/ only; medium/large require a
-completed /grill (docs/adr)."*
+`docs/adr/` + `CONTEXT.md`; Step −1 grill must produce ≥1 ADR for
+medium/large). Surface this in the approval summary so the user sees the
+consequence before approving: *"track: technical → /propose writes tasks/
+only; medium/large require docs/adr/ populated by Step −1 grill pass."*
 
 ## Steps
-1. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) to understand available ground rules. Also read the repo-root `CONTEXT.md` (or per-context `CONTEXT.md` files via `CONTEXT-MAP.md`) and `docs/adr/` if they exist — produced by `/grill`. Use the canonical glossary terms and respect recorded ADRs throughout the conversation.
+1. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) to understand available ground rules. Also read the repo-root `CONTEXT.md` (or per-context `CONTEXT.md` files via `CONTEXT-MAP.md`) and `docs/adr/` if they exist — produced by the Step −1 grill pass. Use the canonical glossary terms and respect recorded ADRs throughout the conversation.
 2. Ask the user to describe the feature or change
 3. **Establish the user perspective first** — before diving into technical areas, clarify:
    - Who benefits from this feature? (user role, persona)

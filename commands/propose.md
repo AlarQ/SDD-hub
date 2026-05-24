@@ -46,10 +46,10 @@ evaluated **after** the tier table above. When `WF_SPEC_TRACK=technical`:
   verify a non-empty `docs/adr/` exists (≥1 `docs/adr/NNNN-*.md`). If it does
   not, **hard-refuse**: stop and print —
   *"Technical track at tier `<tier>` requires a recorded rationale. Run
-  `/grill $ARGUMENTS` first to capture the decision in docs/adr/ (and sharpen
-  CONTEXT.md), then re-run /propose."* Do not generate any artifact. For
-  `small`, skip this check (a rename/one-span change is not ADR-worthy —
-  `/grill` is optional).
+  `/explore $ARGUMENTS` (its Step −1 grill pass produces docs/adr/ and
+  sharpens CONTEXT.md), then re-run /propose."* Do not generate any
+  artifact. For `small`, skip this check (a rename/one-span change is not
+  ADR-worthy — the grill pass may produce no ADR).
 - **Decomposition input:** the Senior Project Manager is the only agent
   spawned. It receives `docs/adr/` + repo-root `CONTEXT.md` (+ `prd.md`/
   conversation context) **in place of** spec.md/design.md, plus the project's
@@ -68,7 +68,7 @@ If `WF_REPO_NAMES` is non-empty (loaded by Step 0 via `wf_load_config --spec`):
 1. Read `specs/$ARGUMENTS/prd.md` if it exists, otherwise use conversation context
 2. Read both knowledge base indexes (per `$WF_GENERAL_KB/_rules.md`) — identify all applicable rules from both
 3. Read the applicable rule files from both knowledge bases
-4. Read the repo-root `CONTEXT.md` (or per-context files via `CONTEXT-MAP.md`) and `docs/adr/` if they exist (produced by `/grill`). Use the canonical glossary terms in all generated artifacts. **ADR home:** `docs/adr/` holds durable, cross-spec, repo-level decisions; `design.md ## Architecture Decision Records` holds spec-scoped decisions for this feature only. When an architectural decision is already recorded in `docs/adr/`, reference it by id (e.g. "see ADR-0003") — do not restate or duplicate it in `design.md`.
+4. Read the repo-root `CONTEXT.md` (or per-context files via `CONTEXT-MAP.md`) and `docs/adr/` if they exist (produced by `/explore` Step −1 grill pass). Use the canonical glossary terms in all generated artifacts. **ADR home:** `docs/adr/` holds durable, cross-spec, repo-level decisions; `design.md ## Architecture Decision Records` holds spec-scoped decisions for this feature only. When an architectural decision is already recorded in `docs/adr/`, reference it by id (e.g. "see ADR-0003") — do not restate or duplicate it in `design.md`.
 
 ## Generate Artifacts
 
