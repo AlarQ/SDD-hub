@@ -107,10 +107,6 @@ _Avoid_: "base commit", "start sha" (when used loosely).
 
 ### Audits
 
-**Spec audit**:
-The pre-implementation spec-coherence gate (`/validate-spec`, Spec Reviewer agent) — audits `specs/<feature>/` for contract/logic gaps and repo misalignment; patches spec artifacts, not code.
-_Avoid_: spec validation, spec review.
-
 **Task validation**:
 Per-Task post-implementation run (`/validate`) executing the effective-set of Gates plus Phase-2 Validation agents; Findings patch code.
 _Avoid_: "validate" bare.
@@ -128,7 +124,7 @@ _Avoid_: final validation, impl validation.
 - **Findings** are grouped into **Review units** for accept/reject
 - A **Task** moves through the state machine: `blocked → todo → in-progress → implemented → review → done` (canonical source: `scripts/task-manager.sh`)
 - A **Feature** has exactly one **Tier**, one **Track**, and one **Branch strategy**; each **Task** carries one **interaction** mode (HITL or AFK)
-- **Spec audit** precedes implementation; **Task validation** runs per Task; **Spec-completion audit** runs once after the last Task is `done`
+- **Task validation** runs per Task; **Spec-completion audit** runs once after the last Task is `done`
 
 ## Flagged ambiguities
 
@@ -139,13 +135,11 @@ _Avoid_: final validation, impl validation.
 - "ground rule" vs "KB rule" — resolved: a **Ground rule** is a bare `$WF_GENERAL_KB`-relative pointer in task frontmatter; the content it resolves to is "a KB rule".
 - "Project KB" vs "General KB" / prefix grammar / vault `exit 7` ambiguity — **resolved by ADR-0002**: the dual KB collapsed to one **Knowledge base** (`$WF_GENERAL_KB`); `gates.yml` folded into inline `.workflow.yml gate_pool:`; `ground_rules` are bare paths (legacy prefixes stripped + deprecation-warned); the feedback loop writes to the general KB; `/promote-rules` deleted.
 - "review" — overloaded across the `review` Task state, `/review-findings` (triage Findings), and `/pr-review` (handle PR comments). Resolved: keep distinct; "review" bare = the Task state.
-- "validate" — shared root across `/validate-spec`, `/validate`, `/validate-impl`. Resolved: **Spec audit** (pre-impl), **Task validation** (per-Task), **Spec-completion audit** (terminal). Never "validate" bare in docs.
+- "validate" — shared root across `/validate` and `/validate-impl`. Resolved: **Task validation** (per-Task), **Spec-completion audit** (terminal). Never "validate" bare in docs.
 
 ## Example dialogue
 
-> **Dev:** "The Spec audit flagged a contract gap — does that block /implement?"
-> **Maintainer:** "Yes. Spec audit patches the Feature's Spec and design artifacts, not code. /implement can't start until it's clean."
-> **Dev:** "And once all Tasks are `done`, Task validation has already run per Task — why another audit?"
+> **Dev:** "Once all Tasks are `done`, Task validation has already run per Task — why another audit?"
 > **Maintainer:** "Task validation checks each slice in isolation. The Spec-completion audit (Odium) checks claimed-vs-actual for the whole Feature. `reopen` spawns follow-up Tasks; `complete` ships it."
 > **Dev:** "If a Gate is `blocking: true` but it's a `small` Tier?"
 > **Maintainer:** "Blocking still holds for matching Tasks. Tier trims ceremony — Phase-2 Validation agents — not Blocking Gates."

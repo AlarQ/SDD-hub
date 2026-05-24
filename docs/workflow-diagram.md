@@ -13,13 +13,11 @@ Visual map of the spec-driven development workflow: slash commands, agent spawns
 
 Each command runs only when the user invokes it. There is no auto-chaining between slash commands — every command terminates after its own work and prints the next command to run. The per-task sequence is `/implement` (opens draft PR) → `/pr-review` (optional; loops until PR comments resolved) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks draft PR ready). Human gates appear at PR comment review (on GitHub), finding review, rule-candidate review, and PR merge. Side commands (`/spec-status`, `/continue-task`, etc.) are invokable anytime.
 
-After `/propose` finishes, the user runs `/validate-spec` — a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent. Findings flow through `/review-findings` (also user-invoked) and patch spec/design/tasks (not code). `/implement` is blocked until `specs/<feature>/reports/spec-review.yaml` has `status: pass`.
-
 When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event. `/implement` surfaces this event and instructs the user to run `/validate-impl` (implementation-completion audit via Odium, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
-`/explore` step 0 sets `WF_SPEC_TIER` (`small | medium | large`). Tier forks the flow: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl` (emits `validate_impl_skipped`); `medium` runs `/validate-spec` (only `small` exits early inside the command) plus full per-task gates and `/validate-impl`; `large` is the unchanged full flow. `/implement` step 0 runs `tier-check.sh`; on breach (exit 9) the user picks `Continue` (proceed) or `Abort` → `/promote-tier` → re-runs `/propose` at the next tier (preserved `done`/`implemented` tasks remain).
+`/explore` step 0 sets `WF_SPEC_TIER` (`small | medium | large`). Tier forks the flow: `small` skips Phase-2 agent gates and `/validate-impl` (emits `validate_impl_skipped`); `medium` runs full per-task gates and `/validate-impl`; `large` is the unchanged full flow. `/implement` step 0 runs `tier-check.sh`; on breach (exit 9) the user picks `Continue` (proceed) or `Abort` → `/promote-tier` → re-runs `/propose` at the next tier (preserved `done`/`implemented` tasks remain).
 
 `/explore` step 0 also sets `WF_SPEC_TRACK` (`feature` default | `technical`), orthogonal to tier. On the **technical track** `/propose` writes **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md; rationale comes from `docs/adr/` + `CONTEXT.md`), and hard-refuses for `medium`/`large` until the `/explore` Step −1 grill pass has produced a non-empty `docs/adr/` (`small` is exempt). Per-task `technical_acceptance` seeds the `/implement` TDD backlog; `/validate-impl` adds an advisory finding if those items lack red→green evidence. All other flow (validate gates, state machine, ship) is unchanged.
 
@@ -44,7 +42,6 @@ graph LR
         EXP["/explore<br/>(Step −1: grill pass<br/>→ CONTEXT.md + docs/adr/)"]
         TIER{WF_SPEC_TIER}
         PROP["/propose"]
-        VSPEC_PRE["/validate-spec"]
         IMPL["/implement"]
         DPR[draft PR opened<br/>human review on GitHub]
         PRR["/pr-review<br/>(loop until comments resolved)"]
@@ -72,10 +69,7 @@ graph LR
     BOOT -.-> EXP
     EXP --> TIER
     TIER -->|small / medium / large| PROP
-    PROP -->|small: skip| IMPL
-    PROP -->|medium / large| VSPEC_PRE
-    VSPEC_PRE -->|findings| REV
-    VSPEC_PRE -->|pass| IMPL
+    PROP --> IMPL
     IMPL --> TCHK
     TCHK --> BSTR{WF_BRANCH_STRATEGY}
     TCHK -.->|breach: Abort| PROMO
@@ -117,7 +111,7 @@ graph LR
 
 ### `/fix` — bug-fix flow
 
-Standalone entry. Bypasses `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, and the tier system. Artifact: `specs/fixes/<slug>/fix.md`.
+Standalone entry. Bypasses `/explore`, `/propose`, `/validate-impl`, and the tier system. Artifact: `specs/fixes/<slug>/fix.md`.
 
 ```mermaid
 graph LR
@@ -391,21 +385,14 @@ graph LR
     CFG0 -->|loaded| CR[engineering-code-reviewer]
 ```
 
-### 5f. `/validate-spec` — pre-implementation spec coherence
-
-```mermaid
-graph LR
-    VSPEC["/validate-spec"] --> SR[engineering-spec-reviewer]
-```
-
-### 5g. `/validate-impl` — implementation-completion audit
+### 5f. `/validate-impl` — implementation-completion audit
 
 ```mermaid
 graph LR
     VIMPL["/validate-impl"] --> ODIUM[odium]
 ```
 
-### 5h. `/review-findings` — finding triage
+### 5g. `/review-findings` — finding triage
 
 ```mermaid
 graph LR
@@ -414,7 +401,7 @@ graph LR
     CFG0 -->|loaded| TRIAGE[group + triage findings]
 ```
 
-### 5i. `/ship` — commit, push, PR
+### 5h. `/ship` — commit, push, PR
 
 ```mermaid
 graph LR

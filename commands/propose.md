@@ -182,7 +182,7 @@ Embed every Mermaid block emitted by an agent verbatim under the section that ho
 - Backend Architect's `erDiagram` and `sequenceDiagram` → inside the `## Backend Design` section, next to the schema and API contracts they describe.
 - UX Architect's component-tree `graph TD` and user-flow `sequenceDiagram` → inside the `## Frontend Architecture` section.
 
-Style: follow `docs/workflow-diagram.md` (solid arrows direct, dashed async/human, subgraph clusters). Every node/entity label MUST correspond to a term defined in spec.md or design.md prose — orphan nodes are flagged by `/validate-spec`.
+Style: follow `docs/workflow-diagram.md` (solid arrows direct, dashed async/human, subgraph clusters). Every node/entity label MUST correspond to a term defined in spec.md or design.md prose — no orphan nodes.
 
 ### specs/$ARGUMENTS/tasks/NNN-{task-name}.md
 
@@ -256,4 +256,4 @@ Present all generated artifacts for human review before proceeding to implementa
 
 ## Next Step
 
-This command is complete. Run `/validate-spec $ARGUMENTS` next — the spec-coherence gate validates internal coherence, logic gaps, and repo alignment of the generated bundle before `/implement` is allowed to start. Findings then flow through `/review-findings` and patch the spec/design/tasks files.
+This command is complete. Run `/implement $ARGUMENTS` next.

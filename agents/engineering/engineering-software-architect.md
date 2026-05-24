@@ -93,7 +93,7 @@ One ADR per significant decision, using the ADR template below.
 ```
 
 ### Mermaid Diagrams
-Emit Mermaid blocks (fenced with ```mermaid). Follow conventions from `docs/workflow-diagram.md`: solid arrows (`-->`) for direct flow, dashed (`-.->`) for async/event, subgraph clusters for logical groups. Every node label MUST correspond to a term defined in spec.md or design.md prose — orphan nodes will be flagged by `/validate-spec`.
+Emit Mermaid blocks (fenced with ```mermaid). Follow conventions from `docs/workflow-diagram.md`: solid arrows (`-->`) for direct flow, dashed (`-.->`) for async/event, subgraph clusters for logical groups. Every node label MUST correspond to a term defined in spec.md or design.md prose — no orphan nodes.
 
 **Architecture diagram (required on large tier).** One `graph TB` showing modules/layers and dependency direction.
 

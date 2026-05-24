@@ -65,7 +65,7 @@ On `Cancel` (or missing selection): print `Promotion cancelled. config.yml uncha
 Invoke the relevant chunks of `/propose` (do NOT run the whole command — that would re-decompose preserved tasks). Specifically:
 
 - **small → medium**: write `spec.md` (was skipped at small). Re-decompose only the unfinished scope into tasks. Skip `design.md`, `test-strategy.md`.
-- **medium → large**: write `design.md` (spawn `Software Architect`) and `test-strategy.md` (spawn `Test Strategist`). Re-decompose unfinished scope. Run `/validate-spec`.
+- **medium → large**: write `design.md` (spawn `Software Architect`) and `test-strategy.md` (spawn `Test Strategist`). Re-decompose unfinished scope.
 
 Preserved tasks: leave files untouched.
 

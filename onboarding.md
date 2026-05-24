@@ -31,7 +31,7 @@ Run from the dev-workflow repository root:
 
 This installs:
 - Slash commands to `~/.claude/commands/`:
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-spec`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `fix`, `promote-tier`
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `fix`, `promote-tier`
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 - 35+ agent definitions to `~/.claude/agents/`
@@ -111,9 +111,9 @@ project-root/
 
 The workflow has 10 core stages (plus `/spec-status`, `/workflow-summary`, `/continue-task`, `/quick-ship`, and `/research` available anytime). Each stage produces specific artifacts and has a clear next step.
 
-**Tier branching.** After `/explore` step 0 sets `tier:` in `config.yml`, the path forks: `small` skips `/validate-spec`, Phase-2 agent gates, and `/validate-impl`; `medium` skips `/validate-spec`; `large` runs the full flow. See [Tiered specs](#tiered-specs).
+**Tier branching.** After `/explore` step 0 sets `tier:` in `config.yml`, the path forks: `small` skips Phase-2 agent gates and `/validate-impl`; `medium`/`large` run the full flow. See [Tiered specs](#tiered-specs).
 
-**`/fix` bypass.** Bug fixes use `/fix <slug>` and skip `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, and tiering. See [Bug-fix flow (`/fix`)](#bug-fix-flow-fix).
+**`/fix` bypass.** Bug fixes use `/fix <slug>` and skip `/explore`, `/propose`, `/validate-impl`, and tiering. See [Bug-fix flow (`/fix`)](#bug-fix-flow-fix).
 
 ### Stage 0: `/bootstrap` (once per project)
 
@@ -337,8 +337,8 @@ Specs are tiered to right-size flow ceremony — `/explore` → `/propose` → `
 
 | Tier | Threshold (defaults) | Flow shape |
 |------|----------------------|------------|
-| `small`  | ≤5 tasks, ≤10 files | `/propose` writes tasks/ only (skip spec.md, design.md, test-strategy.md). Skip `/validate-spec`. `/validate` runs lint+tests only — Phase-2 agent gates are skipped per `WF_TIER_AGENT_SKIP`. Skip `/validate-impl` Odium audit. |
-| `medium` | ≤10 tasks, ≤30 files | `/propose` writes spec.md + tasks/ (skip design.md + test-strategy.md). Skip `/validate-spec`. Full per-task gates. `/validate-impl` runs. |
+| `small`  | ≤5 tasks, ≤10 files | `/propose` writes tasks/ only (skip spec.md, design.md, test-strategy.md). `/validate` runs lint+tests only — Phase-2 agent gates are skipped per `WF_TIER_AGENT_SKIP`. Skip `/validate-impl` Odium audit. |
+| `medium` | ≤10 tasks, ≤30 files | `/propose` writes spec.md + tasks/ (skip design.md + test-strategy.md). Full per-task gates. `/validate-impl` runs. |
 | `large`  | unbounded            | Full unchanged flow. |
 
 Defaults live in `.workflow.yml` under `tiers:`. Per-spec override via `tier_ceiling:` in `specs/<feature>/config.yml`.
@@ -353,7 +353,7 @@ Loader exports `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, `
 
 ## Bug-fix flow (`/fix`)
 
-Standalone command for production bugs, regressions, and hotfixes. Skips `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, and the tier system entirely.
+Standalone command for production bugs, regressions, and hotfixes. Skips `/explore`, `/propose`, `/validate-impl`, and the tier system entirely.
 
 **When to use vs the feature flow.** Use `/fix` when there is a known broken behavior to repro and patch. Use the feature flow when scope is open-ended or design choices remain.
 
@@ -375,7 +375,7 @@ Scaffold via `task-manager.sh init-fix <slug>`.
 7. Lint + ground-rule-matched gates run. Phase-2 agent gates are skipped by default unless the diff touches auth/crypto/migrations.
 8. `/ship` with PR title prefix `fix:`.
 
-**Not run:** `/explore`, `/propose`, `/validate-spec`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants a new general-KB rule).
+**Not run:** `/explore`, `/propose`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants a new general-KB rule).
 
 Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 

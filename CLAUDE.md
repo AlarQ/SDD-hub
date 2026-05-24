@@ -10,7 +10,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 
 ## Project Structure
 
-- `commands/*.md` — Slash command definitions (bootstrap, config, explore, propose, validate-spec, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-tier, capture-rule)
+- `commands/*.md` — Slash command definitions (bootstrap, config, explore, propose, implement, validate, validate-impl, review-findings, learn-from-reports, ship, quick-ship, pr-review, fix, spec-status, workflow-summary, continue-task, research, promote-tier, capture-rule)
 - `skills/` — Reusable skill prompts (e.g. `bash-scripting/SKILL.md`). Installed to `~/.claude/skills/` by `setup.sh`.
 - `tests/` — Bash test suite for scripts (task-manager, config-loader, monitor, validate-impl, tier-check, etc.). Run individual tests directly: `bash tests/test-task-manager.sh`.
 - `scripts/knowledge-base-rules.md` — Shared KB prerequisites and single-KB resolution rules (bare `$WF_GENERAL_KB`-relative paths; legacy prefixes stripped + deprecation-warned). Installed globally to `~/.claude/scripts/` by `setup.sh`. Referenced by all workflow commands instead of duplicating KB instructions inline.
@@ -117,8 +117,8 @@ Specs are tiered to right-size flow ceremony. Tier is inferred at `/explore` ste
 
 | Tier | Target tasks | Ceiling tasks | Ceiling files | Flow shape |
 |------|--------------|---------------|---------------|------------|
-| `small`  | 2–4         | 5             | 10            | `/explore` (incl. Step −1 grill pass) → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → skip `/validate-spec` → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. |
-| `medium` | 4–7         | 10            | 30            | `/explore` (incl. Step −1 grill pass) → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → skip `/validate-spec` → full per-task gates → `/validate-impl` runs. |
+| `small`  | 2–4         | 5             | 10            | `/explore` (incl. Step −1 grill pass) → `/propose` (tasks/ only — skip spec.md, design.md, test-strategy.md) → `/implement` → `/validate` (lint+tests only; skip Phase-2 agent gates per `WF_TIER_AGENT_SKIP`) → `/ship`. Skip `/validate-impl` Odium audit. |
+| `medium` | 4–7         | 10            | 30            | `/explore` (incl. Step −1 grill pass) → `/propose` (spec.md + tasks/, skip design.md + test-strategy.md) → full per-task gates → `/validate-impl` runs. |
 | `large`  | 7–12 typical | unbounded    | unbounded     | `/explore` (incl. Step −1 grill pass) → full unchanged flow. |
 
 Defaults live in `.workflow.yml` under `tiers:`. Per-spec override via `tier_ceiling:` in `specs/<feature>/config.yml`.
@@ -213,7 +213,7 @@ Standalone command for production bugs/regressions. Skips `/explore` and `/propo
 
 Flow: `/fix <slug>` → BDD repro → spawn `ultrathink-debugger` for root cause → write `fix.md` → capture pre-fix test failure → apply fix → regression test must pass → lint + ground-rule-matched gates (skip Phase-2 agent gates by default unless diff touches auth/crypto/migrations) → `/ship` (PR title prefix `fix:`).
 
-No `design.md`, no `test-strategy`, no `/validate-spec`, no `/validate-impl`, no tier system. Use `task-manager.sh init-fix <slug>` to scaffold the artifact.
+No `design.md`, no `test-strategy`, no `/validate-impl`, no tier system. Use `task-manager.sh init-fix <slug>` to scaffold the artifact.
 
 Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
 
@@ -234,10 +234,10 @@ domain/architecture decisions. `specs/<feature>/design.md
 ## Architecture Decision Records` = spec-scoped decisions for one feature.
 `/propose` (and its Software Architect agent) reads `docs/adr/` + `CONTEXT.md`,
 references existing ADRs by id instead of duplicating them, and uses canonical
-glossary terms. `/explore` reads both as inputs. `/validate-spec` treats
+glossary terms. `/explore` reads both as inputs. `/propose` treats
 `docs/adr/` as authoritative — a `design.md` ADR that references an existing
 `docs/adr/` entry by id is correct, not a gap; `CONTEXT.md` terms count as
-defined for the ambiguity check.
+defined.
 
 ## Key Design Decisions
 
@@ -266,6 +266,5 @@ defined for the ambiguity check.
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
 - `/continue-task` detects resume phase by checking task status and existing artifacts (reports, branches, PR state)
 - `/research` activates anti-hallucination mode with citation discipline — useful for bug investigation and API contract review
-- `/validate-spec` is a pre-implementation spec-coherence gate wrapping the `Spec Reviewer` agent — audits `specs/<feature>/` for contract gaps, logic gaps, missing pieces, and repo misalignment before `/implement` is allowed to start. The user runs it explicitly after `/propose`. Findings flow through `/review-findings` and patch the spec/design/tasks files (not code). Distinct from `/validate-impl` (post-implementation Odium audit of claimed-vs-actual completion, per configurable-workflow ADR-008).
 - All interactive user prompts in workflow commands MUST use the `AskUserQuestion` tool (per `scripts/ask-user-protocol.md`). Plain markdown question lists / `[A][B][C]` text menus / "type your answer below" prose are not allowed.
 - Flow changes (command chain, task state machine, validation gates, agent spawns, hooks, artifact flow) MUST trigger review of `docs/workflow-diagram.md` — update affected Mermaid diagrams in the same change. Minor wording tweaks exempt; any structural/edge/node change is not.

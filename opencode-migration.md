@@ -2,7 +2,7 @@
 
 ## Context
 
-Repo today is Claude Code-only spec-driven workflow installed to `~/.claude/`: 18 commands, 20 agents, 3 hooks, shared bash scripts, dual KB. Goal — produce a co-equal OpenCode target so the same workflow (`/explore → /propose → /validate-spec → /implement → /validate → /review-findings → /learn-from-reports → /ship → /validate-impl`) runs natively under OpenCode at `~/.config/opencode/`. Both targets supported long-term, single source of truth, full command chain working in v1.
+Repo today is Claude Code-only spec-driven workflow installed to `~/.claude/`: 18 commands, 20 agents, 3 hooks, shared bash scripts, dual KB. Goal — produce a co-equal OpenCode target so the same workflow (`/explore → /propose → /implement → /validate → /review-findings → /learn-from-reports → /ship → /validate-impl`) runs natively under OpenCode at `~/.config/opencode/`. Both targets supported long-term, single source of truth, full command chain working in v1.
 
 Supersedes earlier draft (had errors: plugin API shape, permission-key list, file counts, AGENTS.md auto-load assumption, dispatch-prose rewrite cost).
 
@@ -109,7 +109,7 @@ OpenCode (new):
 
 For each `commands/*.md`:
 - Replace literal `~/.claude/scripts/` → `{{PATH:scripts/...}}` (16 files).
-- Replace agent dispatch prose → `{{AGENT_DISPATCH:...}}` / `{{AGENT_DISPATCH_PARALLEL:...}}` (7 files: explore, propose, validate-spec, validate, implement, review-findings, pr-review).
+- Replace agent dispatch prose → `{{AGENT_DISPATCH:...}}` / `{{AGENT_DISPATCH_PARALLEL:...}}` (6 files: explore, propose, validate, implement, review-findings, pr-review).
 
 Critical: dispatch placeholders must capture the **prompt body** verbatim — keep multi-line prompts intact.
 
@@ -202,7 +202,7 @@ For each `knowledge-base/*.md` (3 files):
 10. **OpenCode hook**: `git commit --no-verify` via Bash tool inside session — plugin denies with thrown error.
 11. **OpenCode parallel**: `/validate` on a small feature — confirm 4 specialist agents run concurrently (assumed working per locked decisions); if serial, file follow-up.
 12. **OpenCode skill activation**: agent in a command that says "Load the `security` skill" actually invokes `skill({name:"security"})` — verify via monitor JSONL.
-13. **Full chain (OpenCode)**: throwaway repo, run `/explore → /propose → /validate-spec → /implement → /validate → /review-findings → /learn-from-reports → /ship → /validate-impl`. User-driven (per locked decision).
+13. **Full chain (OpenCode)**: throwaway repo, run `/explore → /propose → /implement → /validate → /review-findings → /learn-from-reports → /ship → /validate-impl`. User-driven (per locked decision).
 14. **Full chain (Claude)**: same throwaway repo or parallel — confirm dual-target setup didn't break Claude path.
 
 ## Architectural revision: hybrid agent-primary shape (2026-05-04)
@@ -220,8 +220,8 @@ User's existing `opencoder` proves the pattern: one primary agent, 6-stage workf
 
 ### Revised target shape (OpenCode side)
 
-1. **New primary agent `SpecDriver`** (`agents/spec-driver.md`, OpenCode-only — no Claude twin). Owns spec-driven state: `specs/<feature>/`, `task-manager.sh`, gate ceiling, monitor JSONL, phase chain (`explore → propose → validate-spec → implement → validate → review-findings → learn-from-reports → ship → validate-impl`). Cross-phase state (config.yml handle, current task id, monitor file) lives in agent, not command bodies.
-2. **Workflow slash commands shrink to ~10 lines** — `/explore`, `/propose`, `/validate-spec`, `/implement`, `/validate`, `/review-findings`, `/learn-from-reports`, `/ship`, `/validate-impl`, `/pr-review`. Frontmatter: `agent: SpecDriver`, `subtask: true`. Body: phase hint + `$ARGUMENTS`.
+1. **New primary agent `SpecDriver`** (`agents/spec-driver.md`, OpenCode-only — no Claude twin). Owns spec-driven state: `specs/<feature>/`, `task-manager.sh`, gate ceiling, monitor JSONL, phase chain (`explore → propose → implement → validate → review-findings → learn-from-reports → ship → validate-impl`). Cross-phase state (config.yml handle, current task id, monitor file) lives in agent, not command bodies.
+2. **Workflow slash commands shrink to ~10 lines** — `/explore`, `/propose`, `/implement`, `/validate`, `/review-findings`, `/learn-from-reports`, `/ship`, `/validate-impl`, `/pr-review`. Frontmatter: `agent: SpecDriver`, `subtask: true`. Body: phase hint + `$ARGUMENTS`.
 3. **20 existing subagents port as-is** — already `mode: subagent` shape (Odium, config-inferencer, software-architect, code-reviewer, ultrathink-debugger, etc.). SpecDriver invokes via task tool. Parallel dispatch (validate Phase 2) happens inside SpecDriver, not from command body.
 4. **AGENTS.md richer than CLAUDE.md** — centralizes content currently inlined across command bodies: KB prefix convention, gate-skip semantics, triple-gate rule, hook bypass policy, task state machine.
 5. **Utility commands stay plain** (no agent wrapper): `/spec-status`, `/workflow-summary`, `/config`, `/bootstrap`, `/quick-ship`, `/continue-task`, `/research`. Pure utilities, no orchestration.
@@ -231,7 +231,7 @@ User's existing `opencoder` proves the pattern: one primary agent, 6-stage workf
 - **Placeholder grammar must support per-target body fork.** Claude target = full orchestration body (current plan). OpenCode target = thin agent-delegating stub. Add `{{TARGET_BODY:claude=...,opencode=...}}` block placeholder, or split source into `commands/<name>.claude.md` + `commands/<name>.opencode.md` for the 10 workflow commands. Utility commands remain single-source.
 - **New artifact** — `agents/spec-driver.md` (OpenCode-only). Not rendered for Claude target.
 - **Risk #1 dissolves** — `{{AGENT_DISPATCH_PARALLEL}}` parallel-from-command-body concern goes away; parallel dispatch lives inside SpecDriver agent body where state and permissions are scoped correctly.
-- **Verification step added** — prototype SpecDriver on throwaway feature covering `/explore → /propose → /validate-spec` only before expanding. Confirm subagent dispatch + monitor events work cleanly. If OpenCode's auto-delegation or child-session model fights the design, fall back to original 1:1 command port.
+- **Verification step added** — prototype SpecDriver on throwaway feature covering `/explore → /propose` only before expanding. Confirm subagent dispatch + monitor events work cleanly. If OpenCode's auto-delegation or child-session model fights the design, fall back to original 1:1 command port.
 
 ### Tradeoffs (why hybrid, not pure-agent or pure-command)
 

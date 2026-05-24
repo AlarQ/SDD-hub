@@ -156,8 +156,8 @@ Event summary:
 
 The agent's YAML must include `tier: small|medium|large`. If the YAML lacks `tier`, treat as agent error and route to manual entry. The tier drives downstream flow shape:
 
-- `small` → `/propose` writes only `tasks/`. `/validate-spec` early-exits. `/validate` skips Phase-2 agent gates listed in `WF_TIER_AGENT_SKIP`. `/validate-impl` early-exits.
-- `medium` → `/propose` writes `spec.md` + `tasks/` (no `design.md`/`test-strategy.md`). `/validate-spec` audits `spec.md` only.
+- `small` → `/propose` writes only `tasks/`. `/validate` skips Phase-2 agent gates listed in `WF_TIER_AGENT_SKIP`. `/validate-impl` early-exits.
+- `medium` → `/propose` writes `spec.md` + `tasks/` (no `design.md`/`test-strategy.md`).
 - `large` → unchanged full flow.
 
 If the agent picked `small` and the spec keywords include `auth`, `security`, `migration`, `api`, `schema`, or `crypto`, override to `medium` and note the override in reasoning. The user can override via `Edit` path.
