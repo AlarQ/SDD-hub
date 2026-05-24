@@ -91,13 +91,75 @@ The agent must return:
 If the agent errors or times out, proceed with spec.md generation without security input and note: *"Security Engineer analysis unavailable — security scenarios may be incomplete."*
 
 ##### Embedding Security Output in spec.md
-- Generate spec.md content:
-  - Detailed functional specification
-  - All scenarios in BDD format: Given / When / Then
-  - Edge cases and error scenarios explicitly listed
-  - Reference applicable rules from both knowledge bases
-- Incorporate security agent findings as BDD scenarios for auth, input validation, and data handling
-- Add a `## Security Scenarios` section with Given/When/Then for each threat mitigation
+- Generate spec.md content per the **Canonical spec.md shape** below.
+- Incorporate security agent findings as BDD scenarios for auth, input validation, and data handling.
+- Add a `## Security Scenarios` section with Given/When/Then for each threat mitigation.
+
+##### Canonical spec.md shape (MANDATORY)
+
+spec.md uses structured sections so wire detail stays scannable/diffable. FR prose is **intent only** — no URLs, no status codes, no schema columns.
+
+**FR block** — 1–3 sentences of intent + ref block. Refs are required when the FR maps to a contract / table / scenario:
+
+```
+### FR-2: Idempotent Category create
+A user creating a Category with the same `(parent_id, name)` they already own
+gets the existing row, not a duplicate. Concurrent creates resolve to one row.
+
+**Contracts:** EP-CAT-CREATE
+**Data:** category
+**Scenarios:** idempotent-create-new, idempotent-create-existing, concurrent-create
+```
+
+**`## API Contracts` section** — one block per endpoint. **Skip the whole section if the spec has no endpoints.** Endpoint id grammar: `EP-<DOMAIN>-<VERB>` (uppercase, kebab).
+
+```
+### EP-CAT-CREATE — POST /v1/qanda/categories
+**Auth:** session
+**FRs:** FR-2, FR-6
+
+**Request body**
+```json
+{ "name": "string", "parent_id": "UUID?" }
+```
+
+| Status | When | Body |
+|--------|------|------|
+| 201 | new row inserted | `Category { id, name, parent_id }` |
+| 200 | existing row matched | `Category { id, name, parent_id }` |
+| 404 | parent_id not owned by caller | `{ code: "category_not_found" }` |
+| 400 | name invalid | `{ code: "validation_error" }` |
+```
+
+**`## Data Model` section** — one block per table/collection. **Skip the whole section if the spec changes no schema.** Migration sub-block only when destructive/multi-step.
+
+```
+### `category`
+**FRs:** FR-1, FR-7
+
+| Column | Type | Null | Default | Notes |
+|--------|------|------|---------|-------|
+| id | UUID | no | gen_random_uuid() | PK |
+| user_id | UUID | no | — | FK users(id) ON DELETE CASCADE |
+| parent_id | UUID | yes | — | FK category(id) ON DELETE RESTRICT |
+| name | text | no | — | CHECK length 1..200, lowercase |
+
+**Constraints**
+- UNIQUE (user_id, parent_id, lower(name))
+- INDEX (user_id, parent_id)
+
+**Migration** (FR-7)
+- File 1 (gated by `ALLOW_DESTRUCTIVE_MIGRATION`): …
+- File 2: …
+```
+
+**Required spec.md section order:** `## Overview` → `## Functional Requirements` (FR blocks) → `## API Contracts` (conditional) → `## Data Model` (conditional) → `## Scenarios` (BDD with scenario ids referenced by FR blocks) → `## Security Scenarios` → `## User Flow` (medium/large). Tier-agnostic — conditional sections are driven by **endpoint/schema presence**, not tier.
+
+**Hard rules** for spec.md authoring:
+- FR prose ≤3 sentences. No URLs, status codes, JSON shapes, SQL, or column lists inside an FR.
+- Every endpoint in scope appears as exactly one `### EP-…` block under `## API Contracts`.
+- Every table/collection touched appears as exactly one `### \`tablename\`` block under `## Data Model`.
+- Each BDD scenario gets a kebab-case `scenario-id` referenced from FR blocks via `**Scenarios:**`.
 
 ##### User Flow Diagram (medium + large tiers)
 After `## Security Scenarios`, add a `## User Flow` section containing one Mermaid `sequenceDiagram` block synthesized from the primary happy-path BDD scenario. Actor = end user; participants = the user-visible system surfaces named in spec.md (UI, API, store, external services). Every participant label MUST be a term defined elsewhere in spec.md. Style conventions per `docs/workflow-diagram.md` (solid arrows for direct flow, dashed `-->>` for async/return). Skip on `small`.
@@ -199,7 +261,7 @@ Instruct the agent with this directive: "Analyze the spec and design, then produ
 
 ##### PM Agent Output Contract
 The agent must return:
-1. **Task list** — ordered tasks with: name, description, acceptance criteria, dependencies, estimated file count, `interaction` (`hitl`|`afk`), **rationale (why this task isn't merged with a neighbor)**, and — **technical track only** — a `technical_acceptance` list per task (refactor tasks lead with a characterization assertion)
+1. **Task list** — ordered tasks with: `name`, `objective` (one-sentence what+why), `implements` (feature track: map of `{ fr, contract, data, scenarios }` drawn from `spec.md` FR blocks / `## API Contracts` / `## Data Model` / `## Scenarios`), `acceptance_criteria` (list of Given/When/Then rows — no bullet/prose acceptance), `approach` (optional 2–5 bullets), `dependencies` (`blocked_by`), `estimated_files`, `ground_rules`, `interaction` (`hitl`|`afk`), **`rationale` (why this task isn't merged with a neighbor)**, and — **technical track only** — a `technical_acceptance` list per task (refactor tasks lead with a characterization assertion; on the technical track `implements` is omitted)
 2. **Dependency graph** — which tasks block which
 3. **Scope flags** — any tasks that risk scope creep, exceed the 20-file limit, or breach the tier task-count target
 
@@ -214,6 +276,41 @@ Use the PM agent's task breakdown as input for generating the final task files:
 - Set `status: todo` for tasks with no dependencies
 - Set the `interaction:` frontmatter field to the PM's `hitl`/`afk` classification (omit only if the PM analysis was unavailable — `task-manager.sh` then defaults it to `afk`)
 - **Technical track:** write the PM's per-task `technical_acceptance` list into each task file's `technical_acceptance:` frontmatter array (see `scripts/task-manager.sh` schema). On the feature track this field is omitted.
+
+##### Canonical task body shape (MANDATORY)
+
+Every generated `tasks/NNN-*.md` body follows this skeleton. Frontmatter is unchanged (per `scripts/task-manager.sh` schema — `estimated_files`, `ground_rules`, `test_cases`, `interaction`, `repo`, `technical_acceptance`).
+
+```
+## Objective
+One sentence: what changes and why.
+
+## Implements
+| Kind      | Ref                          |
+|-----------|------------------------------|
+| FR        | FR-2, FR-6                   |
+| Contract  | EP-CAT-CREATE                |
+| Data      | `category`                   |
+| Scenarios | idempotent-create-new, …     |
+
+## Acceptance
+| # | Given | When | Then |
+|---|-------|------|------|
+| 1 | valid feature name | `set_context my-feat 001` | exit 0, context file written |
+| 2 | feature `../etc/passwd` | `set_context` called | exit 1, stderr "invalid feature" |
+
+## Approach   <!-- optional, 2–5 bullets, reference design.md/ADRs -->
+- …
+
+## Implementation Log   <!-- LEFT EMPTY by /propose; /implement appends here -->
+```
+
+**Hard rules** for task bodies:
+- `## Implements` is required when spec FRs exist (feature track). Technical track tasks omit it — `technical_acceptance` frontmatter carries the same role.
+- Acceptance criteria use the Given/When/Then table; bullet acceptance is not allowed.
+- Do **NOT** emit a `## Files` body section — frontmatter `estimated_files` is canonical.
+- Do **NOT** emit `## Description`, `## Implementation Notes`, or `## Decisions Made` — collapsed into `## Implementation Log`, post-impl only.
+- `## Implementation Log` is **empty** at `/propose` time. `/implement` is the sole writer.
 
 #### Agent — Test Strategist (after task generation)
 **Skip entirely on the technical track** (`WF_SPEC_TRACK=technical`) — there is no test-strategy.md; per-task `technical_acceptance` drives `/implement`'s TDD loop instead.

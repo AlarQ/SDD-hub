@@ -74,13 +74,29 @@ Hard guidance — exceed only with justification per task.
 Each task in your breakdown must include:
 
 - **name** — verb phrase, vertical slice (e.g., "Add config loader with first consumer", not "Create config loader function")
-- **description** — what behavior ships
-- **acceptance_criteria** — testable, specific, and sufficient to **demo or verify the slice on its own**
+- **objective** — one sentence: what changes and why (becomes the task body's `## Objective`)
+- **implements** *(feature track only)* — map of `{ fr: [FR-ids], contract: [EP-ids], data: [table names], scenarios: [scenario-ids] }`, drawn from `spec.md` FR blocks / `## API Contracts` / `## Data Model` / `## Scenarios`. Populates the task body's `## Implements` table. Leave a kind out if it doesn't apply.
+- **acceptance_criteria** — list of Given/When/Then rows (each row = `{ given, when, then }`). Bullet/prose acceptance is not allowed. Populates the task body's `## Acceptance` table. Must be sufficient to **demo or verify the slice on its own**.
+- **approach** *(optional, 2–5 bullets)* — high-level path, referencing `design.md` sections or `docs/adr/` ids. Populates `## Approach`. Omit when trivial.
 - **dependencies** — `blocked_by` task ids
 - **estimated_files** — integer
 - **ground_rules** — applicable knowledge-base files (prefix convention)
 - **interaction** — `hitl` or `afk`. `hitl` = the slice requires human interaction to complete (an architectural decision, a design review, a product judgement call). `afk` = the slice can be implemented and merged autonomously. **Prefer `afk`**; mark `hitl` only when a genuine human-in-the-loop decision is unavoidable.
 - **rationale** — **why this isn't merged with a neighboring task.** Required for every task. If you can't justify the split, merge.
+
+### Task body shape you emit
+
+The `/propose` step renders task bodies from your output in this exact skeleton — your fields must populate it:
+
+```
+## Objective    <- from `objective`
+## Implements   <- table from `implements` (feature track only)
+## Acceptance   <- Given/When/Then table from `acceptance_criteria`
+## Approach     <- bullets from `approach` (omit section if absent)
+## Implementation Log   <- LEFT EMPTY; /implement writes this
+```
+
+Do **NOT** propose `## Files` (frontmatter `estimated_files` is canonical), `## Description`, `## Implementation Notes`, or `## Decisions Made`. Do **NOT** populate `## Implementation Log` — it is post-impl only.
 
 ## Critical Rules
 
