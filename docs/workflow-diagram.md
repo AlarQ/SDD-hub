@@ -338,6 +338,9 @@ graph LR
     PR -.->|feature + ui kw| UXA[design-ux-architect]
     PR -.->|feature + ui kw| UID[design-ui-designer]
     PR -.->|feature + ai kw| AIE[engineering-ai-engineer]
+    SPM --> SR[engineering-spec-reviewer<br/>final consistency check<br/>all tiers + tracks]
+    SR -->|pass| OK_PR[→ /implement]
+    SR -->|findings| RFP[→ /review-findings<br/>then /implement<br/>no /propose re-run]
 ```
 
 ### 5c. `/implement` — task execution

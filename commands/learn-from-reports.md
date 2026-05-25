@@ -43,15 +43,16 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
    - Update `$WF_GENERAL_KB/_index.md` with the new or updated rule entry.
    - Set `rule_added: true` on all source findings in their report YAML files (use `yq` to preserve schema).
 
-6. **Delete per-task reports.** Scoped delete — preserve spec-level reports (`spec-audit-*.md`) which audit the whole spec and remain valid across tasks; only rotate per-task gate reports:
+6. **Delete per-task reports.** Scoped delete — preserve spec-level reports (`spec-audit-*.md` from `/validate-impl`, `spec-consistency.yaml` from `/propose`) which audit the whole spec and remain valid across tasks; only rotate per-task gate reports:
 
    ```bash
    find specs/$ARGUMENTS/reports -maxdepth 1 -type f \
      ! -name 'spec-audit-*.md' \
+     ! -name 'spec-consistency.yaml' \
      -delete
    ```
 
-   Deletion is centralized here so both the `/review-findings` path and the `/validate` zero-findings path converge through mining first. Spec-level reports are owned by the `/validate-impl` lifecycle, not per-task cleanup.
+   Deletion is centralized here so both the `/review-findings` path and the `/validate` zero-findings path converge through mining first. Spec-level reports are owned by the `/validate-impl` and `/propose` lifecycles, not per-task cleanup.
 
    **Guard.** If no per-task reports existed on entry to step 1 (i.e., this command had nothing to mine — count files matching `<task-id>-<gate>.yaml`, excluding spec-level reports), warn before deleting: `WARNING: no per-task reports on entry — possible rogue deletion upstream (only /learn-from-reports may delete per-task reports). Check git/archived dirs before continuing.` Still proceed with the (no-op) cleanup, but surface the anomaly so the user can investigate.
 

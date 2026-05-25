@@ -178,10 +178,11 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 - `specs/<name>/spec.md` — functional spec with BDD scenarios (Given/When/Then)
 - `specs/<name>/design.md` — architectural decisions with rule references and rationale
 - `specs/<name>/tasks/NNN-task-name.md` — task files with `ground_rules`, `test_cases`, `blocked_by`, status (`todo` or `blocked`)
+- `specs/<name>/reports/spec-consistency.yaml` — final spec-coherence audit by the `Spec Reviewer` subagent (`engineering-spec-reviewer`). Runs on every tier and track. Findings hard-block `/propose` from returning success; resolved via `/review-findings <name>` (no `/propose` re-run — go straight to `/implement`).
 
 **Requires:** `.workflow.yml` must exist.
 
-**Next:** Spec review (stage 3)
+**Next:** Spec review (stage 3) — or `/review-findings <name>` first if spec-consistency produced findings.
 
 ### Stage 3: Spec review (conversational)
 

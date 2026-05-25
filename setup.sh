@@ -27,10 +27,14 @@ HOOKS_DIR="$CLAUDE_DIR/hooks"
 TEMPLATES_DIR="$CLAUDE_DIR/templates"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 FORCE=false
+PRUNE=true
 
-if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
-  FORCE=true
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --force|-f) FORCE=true ;;
+    --no-prune) PRUNE=false ;;
+  esac
+done
 
 echo -e "${BOLD}${BLUE}=== Spec-Driven Dev Workflow Setup ===${RESET}"
 echo ""
@@ -188,6 +192,57 @@ for skill_dir in "$SCRIPT_DIR/skills/"*/; do
     fi
   done < <(find "$skill_dir" -type f -print0)
 done
+
+# 8b. Prune orphan global files (installed by an older version of this repo,
+# no longer present in the source tree). Per-file `yes` confirmation; --force
+# does NOT auto-confirm (overwrite is reversible, deletion is not). Skip
+# entirely with --no-prune. Restricted to subdirs this script installs into,
+# so unrelated user files in ~/.claude/ are never touched.
+if [ "$PRUNE" = true ]; then
+  echo ""
+  echo -e "${CYAN}Scanning for orphan global files${RESET}"
+  pruned=0
+  seen=0
+  prune_pair() {
+    # $1 = source dir under repo, $2 = dest dir under ~/.claude
+    local src_root="$1" dest_root="$2"
+    [ -d "$dest_root" ] || return 0
+    # Read prompts from /dev/tty — the while loop's stdin is bound to the
+    # find process substitution, so plain `read` would get EOF immediately.
+    if [ ! -r /dev/tty ]; then
+      echo -e "  ${YELLOW}[skip]${RESET} no tty — orphan-prune needs interactive confirmation. Re-run interactively or pass --no-prune."
+      return 0
+    fi
+    while IFS= read -r -d '' dest_file; do
+      local rel="${dest_file#"$dest_root/"}"
+      if [ ! -f "$src_root/$rel" ]; then
+        local short="${dest_file/#$HOME/~}"
+        seen=$((seen + 1))
+        echo -e "  ${YELLOW}[orphan]${RESET} $short"
+        printf "          Not present in repo. Delete? (type 'yes' to confirm) > "
+        local reply=""
+        IFS= read -r reply </dev/tty || reply=""
+        if [ "$reply" = "yes" ]; then
+          rm -f "$dest_file"
+          echo -e "          ${RED}[deleted]${RESET} $short"
+          pruned=$((pruned + 1))
+        else
+          echo -e "          ${DIM}[kept]${RESET} $short"
+        fi
+      fi
+    done < <(find "$dest_root" -type f -print0)
+  }
+  prune_pair "$SCRIPT_DIR/commands"  "$COMMANDS_DIR"
+  prune_pair "$SCRIPT_DIR/scripts"   "$SCRIPTS_DIR"
+  prune_pair "$SCRIPT_DIR/agents"    "$AGENTS_DIR"
+  prune_pair "$SCRIPT_DIR/hooks"     "$HOOKS_DIR"
+  prune_pair "$SCRIPT_DIR/skills"    "$SKILLS_DIR"
+  if [ "$seen" -eq 0 ]; then
+    echo -e "${DIM}No orphans found.${RESET}"
+  else
+    echo -e "${GREEN}Pruned $pruned of $seen orphan(s); $((seen - pruned)) kept.${RESET}"
+  fi
+fi
 
 # 9. Verify
 echo ""

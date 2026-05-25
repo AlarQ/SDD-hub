@@ -351,6 +351,23 @@ After saving test-strategy.md, update each task file's `test_cases` field:
 
 Present all generated artifacts for human review before proceeding to implementation.
 
+## Final Step — Spec Consistency Check (subagent, all tiers)
+
+After all artifacts are written, spawn the `Spec Reviewer` agent (`engineering-spec-reviewer`) via the Agent tool. **This step runs on every tier and every track — no skip.** Inputs to pass:
+- Feature directory: `specs/$ARGUMENTS/`
+- `$WF_GENERAL_KB`
+- Repo context — either the repo root (CWD) or, in vault mode, `WF_REPO_NAMES` + `WF_REPO_PATHS` so the agent can resolve per-task `repo:` references
+- The project's `CLAUDE.md`
+
+Directive: "Audit `specs/$ARGUMENTS/` against the four pillars in your agent definition (doc↔doc consistency, FR→task traceability, task-graph sanity, repo alignment). Output a single YAML document with `gate: spec-consistency` per `~/.claude/scripts/report-schema.md`."
+
+Write the agent's YAML output verbatim to `specs/$ARGUMENTS/reports/spec-consistency.yaml` (create `reports/` if missing).
+
+Branch on the agent's `status`:
+- `pass` (or empty `findings: []`) — print one line: `Spec consistency: pass.` Continue to Next Step.
+- `findings` — print: `Spec consistency check found N findings. Run /review-findings $ARGUMENTS to resolve, then /implement $ARGUMENTS. Do NOT re-run /propose.` Then **stop with non-success exit** so the user does not silently fall through to `/implement`. `/propose` does not re-run the subagent after `/review-findings`; once findings are resolved the user runs `/implement` directly.
+- `error` — surface the agent error verbatim; instruct the user to re-run `/propose $ARGUMENTS`.
+
 ## Next Step
 
-This command is complete. Run `/implement $ARGUMENTS` next.
+Run `/implement $ARGUMENTS` next (or `/review-findings $ARGUMENTS` first if the consistency check produced findings).
