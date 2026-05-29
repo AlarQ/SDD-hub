@@ -121,6 +121,43 @@ test_validate_technical_acceptance_scalar_rejected() {
   return 0
 }
 
+# === implementer field tests ===
+# Pin the agent pool to this repo's agents/ tree so id resolution is
+# deterministic regardless of whether ~/.claude/agents is installed.
+export WF_AGENT_POOL="$REPO_ROOT/agents"
+
+test_validate_implementer_generalist_accepted() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  sed -i.bak 's/^status: todo$/status: todo\nimplementer: generalist/' "$task_file"
+  "$TASK_MANAGER" validate "$task_file"
+}
+
+test_validate_implementer_resolvable_accepted() {
+  # engineering/frontend-developer → agents/engineering/engineering-frontend-developer.md
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  sed -i.bak 's#^status: todo$#status: todo\nimplementer: engineering/frontend-developer#' "$task_file"
+  "$TASK_MANAGER" validate "$task_file"
+}
+
+test_validate_implementer_unresolvable_rejected() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  sed -i.bak 's#^status: todo$#status: todo\nimplementer: bogus/nope#' "$task_file"
+  if "$TASK_MANAGER" validate "$task_file" 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
+test_validate_implementer_absent_grace_ok() {
+  # write_task emits no implementer field — legacy task must still validate
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  "$TASK_MANAGER" validate "$task_file"
+}
+
 # === Walk-up tests ===
 
 test_validate_from_nested_subdir() {
@@ -353,6 +390,10 @@ run_test "validate rejects technical_acceptance scalar" test_validate_technical_
 run_test "validate accepts interaction: afk" test_validate_interaction_afk_accepted
 run_test "validate accepts task with no interaction field (defaults afk)" test_validate_interaction_absent_defaults_ok
 run_test "validate rejects invalid interaction value" test_validate_interaction_invalid_rejected
+run_test "validate accepts implementer: generalist" test_validate_implementer_generalist_accepted
+run_test "validate accepts resolvable implementer id" test_validate_implementer_resolvable_accepted
+run_test "validate rejects unresolvable implementer id" test_validate_implementer_unresolvable_rejected
+run_test "validate accepts task with no implementer field (grace)" test_validate_implementer_absent_grace_ok
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"

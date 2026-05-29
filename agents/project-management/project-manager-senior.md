@@ -82,6 +82,11 @@ Each task in your breakdown must include:
 - **estimated_files** — integer
 - **ground_rules** — applicable knowledge-base files (prefix convention)
 - **interaction** — `hitl` or `afk`. `hitl` = the slice requires human interaction to complete (an architectural decision, a design review, a product judgement call). `afk` = the slice can be implemented and merged autonomously. **Prefer `afk`**; mark `hitl` only when a genuine human-in-the-loop decision is unavoidable.
+- **implementer** — the specialist agent that owns this task's TDD loop in `/implement`, or the reserved literal `generalist` (no subagent — main runs the loop inline). **Always set it.** Pick the best-fit agent from the agent pool by the task's dominant surface; when no specialist clearly fits, use `generalist`. One task = one implementer. Rubric:
+  - UI / client / component / CSS / page / form work → `engineering/frontend-developer`
+  - server / API / endpoint / database / schema / migration / queue / cache work → `engineering/backend-architect`
+  - another agent-pool id only where the fit is unambiguous (use the `<category>/<name>` grammar)
+  - mixed, glue, scripting, docs, or anything without a clear specialist → `generalist`
 - **rationale** — **why this isn't merged with a neighboring task.** Required for every task. If you can't justify the split, merge.
 
 ### Task body shape you emit

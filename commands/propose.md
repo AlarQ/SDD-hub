@@ -261,7 +261,7 @@ Instruct the agent with this directive: "Analyze the spec and design, then produ
 
 ##### PM Agent Output Contract
 The agent must return:
-1. **Task list** — ordered tasks with: `name`, `objective` (one-sentence what+why), `implements` (feature track: map of `{ fr, contract, data, scenarios }` drawn from `spec.md` FR blocks / `## API Contracts` / `## Data Model` / `## Scenarios`), `acceptance_criteria` (list of Given/When/Then rows — no bullet/prose acceptance), `approach` (optional 2–5 bullets), `dependencies` (`blocked_by`), `estimated_files`, `ground_rules`, `interaction` (`hitl`|`afk`), **`rationale` (why this task isn't merged with a neighbor)**, and — **technical track only** — a `technical_acceptance` list per task (refactor tasks lead with a characterization assertion; on the technical track `implements` is omitted)
+1. **Task list** — ordered tasks with: `name`, `objective` (one-sentence what+why), `implements` (feature track: map of `{ fr, contract, data, scenarios }` drawn from `spec.md` FR blocks / `## API Contracts` / `## Data Model` / `## Scenarios`), `acceptance_criteria` (list of Given/When/Then rows — no bullet/prose acceptance), `approach` (optional 2–5 bullets), `dependencies` (`blocked_by`), `estimated_files`, `ground_rules`, `interaction` (`hitl`|`afk`), `implementer` (the specialist agent id that owns the task's TDD loop, or `generalist` for inline — see the PM's implementer rubric), **`rationale` (why this task isn't merged with a neighbor)**, and — **technical track only** — a `technical_acceptance` list per task (refactor tasks lead with a characterization assertion; on the technical track `implements` is omitted)
 2. **Dependency graph** — which tasks block which
 3. **Scope flags** — any tasks that risk scope creep, exceed the 20-file limit, or breach the tier task-count target
 
@@ -275,11 +275,12 @@ Use the PM agent's task breakdown as input for generating the final task files:
 - Set `status: blocked` with `blocked_by` IDs for tasks with dependencies (per PM dependency graph)
 - Set `status: todo` for tasks with no dependencies
 - Set the `interaction:` frontmatter field to the PM's `hitl`/`afk` classification (omit only if the PM analysis was unavailable — `task-manager.sh` then defaults it to `afk`)
+- Set the `implementer:` frontmatter field to the PM's per-task implementer assignment (`generalist` or an agent-pool id). Applies to **both feature and technical tracks**. `task-manager.sh validate` accepts `generalist` or any resolvable agent id and hard-fails an unresolvable one; if the PM analysis was unavailable, omit the field (validate grants legacy grace and `/implement` falls back to the inline path)
 - **Technical track:** write the PM's per-task `technical_acceptance` list into each task file's `technical_acceptance:` frontmatter array (see `scripts/task-manager.sh` schema). On the feature track this field is omitted.
 
 ##### Canonical task body shape (MANDATORY)
 
-Every generated `tasks/NNN-*.md` body follows this skeleton. Frontmatter is unchanged (per `scripts/task-manager.sh` schema — `estimated_files`, `ground_rules`, `test_cases`, `interaction`, `repo`, `technical_acceptance`).
+Every generated `tasks/NNN-*.md` body follows this skeleton. Frontmatter is unchanged (per `scripts/task-manager.sh` schema — `estimated_files`, `ground_rules`, `test_cases`, `interaction`, `implementer`, `repo`, `technical_acceptance`).
 
 ```
 ## Objective

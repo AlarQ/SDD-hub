@@ -309,6 +309,41 @@ validate_required_fields() {
     ta_seq=$(read_frontmatter "$file" '.technical_acceptance | type')
     [ "$ta_seq" = "!!seq" ] || die "technical_acceptance must be a YAML array in $file"
   fi
+  # `implementer` field — names the specialist agent that owns the TDD loop in
+  # /implement, or the reserved literal `generalist` ("no subagent — main runs
+  # the loop inline", today's exact behavior). The PM sets it at /propose.
+  # Absent on a pre-existing task → allowed (treated as inline fallback;
+  # backward compatible with specs authored before this field existed). When
+  # present it must be `generalist` OR an agent-pool id resolvable to a real
+  # file; an unresolvable id is a hard FAIL (fail-closed).
+  local implementer
+  implementer=$(read_frontmatter "$file" '.implementer')
+  if [ "$implementer" != "null" ] && [ -n "$implementer" ]; then
+    validate_implementer_field "$implementer" "$file"
+  fi
+}
+
+# Resolve an `implementer:` value. `generalist` is the inline sentinel and
+# always passes. Otherwise the value must be an agent-pool id resolvable via the
+# canonical grammar (see commands/validate.md / config-inferencer ID Validation
+# Rules): `<category>/<name>` → `<pool>/<category>/<category>-<name>.md`, bare
+# `<name>` → `<pool>/<name>.md`. Pool = $WF_AGENT_POOL (exported by
+# config-loader) or the install default $HOME/.claude/agents. Unresolvable → die.
+validate_implementer_field() {
+  local implementer="$1" file="$2"
+  [ "$implementer" = "generalist" ] && return 0
+  [[ "$implementer" == *..* ]] && die "Invalid implementer '$implementer' in $file (contains '..')"
+  [[ "$implementer" =~ ^[a-z0-9_-]+(/[a-z0-9_-]+)?$ ]] || \
+    die "Invalid implementer '$implementer' in $file (expected 'generalist' or '[<category>/]<name>')"
+  local pool="${WF_AGENT_POOL:-$HOME/.claude/agents}"
+  local path
+  if [[ "$implementer" == */* ]]; then
+    local cat="${implementer%%/*}" name="${implementer#*/}"
+    path="$pool/$cat/$cat-$name.md"
+  else
+    path="$pool/$implementer.md"
+  fi
+  [ -f "$path" ] || die "Unknown implementer '$implementer' in $file — not found in agent pool ($path). Use 'generalist' or a resolvable agent id."
 }
 
 # Warn if ground_rules paths don't resolve to real files.

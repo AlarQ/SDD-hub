@@ -354,17 +354,23 @@ graph LR
     S9 -.->|if test-strategy.md exists| TSG[engineering-test-strategist]
     S9 -.->|technical track| TAP[prepend technical_acceptance<br/>characterization first]
     S9 -.->|interaction: hitl only| HITL[AskUserQuestion:<br/>interface + priority]
-    S9 --> LOOP["step 10: per behavior"]
+    S9 --> IMPL{implementer?}
+    IMPL -->|generalist / absent| LOOP["step 10: per behavior (inline)"]
+    IMPL -->|agent-pool id| SPEC["spawn specialist<br/>(frontend-developer /<br/>backend-architect / …)"]
     LOOP --> RED["RED: 1 failing test<br/>→ tdd_red event"]
     RED --> GREEN["GREEN: minimal code<br/>→ tdd_green event"]
     GREEN -.->|on error / test fail| UD[ultrathink-debugger]
     GREEN -->|next behavior| LOOP
     LOOP -->|backlog empty| RF["step 11: refactor<br/>(never while RED)"]
-    RF --> CQP2[code-quality-pragmatist]
+    SPEC -->|"owns red→green→refactor in WF_TASK_REPO_PATH<br/>debugs inline · no tdd_red/green events"| SR{status?}
+    SR -->|blocked| PAUSE[surface diagnosis · pause<br/>stays in-progress]
+    SR -->|complete| ST12[step 12: write specialist impl_notes]
+    RF --> ST12
+    ST12 --> CQP2[code-quality-pragmatist]
     CQP2 -.->|post-impl, if in WF_SPEC_AGENTS_IMPLEMENT| DONE[implemented → draft PR]
 ```
 
-Step 10 is a vertical red-green loop: exactly one test then minimal code per behavior, repeated. Horizontal slicing (all tests, then all code) is prohibited per the `tdd` skill. Applies to all tiers — no small-tier exemption.
+After step 9 settles the backlog, `/implement` branches on the Task's `implementer:` field (ADR-0004). `generalist` or absent → the inline vertical red-green loop runs in the main session exactly as before (one test then minimal code per behavior; horizontal slicing prohibited per the `tdd` skill; Ultrathink Debugger + `tdd_red`/`tdd_green` events live here). A resolvable agent-pool id → a specialist subagent owns the whole loop in its own context (no `tdd_red`/`tdd_green` events), returning `complete` (→ step 12 writes its `impl_notes`) or `blocked` (→ main surfaces the diagnosis and pauses). Both paths converge at step 12; the post-impl quality check, draft PR, and state machine are unchanged. Applies to all tiers — no small-tier exemption.
 
 ### 5d. `/validate` — validation gates (parallel)
 

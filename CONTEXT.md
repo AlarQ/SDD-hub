@@ -96,6 +96,10 @@ _Avoid_: MVP, increment.
 A Task's `interaction` field. **HITL** = needs a human-in-the-loop decision; **AFK** = autonomously implementable and mergeable (preferred default).
 _Avoid_: manual/auto, interactive/batch.
 
+**Implementer**:
+A Task's `implementer` field — the specialist agent that owns the Task's TDD loop in `/implement`, or the reserved literal **`generalist`** meaning "no subagent, the main session runs the loop inline" (today's behavior, and the fallback for legacy Tasks lacking the field). Set by the Senior Project Manager at `/propose`, validated by `task-manager.sh` (`generalist` or a resolvable agent-pool id; unresolvable → hard fail). On the delegated path the specialist owns red-green-refactor in `WF_TASK_REPO_PATH` in its own context and returns a compact summary, keeping main context flat; `tdd_red`/`tdd_green` events and the Ultrathink Debugger stay on the inline (`generalist`) path only.
+_Avoid_: "coder", "executor", "the agent" (unqualified); do not conflate with the **interaction** HITL/AFK axis.
+
 **Branch strategy**:
 A Feature's per-spec `branch_strategy` axis (`per-task | single-branch`),
 orthogonal to Tier/Track; inferred at `/explore` step 0, user-approved, absent → `per-task`. **per-task** = `feat/<feature>` integration branch + a per-Task sub-branch and one draft PR per Task (today's default). **single-branch** = one `feat/<feature>` branch off `main`, commits accumulate, no per-Task PR — one spec PR opened at the final `/ship` (base `main`).

@@ -70,8 +70,8 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
    ```
    This snapshot is compared by `/ship` to detect mid-task `config.yml` drift. Normalized JSON (sorted keys, sorted gate list) ensures whitespace-only edits do not trigger false drift.
 7. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
-8. Read context for the task. **Feature track** (`WF_SPEC_TRACK=feature`, default): read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md`. **Technical track** (`WF_SPEC_TRACK=technical`): spec.md/design.md do not exist — read `docs/adr/` + repo-root `CONTEXT.md` (the recorded rationale) and the task file's `technical_acceptance` instead. (`WF_SPEC_TRACK` is exported by the Step 0/6 `wf_load_config --spec` call.)
-**Implementation is test-driven.** Follow the `tdd` skill at `~/.claude/skills/tdd/SKILL.md` — it is the governing method for steps 9–11. Code is written to make a failing test pass, not before it. The horizontal-slice anti-pattern (all tests, then all code) is prohibited; slices are vertical (one test → one impl → repeat).
+8. Read context for the task. **This full-body read happens only on the inline (`generalist`/absent) path** — see "Implementer routing" after step 9. On the delegated path, do **not** read spec.md/design.md/`docs/adr/` bodies into the main session; pass their **paths** to the specialist and let it read them (this is what keeps main context flat). **Feature track** (`WF_SPEC_TRACK=feature`, default): read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md`. **Technical track** (`WF_SPEC_TRACK=technical`): spec.md/design.md do not exist — read `docs/adr/` + repo-root `CONTEXT.md` (the recorded rationale) and the task file's `technical_acceptance` instead. (`WF_SPEC_TRACK` is exported by the Step 0/6 `wf_load_config --spec` call.)
+**Implementation is test-driven.** Follow the `tdd` skill at `~/.claude/skills/tdd/SKILL.md` — it is the governing method for steps 9–11 (and is the method handed to the specialist on the delegated path). Code is written to make a failing test pass, not before it. The horizontal-slice anti-pattern (all tests, then all code) is prohibited; slices are vertical (one test → one impl → repeat).
 
 9. **Pre-loop setup — settle the behavior backlog (no code yet):**
    - If `specs/$ARGUMENTS/test-strategy.md` exists, spawn the `Test Strategist` agent (`engineering-test-strategist`) using the Agent tool. The agent receives:
@@ -89,6 +89,34 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
      - `interaction: hitl` → use `AskUserQuestion` to confirm the public interface shape and the behavior priority order before the loop. Apply the user's adjustments to the backlog.
      - `interaction: afk` (or absent — defaults to afk) → the pre-approval is `spec.md` BDD scenarios + the refined backlog on the **feature track**, or `technical_acceptance` + `docs/adr/` + the refined backlog on the **technical track**. Do not prompt. Proceed directly to the loop.
 
+### Implementer routing (after the backlog is settled)
+
+Read the task file's `implementer:` frontmatter field. It decides who runs the TDD loop:
+
+- **`generalist`, or the field is absent** (legacy specs) → **inline path.** The main session runs steps 10–11 below exactly as today. This requires the step-8 full-body context read — do it now if not already done. The Ultrathink Debugger and `tdd_red`/`tdd_green` monitor events live on this path only.
+- **a resolvable agent-pool id** (e.g. `engineering/frontend-developer`, `engineering/backend-architect`) → **delegated path.** Skip steps 10–11 in the main session entirely. Instead spawn that specialist with the contract in "Delegated implementation" below. Do **not** perform the step-8 full-body read; pass paths to the specialist. After the specialist returns `complete`, continue at step 12.
+
+`implementer:` was validated by `task-manager.sh` at `/propose` time (resolvable id or `generalist`; unresolvable → the spec never got here). Resolve the id with the same grammar `/validate` uses: `<category>/<name>` → `<agent_pool>/<category>/<category>-<name>.md`, bare `<name>` → `<agent_pool>/<name>.md`.
+
+### Delegated implementation (delegated path only)
+
+Spawn the `implementer:` agent **once** using the Agent tool. The spawn prompt is built here by `/implement` — the agent file stays generic; `/implement` injects the method. Pass exactly:
+
+- **Method**: "Read and strictly follow `~/.claude/skills/tdd/SKILL.md`. Implement red-green-refactor in vertical slices: one failing test → minimal code to pass → repeat, then refactor once the whole backlog is green. Tests assert the public interface only, never implementation internals. Do **NOT** emit any monitor events."
+- **Backlog**: the settled ordered behavior backlog from step 9 (inline it — it is compact).
+- **Scope**: the task's `objective`, `acceptance_criteria`, `test_cases`, and `ground_rules` (pass the ground_rules **paths** — the specialist reads them itself).
+- **Architecture source (paths, not bodies)**: feature track → `specs/$ARGUMENTS/design.md` (+ `specs/$ARGUMENTS/spec.md`); technical track → `docs/adr/` + repo-root `CONTEXT.md` + the task's `technical_acceptance` list. Instruct the specialist to read these itself.
+- **Workdir**: `WF_TASK_REPO_PATH`. All edits + test runs happen in that working tree (no worktree isolation — execution is serial, one task in flight). The specialist edits the same tree the main session will `git diff`.
+- **Error rule**: "Debug failing tests yourself, inline, within your own loop. If you cannot reach green after reasonable attempts, stop and return `status: blocked` with your diagnosis. Do **not** spawn further subagents."
+- **Required return** (structured): `status: complete|blocked`, `impl_notes` (interface choices, backlog deviations, refactors applied — for the task file), `changed_files` (list), `blockers?` (diagnosis when `blocked`).
+
+Handle the return:
+- **`status: complete`** → carry the specialist's `impl_notes` forward to step 12 (the main session does **not** re-derive them). Continue to step 12.
+- **`status: blocked`** → **do not** mark the task `implemented`. Surface the specialist's `blockers` diagnosis to the user and pause for guidance (same posture as an Ultrathink-Debugger reject on the inline path). The task stays `in-progress`.
+- If the Agent call itself errors or times out → report the failure and pause; do not silently fall back to inline (the context-hygiene contract assumes the specialist owns the loop).
+
+**Steps 10–11 below run on the inline path only.** On the delegated path, jump to step 12 with the specialist's result.
+
 10. **Red-green-refactor loop — iterate the backlog one behavior at a time** (vertical slices):
 
     For each behavior in the ordered backlog, in order:
@@ -104,7 +132,7 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
    - Extract duplication, deepen modules (small interface / deep implementation), apply SOLID where natural, consider what new code revealed about existing code.
    - Run the full test suite after each refactor step; revert any step that breaks a test.
    - Tests are behavior-level and must survive this refactor unchanged — if a test breaks on a pure internal rename, it was testing implementation; fix the test to assert behavior.
-12. Add implementation notes to the task file explaining decisions made (interface choices, backlog deviations, refactors applied)
+12. Add implementation notes to the task file explaining decisions made (interface choices, backlog deviations, refactors applied). **Inline path**: write the notes the main session produced. **Delegated path**: write the specialist's returned `impl_notes` verbatim (lightly formatted) — do not re-analyze the diff to regenerate them.
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), spawn the implement-phase agents from `WF_SPEC_AGENTS_IMPLEMENT` for a pre-validation sanity check. If `WF_SPEC_AGENTS_IMPLEMENT` is empty, skip this step. If it contains `code-quality-pragmatist` or any advisory agent, spawn it using the Agent tool. The spawned agent(s) receive:
