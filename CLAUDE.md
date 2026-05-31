@@ -97,6 +97,7 @@ The configurable-workflow feature externalizes gate and agent selection into YAM
 **Key terms.** Canonical definitions of **ceiling**, **effective-set**, **spec-union** live in `scripts/workflow-glossary.md` (installed to `~/.claude/scripts/workflow-glossary.md`). Commands link there. One additional cadence term defined here:
 
 - **`validate_scope`** — cadence control: `per-task` (default), `per-spec` (skip per-task validate; spec-union runs at `/validate-impl`), or `both`.
+- **`coverage_audit`** — per-spec toggle (`true` default | `false`) in `config.yml`. Drives `/validate` **Phase 3** (per-task Odium coverage audit of the task's own acceptance criteria). `false` = escape hatch to skip for this spec. Also skipped independently on `small` tier and under `validate_scope: per-spec`. Loader exports `WF_COVERAGE_AUDIT` (see `scripts/config-loader.contract.md`).
 
 **Config loader (`scripts/config-loader.sh`):**
 - Walks up from CWD to find `.workflow.yml`; single `timeout 5 yq` parse
@@ -106,6 +107,8 @@ The configurable-workflow feature externalizes gate and agent selection into YAM
 **`/explore` step 0:** Before normal explore flow, spawns `config-inferencer` agent, shows one-screen summary, accepts single-key approval or `/config` override, writes `config.yml`, emits `config_inferred` + `config_approved` monitor events.
 
 **`/validate` ceiling semantics:** Executes intersection of spec-eligible gates ∩ gates applicable to task `ground_rules`. Skipped gates emit `gate_skip` events.
+
+**`/validate` Phase 3 (per-task coverage audit):** After Phase-2 agent gates, reuses **Odium** (`agents/odium.md`, not edited) to verify the task diff covers the task's own acceptance criteria (`## Acceptance` + `## Implements` FR refs on feature track; `technical_acceptance:` on technical track). Advisory — gaps become `source: llm` findings in `reports/<task-id>-coverage.yaml` flowing through the normal `/review-findings` pipeline; no new hard-block. Skipped (first match) when: `WF_SPEC_TIER == small` (`tier_small`), `WF_COVERAGE_AUDIT == false` (`config_off`), `Skip advisory agents` chosen (`user_skipped`), `WF_VALIDATE_SCOPE == per-spec` (`scope=per-spec`). Emits `coverage_audit_start`, `coverage_audit_done` monitor events; skips emit `gate_skip` (`gate: coverage`).
 
 **`/validate-impl`:** Runs once when all spec tasks reach `done`. Spawns Odium with spec FR list, prd.md scope, task list, and git diff range. Verdict `complete` → spec shipped; verdict `reopen` → `/review-findings` spawns follow-up tasks.
 
@@ -245,6 +248,7 @@ defined.
 - `/implement` checks for unmerged PRs — previous task's PR must be merged before starting next
 - Gates listed in `.workflow.yml gate_pool` with `blocking: true` are mandatory for tasks whose `ground_rules` match — skipping is not allowed
 - `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
+- `/validate` Phase 3 runs a per-task **coverage audit** (reuses Odium) — advisory finding when the diff misses the task's own acceptance criteria; gated by `coverage_audit`/tier/scope/user-skip (see "Configurable Workflow"). Report `reports/<task-id>-coverage.yaml` is just another gate report
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
 - `/propose` spawns `Software Architect` agent during design.md generation for trade-off analysis and ADR production; main command still owns spec.md and task decomposition
 - `/propose` ends with a `Spec Reviewer` subagent (`engineering-spec-reviewer`) consistency pass on every tier and track — audits doc↔doc consistency, FR→task traceability, task-graph sanity, and repo alignment; writes `specs/<feature>/reports/spec-consistency.yaml`. Findings hard-block `/propose` from returning success; resolved via `/review-findings`. `/propose` does NOT re-run the subagent after review — once findings are resolved the user runs `/implement` directly. `setup.sh` prunes orphan global files (per-file `yes` confirmation; `--no-prune` to skip) so removed agents/commands don't linger in `~/.claude/`.

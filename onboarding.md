@@ -221,8 +221,9 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 **What it does:**
 1. **Phase 1 — Deterministic tools (hard gates):** Reads `validation_tools` from language file frontmatter, runs every listed tool. Skipping a tool is not allowed. Missing tools are reported as error findings.
 2. **Phase 2 — LLM analysis (advisory):** Checks code against `ground_rules` for architecture compliance, DRY violations, test quality, and rule violations tools can't catch. All LLM findings marked `source: llm`.
+3. **Phase 3 — Per-task coverage audit (advisory):** Reuses the **Odium** agent to verify the task diff covers the task's own acceptance criteria (`## Acceptance` + `## Implements` FR refs; `technical_acceptance:` on the technical track). Gaps become `source: llm` findings in `reports/<task-id>-coverage.yaml`. Skipped (first match) on `small` tier, `coverage_audit: false`, the `Skip advisory agents` choice, or `validate_scope: per-spec`. Emits `coverage_audit_start` / `coverage_audit_done` (skips emit `gate_skip` with `gate: coverage`).
 
-**Produces:** YAML reports in `specs/<name>/reports/NNN-gate.yaml` for each gate.
+**Produces:** YAML reports in `specs/<name>/reports/NNN-gate.yaml` for each gate (plus `<task-id>-coverage.yaml` when Phase 3 runs).
 
 **5 gates:**
 - **security** — semgrep + language audit tools + `Security Engineer` agent (KB security rules)

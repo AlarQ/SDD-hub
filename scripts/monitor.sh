@@ -14,6 +14,7 @@ set -euo pipefail
 #   tier_approved, tier_promoted, validate_impl_skipped, validate_set_approved,
 #   config_inferred, config_approved, repo_bound, repo_missing, gate_repo_switch,
 #   fix_started, fix_root_cause, fix_shipped,
+#   coverage_audit_start, coverage_audit_done,
 #   tdd_red, tdd_green,
 #   pr_opened_draft, pr_comment_answered, pr_comment_task_applied,
 #   pr_comment_skipped, pr_ready.

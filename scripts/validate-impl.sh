@@ -197,3 +197,175 @@ wf_vi_emit_done() {
 wf_vi_emit_complete() { log_event "$1" spec_complete "" '{}'; }
 # wf_vi_emit_reopen <feature>
 wf_vi_emit_reopen()   { log_event "$1" spec_reopened "" '{}'; }
+
+# ===========================================================================
+# Per-task coverage audit (Phase 3 of /validate). Task-scoped siblings of the
+# spec-scoped helpers above. Reuse the same Odium agent (agents/odium.md
+# untouched); only the wrapper prompt and report writer differ. The report is
+# the YAML findings form (NOT wf_vi_write_report's markdown FR-matrix form) so
+# /review-findings consumes it unchanged.
+# ===========================================================================
+
+# wf_vi_task_diff_range <feature> <task_file> -> stdout: <base>..HEAD
+# All git runs in WF_TASK_REPO_PATH (vault/multi-repo safe; default cwd).
+# Resolution order:
+#   1. single-branch + resolvable task_base_sha → <sha>..HEAD
+#   2. merge-base feat/<feature> HEAD            → <mb>..HEAD   (same range
+#      Phase 2 hands advisory agents)
+#   3. wf_vi_diff_range fallback (merge-base main feat/<feature>)
+# Nothing resolves → rc 5 (loud fail; never a silent HEAD~1).
+wf_vi_task_diff_range() {
+  local feature="$1" task_file="$2"
+  local gitdir="${WF_TASK_REPO_PATH:-.}"
+  local sha mb
+  sha="$(bash -c 'source ~/.claude/scripts/task-manager.sh && read_frontmatter "$1" .task_base_sha' _ "$task_file" 2>/dev/null)"
+  sha="${sha//\"/}"
+  [[ "$sha" == "null" ]] && sha=""
+  if [[ "${WF_BRANCH_STRATEGY:-per-task}" == "single-branch" && -n "$sha" ]] \
+     && git -C "$gitdir" rev-parse --verify --quiet "$sha" >/dev/null 2>&1; then
+    printf '%s..HEAD' "$sha"
+    return 0
+  fi
+  if mb="$(git -C "$gitdir" merge-base "feat/$feature" HEAD 2>/dev/null)" && [[ -n "$mb" ]]; then
+    printf '%s..HEAD' "$mb"
+    return 0
+  fi
+  local fb
+  if fb="$(cd "$gitdir" 2>/dev/null && wf_vi_diff_range "$feature" 2>/dev/null)" && [[ -n "$fb" ]]; then
+    printf '%s' "$fb"
+    return 0
+  fi
+  echo "ERROR: wf_vi_task_diff_range: cannot resolve diff range for $feature (task $task_file); refusing to audit" >&2
+  return 5
+}
+
+# wf_vi__task_acceptance_rows <task_file> (private) -> Given/When/Then body rows,
+# skipping the header (`| # | Given …`) and separator (`|---|…`) rows.
+wf_vi__task_acceptance_rows() {
+  awk '/^## Acceptance/{f=1;next} /^## /{f=0}
+       f && /^\|/ && $0 !~ /^\| *# *\| *Given/ && $0 !~ /^\|[-: |]+\|$/ {print}' "$1"
+}
+
+# wf_vi__task_fr_refs <task_file> (private) -> sorted-unique FR ids from the
+# `## Implements` table's `| FR | … |` row.
+wf_vi__task_fr_refs() {
+  awk '/^## Implements/{f=1;next} /^## /{f=0} f && /^\| *FR *\|/ {print}' "$1" \
+    | grep -oE 'FR-[0-9]+' | sort -u
+}
+
+# _wf_vi_yaml_dq <text> -> double-quoted, escaped YAML scalar.
+_wf_vi_yaml_dq() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '"%s"' "$s"
+}
+
+# wf_vi_build_task_prompt <feature> <task_file> <spec_dir> <diff_range> -> prompt
+# Per-task framing: audits the diff against the task's OWN acceptance only.
+wf_vi_build_task_prompt() {
+  local feature="$1" task_file="$2" spec_dir="$3" diff_range="$4"
+  local task_id
+  task_id="$(bash -c 'source ~/.claude/scripts/task-manager.sh && read_frontmatter "$1" .id' _ "$task_file" 2>/dev/null)"
+  task_id="${task_id//\"/}"
+  [[ -z "$task_id" || "$task_id" == "null" ]] && task_id="$(basename "$task_file" .md)"
+
+  printf '# Per-Task Coverage Audit — %s / task %s\n\n' "$feature" "$task_id"
+  printf 'Audit whether the implemented diff for **this single task** covers the task'\''s OWN acceptance criteria. Scope is the task, NOT the whole spec. Do not re-derive spec.md FRs. Output Markdown.\n\n'
+
+  printf '## Acceptance Basis\n\n'
+  if [[ "${WF_SPEC_TRACK:-feature}" == "technical" ]]; then
+    printf 'Technical-track task. Acceptance points (from `technical_acceptance:` frontmatter):\n\n'
+    local ta n=0
+    while IFS= read -r ta; do
+      [[ -z "$ta" ]] && continue
+      n=$((n + 1))
+      printf '%d. %s\n' "$n" "$ta"
+    done < <(bash -c 'source ~/.claude/scripts/task-manager.sh && read_frontmatter "$1" ".technical_acceptance[]"' _ "$task_file" 2>/dev/null)
+    [[ "$n" -eq 0 ]] && printf '_(none declared)_\n'
+  else
+    printf 'Feature-track task. Acceptance points (from `## Acceptance` Given/When/Then rows):\n\n'
+    local rows; rows="$(wf_vi__task_acceptance_rows "$task_file")"
+    if [[ -n "$rows" ]]; then printf '%s\n' "$rows"; else printf '_(no acceptance rows found)_\n'; fi
+    printf '\n### FR Reference Allowlist\n\nReject any FR id not in this list:\n\n'
+    local frs; frs="$(wf_vi__task_fr_refs "$task_file")"
+    if [[ -n "$frs" ]]; then printf '%s\n' "$frs" | sed 's/^/- /'; else printf '_(none)_\n'; fi
+  fi
+
+  printf '\n## Git Diff Range\n\n`%s`\n\nRun `git diff %s` yourself to inspect the implemented change.\n\n' "$diff_range" "$diff_range"
+
+  printf '## Required Output\n\n'
+  printf 'Produce a single Markdown document with:\n\n'
+  printf '1. YAML frontmatter: `feature`, `task_id`, `timestamp`, `verdict ∈ {complete, reopen}`.\n'
+  printf '2. **Acceptance × Coverage Matrix** — a table with one row per acceptance point above. Columns: `point`, `status ∈ {covered, partial, missing}`, `evidence`.\n'
+  printf '3. **Orphan Code** — code paths in the diff not traceable to any acceptance point.\n\n'
+  printf 'Verdict `complete` only if EVERY acceptance point is `covered`. Any `partial` or `missing` point → `reopen`.\n'
+}
+
+# wf_vi_write_task_coverage_report <feature> <spec_dir> <task_id> <verdict> <matrix_file>
+# -> stdout: report path (reports/<task-id>-coverage.yaml, gate id `coverage`).
+# complete → status: pass, findings: []. reopen → one finding per missing/partial
+# matrix row (severity high/medium, source: llm). Lenient parse: a table row is a
+# finding only if a cell holds exactly `missing`/`partial`; everything else
+# (covered rows, header, separator, unknown tokens) is skipped — never crashes.
+wf_vi_write_task_coverage_report() {
+  local feature="$1" spec_dir="$2" task_id="$3" verdict="$4" matrix_file="$5"
+  case "$verdict" in complete|reopen) ;; *) wf_vi__err "invalid verdict: $verdict"; return 1 ;; esac
+  local reports_dir="$spec_dir/reports" out
+  mkdir -p "$reports_dir"
+  out="$reports_dir/${task_id}-coverage.yaml"
+
+  if [[ "$verdict" == "complete" ]]; then
+    { printf 'gate: coverage\n'; printf 'task_id: %s\n' "$task_id"; printf 'status: pass\n'; printf 'findings: []\n'; } > "$out"
+    printf '%s' "$out"; return 0
+  fi
+
+  local tmp_f; tmp_f="$(mktemp)"
+  local n=0 row point status sev
+  while IFS= read -r row; do
+    [[ "$row" == \|* ]] || continue
+    status="$(printf '%s' "$row" | tr '|' '\n' | sed 's/^ *//;s/ *$//' \
+      | tr '[:upper:]' '[:lower:]' | grep -Ex 'missing|partial' | head -1)"
+    case "$status" in
+      missing) sev=high ;;
+      partial) sev=medium ;;
+      *) continue ;;
+    esac
+    point="$(printf '%s' "$row" | awk -F'|' '{print $2}' | sed 's/^ *//;s/ *$//')"
+    [[ -z "$point" ]] && point="(unnamed acceptance point)"
+    n=$((n + 1))
+    {
+      printf -- '  - id: coverage-%d\n' "$n"
+      printf '    severity: %s\n' "$sev"
+      printf '    category: coverage\n'
+      printf '    title: %s\n' "$(_wf_vi_yaml_dq "$point")"
+      printf '    description: %s\n' "$(_wf_vi_yaml_dq "Acceptance point not fully covered by the task diff (status: $status).")"
+      printf '    review_status: pending\n'
+      printf '    source: llm\n'
+    } >> "$tmp_f"
+  done < "$matrix_file"
+
+  {
+    printf 'gate: coverage\n'
+    printf 'task_id: %s\n' "$task_id"
+    if [[ "$n" -gt 0 ]]; then
+      printf 'status: findings\n'
+      printf 'findings:\n'
+      cat "$tmp_f"
+    else
+      printf 'status: pass\n'
+      printf 'findings: []\n'
+    fi
+  } > "$out"
+  rm -f "$tmp_f"
+  printf '%s' "$out"
+}
+
+# wf_vi_emit_coverage_start <feature> <task_id>
+wf_vi_emit_coverage_start() { log_event "$1" coverage_audit_start "${2:-}" '{}'; }
+# wf_vi_emit_coverage_done <feature> <task_id> <verdict> <report_path>
+wf_vi_emit_coverage_done() {
+  local feature="$1" task_id="$2" verdict="$3" path="$4"
+  log_event "$feature" coverage_audit_done "$task_id" \
+    "$(printf '{"verdict":"%s","report":"%s"}' "$verdict" "$(escape_json_string "$path")")"
+}

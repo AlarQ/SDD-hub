@@ -203,6 +203,15 @@ test_validate_impl_md_wires_union_runner() {
   grep -q 'wf_vi_run_union_gates' "$md" || return 1
 }
 
+# Phase 3 coverage audit is skipped under validate_scope: per-spec — assert
+# validate.md documents that skip reason alongside the phase.
+test_validate_md_documents_phase3_per_spec_skip() {
+  local md="$REPO_ROOT/commands/validate.md"
+  grep -q 'Phase 3' "$md" || return 1
+  grep -qi 'coverage' "$md" || return 1
+  grep -q 'scope=per-spec' "$md" || return 1
+}
+
 echo "=== test-scope-semantics.sh ==="
 run_test "task_languages extracts shell tag"                 test_task_languages_extracts_shell
 run_test "union_languages merges across tasks"               test_union_languages_merges_across_tasks
@@ -216,6 +225,7 @@ run_test "run_union doc-only spec passes empty union"        test_run_union_doc_
 run_test "monitor accepts gate_skip reason=scope=per-spec"   test_monitor_accepts_scope_per_spec_reason
 run_test "validate.md documents scope=per-spec short-circuit" test_validate_md_documents_scope_per_spec_short_circuit
 run_test "validate-impl.md wires wf_vi_run_union_gates"      test_validate_impl_md_wires_union_runner
+run_test "validate.md documents Phase 3 scope=per-spec skip"  test_validate_md_documents_phase3_per_spec_skip
 
 echo "=== $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

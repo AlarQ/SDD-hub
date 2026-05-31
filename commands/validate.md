@@ -16,10 +16,10 @@ Feature name: $ARGUMENTS
 
 Before running any gate or spawning any agent, run (substituting the actual feature name for `$ARGUMENTS`):
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This phase uses: `WF_SPEC_GATES`, `WF_SPEC_AGENTS_VALIDATE`, `WF_GATE_POOL`.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This phase uses: `WF_SPEC_GATES`, `WF_SPEC_AGENTS_VALIDATE`, `WF_GATE_POOL`, `WF_SPEC_TIER`, `WF_SPEC_TRACK`, `WF_BRANCH_STRATEGY`, `WF_COVERAGE_AUDIT` (the last four drive the Phase 3 coverage-audit gating below).
 
 ```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS --require-spec && printf "WF_SPEC_GATES=%s\nWF_SPEC_AGENTS_VALIDATE=%s\nWF_GATE_POOL=%s\n" "$WF_SPEC_GATES" "${WF_SPEC_AGENTS_VALIDATE:-}" "${WF_GATE_POOL:-}"'
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS --require-spec && printf "WF_SPEC_GATES=%s\nWF_SPEC_AGENTS_VALIDATE=%s\nWF_GATE_POOL=%s\nWF_SPEC_TIER=%s\nWF_SPEC_TRACK=%s\nWF_BRANCH_STRATEGY=%s\nWF_COVERAGE_AUDIT=%s\n" "$WF_SPEC_GATES" "${WF_SPEC_AGENTS_VALIDATE:-}" "${WF_GATE_POOL:-}" "${WF_SPEC_TIER:-}" "${WF_SPEC_TRACK:-feature}" "${WF_BRANCH_STRATEGY:-per-task}" "${WF_COVERAGE_AUDIT:-true}"'
 ```
 
 ### Multi-repo task resolution
@@ -48,6 +48,8 @@ Before any gate runs and before any agent is spawned, preview the resolved set a
 
 2. Compute the post-tier-skip advisory agent list. Start from `WF_SPEC_AGENTS_VALIDATE`, drop any agent listed in `WF_TIER_AGENT_SKIP`, capture skipped agents with reason `tier_skip=<WF_SPEC_TIER>`. **What the user approves here is what runs** — the tier filter that previously sat in Phase 2 (line 80 below) moves to this step.
 
+2a. Compute the **Phase 3 coverage-audit** status for the preview (full gating lives in Phase 3 below). It is skipped — with the first matching reason — when any of: `WF_SPEC_TIER == small` (`tier_small`), `WF_COVERAGE_AUDIT == false` (`config_off`), `WF_VALIDATE_SCOPE == per-spec` (`scope=per-spec`). Otherwise it is `enabled`. The `Skip advisory agents` option below additionally skips it with reason `user_skipped`.
+
 3. Render the preview as plain status output:
    ```
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -64,6 +66,8 @@ Before any gate runs and before any agent is spawned, preview the resolved set a
        …
      Skipped advisory agents:
        - <agent-id>  reason: tier_skip=<tier>
+     Coverage audit (Phase 3):
+       <enabled | skipped reason: <tier_small|config_off|scope=per-spec>>
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ```
 
@@ -71,7 +75,7 @@ Before any gate runs and before any agent is spawned, preview the resolved set a
    - **question:** "Proceed with this validation set?"
    - **options:**
      - `Run all` — proceed with shown deterministic gates and advisory agents.
-     - `Skip advisory agents` — Phase 1 only; treat `WF_SPEC_AGENTS_VALIDATE` as empty for this run; emit `gate_skip` with `reason=user_skipped` per omitted agent.
+     - `Skip advisory agents` — Phase 1 only; treat `WF_SPEC_AGENTS_VALIDATE` as empty for this run **and skip the Phase 3 coverage audit**; emit `gate_skip` with `reason=user_skipped` per omitted agent and once for the coverage audit (`gate: coverage`). Carry this `user_skipped` signal into Phase 3 gating.
      - `Edit ceiling` — abort. Print: "Run `/config <feature>` to edit ceiling, then re-run `/validate <feature>`."
      - `Cancel` — abort cleanly; do not change task status.
 
@@ -149,6 +153,54 @@ Each agent must return findings in the report schema (below). When constructing 
 
 ### Collecting Results
 After all agents complete, merge their findings into per-gate YAML reports. If an agent errors or times out, record a single `error` finding for that gate (do not block other gates).
+
+## Phase 3: Per-Task Coverage Audit (advisory)
+
+Reuses the generic **Odium** agent (`agents/odium.md`, **do not edit**) to verify the implemented diff covers **this task's own** acceptance criteria — `## Acceptance` Given/When/Then rows + `## Implements` FR refs on the feature track, or `technical_acceptance:` frontmatter on the technical track. It is **advisory**: any gap becomes a `source: llm` finding in `reports/<task-id>-coverage.yaml` and flows through the existing Gate Aggregation → `review` → `/review-findings` pipeline. No new hard-block path; no new status.
+
+Source the helpers (same module `/validate-impl` uses):
+
+```bash
+source ~/.claude/scripts/validate-impl.sh
+spec_dir="$WF_SPEC_STORAGE/$ARGUMENTS"
+```
+
+1. **Skip** (emit `gate_skip` and proceed straight to Gate Aggregation) on the **first** matching reason:
+   - `WF_SPEC_TIER == small` → reason `tier_small`
+   - `WF_COVERAGE_AUDIT == false` → reason `config_off`
+   - user picked `Skip advisory agents` in Step 0.5 → reason `user_skipped`
+   - `WF_VALIDATE_SCOPE == per-spec` → reason `scope=per-spec` (this path normally never reaches Phase 3 — the Phase-1 per-spec short-circuit already wrote the single pass report and skipped Phase 2; the guard is defensive)
+
+   ```bash
+   $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
+     "$(printf '{"gate":"coverage","reason":"%s"}' "<tier_small|config_off|user_skipped|scope=per-spec>")"
+   ```
+
+2. Compute the task-scoped diff range and build the wrapper prompt:
+   ```bash
+   diff_range="$(wf_vi_task_diff_range "$ARGUMENTS" "<task-file>")" || { echo "coverage audit: cannot resolve diff range"; }
+   prompt="$(wf_vi_build_task_prompt "$ARGUMENTS" "<task-file>" "$spec_dir" "$diff_range")"
+   ```
+   On `wf_vi_task_diff_range` non-zero (rc 5 — no range resolvable), treat as a Phase-3 error: write a single `status: error` finding to `reports/<task-id>-coverage.yaml` (see step 6) and stop the phase. Never audit a guessed range.
+
+3. Emit start, then spawn Odium:
+   ```bash
+   wf_vi_emit_coverage_start "$ARGUMENTS" "<task-id>"
+   ```
+   Spawn the agent with `subagent_type: odium`, passing `$prompt` as its instructions and `WF_TASK_REPO_PATH` as the working directory (Odium runs `git diff <diff_range>` itself). Capture its full Markdown body. Do **not** edit `agents/odium.md` — the per-task framing lives entirely in the wrapper prompt.
+
+4. Parse the returned `verdict` from the agent's YAML frontmatter (`complete` | `reopen`). Reject any FR id appearing in the body that is **not** in the prompt's FR-reference allowlist (fail closed, mirroring `/validate-impl` Step 4) — a hallucinated FR ref downgrades the verdict to `reopen` and is noted. Write the agent's Acceptance × Coverage matrix to a temp file `<matrix_file>` (the table rows from its output).
+
+5. Persist the report and emit done:
+   ```bash
+   report="$(wf_vi_write_task_coverage_report "$ARGUMENTS" "$spec_dir" "<task-id>" "<complete|reopen>" "<matrix_file>")"
+   wf_vi_emit_coverage_done "$ARGUMENTS" "<task-id>" "<complete|reopen>" "$report"
+   ```
+   `complete` → `status: pass`, `findings: []`. `reopen` → one `source: llm` finding per `missing` (severity `high`) / `partial` (severity `medium`) matrix row.
+
+6. **Odium error/timeout** (or rc-5 diff range from step 2) → write a single `status: error` finding to `reports/<task-id>-coverage.yaml` (matches Phase 2 error handling). The existing Gate Aggregation "any gate error → re-run" rule governs.
+
+The coverage report is just another `reports/<task-id>-*.yaml` — Gate Aggregation and Status Update below treat it identically to every other gate report. No special-casing.
 
 ## Output
 One YAML report per gate to `specs/$ARGUMENTS/reports/{task-id}-{gate}.yaml`. Schema: `~/.claude/scripts/report-schema.md` (canonical).

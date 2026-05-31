@@ -23,7 +23,7 @@ wf__unset_partials() {
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-        WF_SPEC_TRACK WF_BRANCH_STRATEGY \
+        WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT \
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT \
         WF_SPEC_PROJECT
   local v
@@ -439,6 +439,24 @@ wf_load_config() {
     esac
     WF_BRANCH_STRATEGY="$branch_strategy"
 
+    # Coverage-audit toggle: spec config.yml `coverage_audit` (optional, default
+    # true). Drives /validate Phase 3 (per-task Odium coverage audit). false =
+    # escape hatch to skip the audit for this spec.
+    # NOTE: cannot use wf__json_get here — its `// "__WF_NULL__"` alternative
+    # operator treats a boolean `false` as falsy and returns the default, so
+    # `coverage_audit: false` would mis-read as unset → "true". Read the raw
+    # value directly; yq prints the literal "null" for a missing key.
+    local coverage_audit
+    coverage_audit="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r '.coverage_audit' - 2>/dev/null)" || {
+      wf__err "$spec_cfg: coverage_audit extraction failed"; wf__unset_partials; return 5
+    }
+    case "$coverage_audit" in
+      true|false) ;;
+      null|"") coverage_audit="true" ;;
+      *)  wf__err "$spec_cfg: coverage_audit invalid: '$coverage_audit' (expected: true, false)"; wf__unset_partials; return 4 ;;
+    esac
+    WF_COVERAGE_AUDIT="$coverage_audit"
+
     local tc fc as
     tc="$(wf__json_get "$spec_json" ".tier_ceiling.tasks" '')"
     fc="$(wf__json_get "$spec_json" ".tier_ceiling.files" '')"
@@ -591,7 +609,7 @@ wf_load_config() {
     WF_SPEC_HAS_CONFIG=1
     export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
            WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-           WF_SPEC_TRACK WF_BRANCH_STRATEGY \
+           WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT \
            WF_REPO_NAMES WF_REPO_PATHS
   fi
 
@@ -694,7 +712,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         WF_GENERAL_KB
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
-        WF_SPEC_TRACK WF_BRANCH_STRATEGY
+        WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
         WF_SPEC_PROJECT
       )

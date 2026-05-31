@@ -155,6 +155,8 @@ stateDiagram-v2
 
 **Phase 2** reads the agent list from `WF_SPEC_AGENTS_VALIDATE` (set by config.yml) — not a hardcoded list. Each entry spawns one agent.
 
+**Phase 3** (per-task coverage audit) reuses **Odium** to check the task diff against the task's own acceptance criteria. Advisory — gaps land in `reports/<task-id>-coverage.yaml` (just another gate report into AGG). Skipped (first match) on `tier_small` / `config_off` (`coverage_audit: false`) / `user_skipped` / `scope=per-spec`, each emitting a `gate_skip` event (`gate: coverage`); otherwise emits `coverage_audit_start` + `coverage_audit_done`.
+
 ```mermaid
 graph TD
     V["/validate"] --> CFG0{Step 0: load config.yml}
@@ -170,6 +172,12 @@ graph TD
     AGT --> GATES["effective gate set<br/>(e.g. security, code-quality,<br/>architecture, compliance, testing)"]
     GATES --> AGENTS["matched agents per gate<br/>(e.g. Security Engineer, CQP,<br/>Software Architect, CMC)"]
     AGENTS --> REPORTS[reports/NNN-&lt;gate&gt;.yaml]
+
+    AGENTS --> COVGATE{"Phase 3 coverage audit?<br/>(tier≠small, coverage_audit≠false,<br/>not user-skipped, scope≠per-spec)"}
+    COVGATE -->|skip| COVSKIP[gate_skip event: gate=coverage]
+    COVGATE -->|run| COV["Odium per-task coverage audit<br/>(advisory)"]
+    COV --> COVREP["reports/&lt;task-id&gt;-coverage.yaml"]
+    COVREP --> AGG
 
     REPORTS --> AGG{All configured gates pass?}
     PASS --> AGG

@@ -91,6 +91,15 @@ test_tdd_categories_accepted() {
   log_event "test-feature" "tdd_green" "001" '{"behavior":"rejects empty cart"}'
 }
 
+test_coverage_audit_categories_accepted() {
+  # Given monitor.sh is sourced
+  source "$MONITOR_SCRIPT"
+
+  # When log_event is called with the per-task coverage-audit categories (Phase 3 of /validate)
+  log_event "test-feature" "coverage_audit_start" "010" '{}' && \
+  log_event "test-feature" "coverage_audit_done" "010" '{"verdict":"reopen","report":"r.yaml"}'
+}
+
 test_unknown_category_rejected() {
   # Given monitor.sh is sourced
   source "$MONITOR_SCRIPT"
@@ -239,6 +248,7 @@ echo ""
 run_test "pre-existing categories are accepted" test_known_category_accepted
 run_test "four new T003 categories accepted: config_inferred, config_approved, agent_spawn, gate_skip" test_new_categories_accepted
 run_test "TDD loop categories accepted: tdd_red, tdd_green" test_tdd_categories_accepted
+run_test "coverage-audit categories accepted: coverage_audit_start, coverage_audit_done" test_coverage_audit_categories_accepted
 run_test "unknown category rejected with non-zero exit" test_unknown_category_rejected
 run_test "unknown category writes nothing to JSONL" test_unknown_category_writes_nothing
 run_test "path under HOME is redacted to ~ prefix in event" test_home_path_redacted_in_event

@@ -9,6 +9,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 FIXTURE="$REPO_ROOT/tests/fixtures/spec-audit/sample-spec"
+COV_FEAT="$REPO_ROOT/tests/fixtures/coverage/feature-task.md"
+COV_TECH="$REPO_ROOT/tests/fixtures/coverage/technical-task.md"
 
 PASS=0; FAIL=0
 TMPDIR_T=""
@@ -127,6 +129,106 @@ test_diff_range_fails_loud_when_no_branch() {
   [[ "$rc" == "5" ]]
 }
 
+# ===========================================================================
+# Per-task coverage audit (Phase 3 of /validate) — task-scoped helpers.
+# ===========================================================================
+
+# === Given: feature-track task fixture with `## Acceptance` GWT table ===
+test_task_acceptance_rows_skips_header_and_separator() {
+  local out; out="$(wf_vi__task_acceptance_rows "$COV_FEAT")"
+  assert_contains "$out" "a logged-out user" || return 1
+  assert_contains "$out" "an expired token" || return 1
+  [[ "$out" != *"Given"* ]] || { echo "  header row leaked"; return 1; }
+  [[ "$out" != *"---"* ]]   || { echo "  separator row leaked"; return 1; }
+  local n; n="$(printf '%s\n' "$out" | grep -c .)"
+  assert_eq "2" "$n"
+}
+
+test_task_fr_refs_extracts_unique_sorted() {
+  local out; out="$(wf_vi__task_fr_refs "$COV_FEAT")"
+  assert_eq "FR-2
+FR-5" "$out"
+}
+
+test_build_task_prompt_feature_track() {
+  local out
+  out="$(WF_SPEC_TRACK=feature wf_vi_build_task_prompt sample-spec "$COV_FEAT" "$TMPDIR_T/specs/sample-spec" "abc..HEAD")"
+  assert_contains "$out" "Feature-track task" || return 1
+  assert_contains "$out" "a logged-out user" || return 1
+  assert_contains "$out" "FR Reference Allowlist" || return 1
+  assert_contains "$out" "FR-2" || return 1
+  assert_contains "$out" "Acceptance × Coverage Matrix" || return 1
+  assert_contains "$out" "abc..HEAD" || return 1
+}
+
+test_build_task_prompt_technical_track() {
+  local out
+  out="$(WF_SPEC_TRACK=technical wf_vi_build_task_prompt sample-spec "$COV_TECH" "$TMPDIR_T/specs/sample-spec" "abc..HEAD")"
+  assert_contains "$out" "Technical-track task" || return 1
+  assert_contains "$out" "Extract auth middleware" || return 1
+  [[ "$out" != *"FR Reference Allowlist"* ]] || { echo "  technical track must not emit FR allowlist"; return 1; }
+}
+
+test_task_diff_range_per_task_merge_base() {
+  # per-task (no WF_BRANCH_STRATEGY), fixture has no task_base_sha → merge-base feat/<f> HEAD
+  local out; out="$(wf_vi_task_diff_range sample-spec "$COV_FEAT")"
+  [[ "$out" == *..HEAD ]] || { echo "  exp *..HEAD got:$out"; return 1; }
+}
+
+test_task_diff_range_single_branch_uses_base_sha() {
+  local base; base="$(git rev-parse HEAD~1)"   # the 'base' commit on feat/sample-spec
+  local tf="$TMPDIR_T/sb-task.md"
+  printf -- '---\nid: "030"\ntask_base_sha: "%s"\n---\nbody\n' "$base" > "$tf"
+  local out; out="$(WF_BRANCH_STRATEGY=single-branch wf_vi_task_diff_range sample-spec "$tf")"
+  assert_eq "${base}..HEAD" "$out"
+}
+
+test_task_diff_range_loud_fail_rc5() {
+  # Neither single-branch sha, nor merge-base feat/<f>, nor wf_vi_diff_range resolves → rc 5.
+  local outside; outside="$(mktemp -d)"
+  ( cd "$outside" \
+    && git init -q -b main . 2>/dev/null \
+    && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base ) || { rm -rf "$outside"; return 1; }
+  local rc=0
+  ( WF_TASK_REPO_PATH="$outside" wf_vi_task_diff_range nonexistent-feature "$COV_FEAT" ) >/dev/null 2>&1 || rc=$?
+  rm -rf "$outside"
+  [[ "$rc" == "5" ]]
+}
+
+test_write_task_coverage_report_complete_pass() {
+  local out; out="$(wf_vi_write_task_coverage_report sample-spec "$TMPDIR_T/specs/sample-spec" 010 complete /dev/null)"
+  [[ -f "$out" ]] || return 1
+  assert_contains "$out" "010-coverage.yaml" || return 1
+  local c; c="$(cat "$out")"
+  assert_contains "$c" "gate: coverage" || return 1
+  assert_contains "$c" "status: pass" || return 1
+  assert_contains "$c" "findings: []" || return 1
+}
+
+test_write_task_coverage_report_reopen_findings() {
+  local mx; mx="$(mktemp)"
+  printf '| point | status | evidence |\n|---|---|---|\n| session starts | covered | diff L1 |\n| token re-auth | missing | none |\n| logout flow | partial | half |\n' > "$mx"
+  local out; out="$(wf_vi_write_task_coverage_report sample-spec "$TMPDIR_T/specs/sample-spec" 010 reopen "$mx")"
+  local c; c="$(cat "$out")"
+  rm -f "$mx"
+  assert_contains "$c" "status: findings" || return 1
+  assert_contains "$c" "severity: high" || return 1     # missing row
+  assert_contains "$c" "severity: medium" || return 1   # partial row
+  assert_contains "$c" "source: llm" || return 1
+  assert_contains "$c" "token re-auth" || return 1
+  assert_contains "$c" "logout flow" || return 1
+  [[ "$c" != *"session starts"* ]] || { echo "  covered row must not become a finding"; return 1; }
+}
+
+test_emit_coverage_helpers_in_allowlist() {
+  wf_vi_emit_coverage_start sample-spec 010
+  wf_vi_emit_coverage_done  sample-spec 010 reopen "/tmp/r.yaml"
+  local jsonl="$TMPDIR_T/specs/sample-spec/.monitor.jsonl"
+  [[ -f "$jsonl" ]] || return 1
+  grep -q '"category":"coverage_audit_start"' "$jsonl" || return 1
+  grep -q '"category":"coverage_audit_done"'  "$jsonl" || return 1
+}
+
 echo "=== test-validate-impl.sh ==="
 run_test "parse_frs extracts FR-1..FR-3"                  test_parse_frs_extracts_three_ids
 run_test "build_prompt contains FRs / scope / tasks / FR matrix instructions" test_build_prompt_contains_all_inputs
@@ -137,6 +239,16 @@ run_test "emit_start then emit_done appended in order"    test_emit_start_and_do
 run_test "set_spec_shipped flips frontmatter status"      test_set_spec_shipped_flips_status
 run_test "emit_complete + emit_reopen pass allowlist"     test_emit_complete_and_reopen_in_allowlist
 run_test "diff_range fails loud (rc 5) on missing feat branch" test_diff_range_fails_loud_when_no_branch
+run_test "task_acceptance_rows skips header + separator"  test_task_acceptance_rows_skips_header_and_separator
+run_test "task_fr_refs extracts unique sorted FR ids"     test_task_fr_refs_extracts_unique_sorted
+run_test "build_task_prompt feature track: rows + FR allowlist" test_build_task_prompt_feature_track
+run_test "build_task_prompt technical track: no FR allowlist"   test_build_task_prompt_technical_track
+run_test "task_diff_range per-task → merge-base ..HEAD"   test_task_diff_range_per_task_merge_base
+run_test "task_diff_range single-branch → base_sha..HEAD" test_task_diff_range_single_branch_uses_base_sha
+run_test "task_diff_range loud-fails (rc 5) when unresolvable"  test_task_diff_range_loud_fail_rc5
+run_test "write_task_coverage_report complete → pass"     test_write_task_coverage_report_complete_pass
+run_test "write_task_coverage_report reopen → high/medium llm findings" test_write_task_coverage_report_reopen_findings
+run_test "emit_coverage_start/done pass category allowlist" test_emit_coverage_helpers_in_allowlist
 
 echo "=== $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

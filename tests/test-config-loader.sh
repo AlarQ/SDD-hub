@@ -13,7 +13,11 @@ FIXTURES="$REPO_ROOT/tests/fixtures/config"
 PASS=0; FAIL=0; TEST_TMPDIR=""
 
 setup() {
-  TEST_TMPDIR="$(mktemp -d)"
+  # Canonicalize: on macOS mktemp returns /var/folders/... where /var is a
+  # symlink to /private/var. realpath_safe's symlink-ancestor guard would reject
+  # any path under it. Real KB paths live under $HOME and never hit this, so the
+  # /var symlink is a test-only artifact — resolve it up front.
+  TEST_TMPDIR="$(realpath -- "$(mktemp -d)")"
   # Unset WF_* so each test starts clean.
   while IFS= read -r v; do unset "$v"; done < <(compgen -v | grep '^WF_' || true)
 }
@@ -60,7 +64,7 @@ mk_repo() {
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
 agent_pool: agent_pool
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $repo/gkb
 validate_scope: per-task
 $GATE_POOL_INLINE
 EOF
@@ -204,7 +208,7 @@ test_loader_gates_duplicate_id_exit_3() {
   # Inline duplicate gate_pool ids in .workflow.yml → exit 3.
   cat > "$repo/.workflow.yml" <<EOF
 spec_storage: specs/
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $repo/gkb
 gate_pool:
   - id: rust-clippy
     command: "cargo clippy -- -D warnings"
@@ -254,7 +258,7 @@ test_loader_self_hosting_exception_allows_vault_gate_pool() {
   cat > "$vault/.workflow.yml" <<EOF
 spec_storage_mode: vault
 spec_storage: specs
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $vault/gkb
 $GATE_POOL_INLINE
 EOF
   cat > "$vault/specs/demo/config.yml" <<EOF
@@ -281,7 +285,7 @@ test_loader_vault_gate_pool_no_self_ref_fails() {
   cat > "$vault/.workflow.yml" <<EOF
 spec_storage_mode: vault
 spec_storage: specs
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $vault/gkb
 $GATE_POOL_INLINE
 EOF
   cat > "$vault/specs/demo/config.yml" <<EOF
@@ -425,7 +429,7 @@ mk_vault() {
   cat > "$vault/.workflow.yml" <<EOF
 spec_storage_mode: vault
 spec_storage: $storage
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $vault/gkb
 validate_scope: per-task
 EOF
 
@@ -516,7 +520,7 @@ test_vault_project_token_unresolved_fails_4() {
   cat > "$vault/.workflow.yml" <<EOF
 spec_storage_mode: vault
 spec_storage: projects/{project}/specs
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $vault/gkb
 EOF
   local rc=0
   ( cd "$vault" && source "$LOADER" && wf_load_config ) >/dev/null 2>&1 || rc=$?
@@ -566,7 +570,7 @@ test_vault_repos_empty_fails_4() {
   cat > "$vault/.workflow.yml" <<EOF
 spec_storage_mode: vault
 spec_storage: specs
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $vault/gkb
 EOF
   cat > "$vault/specs/demo/config.yml" <<EOF
 tier: small
@@ -584,7 +588,7 @@ test_vault_repo_path_invalid_fails_7() {
   cat > "$vault/.workflow.yml" <<EOF
 spec_storage_mode: vault
 spec_storage: specs
-general_kb_path: /Users/ernestbednarczyk/Desktop/projects/master-brain/projects/dev-workflow/dev-workflow-repo/tests/fixtures
+general_kb_path: $vault/gkb
 EOF
   cat > "$vault/specs/demo/config.yml" <<EOF
 tier: small
@@ -690,6 +694,46 @@ test_loader_snapshot_includes_branch_strategy_drift_detected() {
   [[ "$rc" != "0" ]]
 }
 
+test_loader_coverage_audit_defaults_true() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: small\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_COVERAGE_AUDIT" == "true" ]] )
+}
+
+test_loader_coverage_audit_false_exported() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\ncoverage_audit: false\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_COVERAGE_AUDIT" == "false" ]] )
+}
+
+test_loader_coverage_audit_invalid_exit_4_no_partial() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: small\ncoverage_audit: bogus\n' > "$repo/specs/demo/config.yml"
+  local rc=0 err="$TEST_TMPDIR/err"
+  ( cd "$repo" && source "$LOADER"
+    WF_COVERAGE_AUDIT="stale-value"
+    wf_load_config --spec demo; rc=$?
+    echo "VAR=${WF_COVERAGE_AUDIT:-UNSET}"
+    exit $rc ) >"$TEST_TMPDIR/out" 2>"$err" || rc=$?
+  [[ "$rc" == "4" ]] || return 1
+  grep -q "coverage_audit invalid" "$err" || return 1
+  grep -q "^VAR=UNSET$" "$TEST_TMPDIR/out"
+}
+
+test_loader_coverage_audit_export_emits_line() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\ncoverage_audit: false\n' > "$repo/specs/demo/config.yml"
+  local out
+  out="$(cd "$repo" && "$LOADER" export --spec demo 2>/dev/null)"
+  echo "$out" | grep -qE "^WF_COVERAGE_AUDIT='?false'?$"
+}
+
 echo "=== test-config-loader.sh ==="
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
@@ -736,6 +780,10 @@ run_test "branch_strategy: single-branch exported"      test_loader_branch_strat
 run_test "branch_strategy invalid exits 4, no partial"  test_loader_branch_strategy_invalid_exit_4_no_partial
 run_test "branch_strategy export emits WF_ line"        test_loader_branch_strategy_export_emits_line
 run_test "snapshot includes branch_strategy; drift caught" test_loader_snapshot_includes_branch_strategy_drift_detected
+run_test "coverage_audit absent defaults to true"        test_loader_coverage_audit_defaults_true
+run_test "coverage_audit: false exported"                test_loader_coverage_audit_false_exported
+run_test "coverage_audit invalid exits 4, no partial"    test_loader_coverage_audit_invalid_exit_4_no_partial
+run_test "coverage_audit export emits WF_ line"          test_loader_coverage_audit_export_emits_line
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

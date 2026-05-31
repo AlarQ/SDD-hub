@@ -9,6 +9,7 @@ _WF_VALID_CATEGORIES=(
   config_inferred config_approved agent_spawn gate_skip gate_pool_dirty
   spec_audit_start spec_audit_done spec_complete spec_reopened spec_last_task_done
   spec_reaudit_requested
+  coverage_audit_start coverage_audit_done
   tier_inferred tier_approved tier_breach tier_promoted validate_impl_skipped
   fix_started fix_root_cause fix_shipped
   tdd_red tdd_green
