@@ -158,7 +158,11 @@ wf_vi_run_union_gates() {
     [[ -z "$id" ]] && continue
     cmd="$(wf_gc_gate_field "$pool" "$id" command)"
     blocking="$(wf_gc_gate_field "$pool" "$id" blocking)"
-    [[ "$blocking" == "null" || -z "$blocking" ]] && blocking="true"
+    # Fail closed: `blocking` must be exactly the JSON boolean true/false.
+    # null/empty OR any non-bool literal (typo, "yes", "True", …) → "true",
+    # so a typo can never silently disable the hard-block and the value is
+    # always a valid JSON boolean when interpolated into the verdict below.
+    [[ "$blocking" == "false" ]] || blocking="true"
     {
       printf -- '----- gate: %s (blocking=%s) -----\n' "$id" "$blocking"
       printf 'CMD: %s\n' "$cmd"

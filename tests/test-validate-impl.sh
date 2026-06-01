@@ -229,6 +229,55 @@ test_emit_coverage_helpers_in_allowlist() {
   grep -q '"category":"coverage_audit_done"'  "$jsonl" || return 1
 }
 
+# ===========================================================================
+# wf_vi_run_union_gates — `blocking:` normalization (fail-closed hard-block).
+# A pool gate may declare a non-boolean `blocking:` value (typo, `yes`, `maybe`,
+# `True`). Such values MUST fail closed → treated as blocking=true, so a gate
+# FAILURE forces verdict "reopen" AND the emitted JSON stays a valid boolean.
+# ===========================================================================
+
+# Builds a one-gate pool with the given `blocking:` literal, a `shell`-scoped
+# failing gate command, and runs wf_vi_run_union_gates over sample-spec (whose
+# tasks carry languages/shell ground_rules, so the union picks the gate up).
+# Echoes the verdict JSON line on stdout.
+_run_union_with_blocking() {
+  local blocking_literal="$1"
+  local pool="$TMPDIR_T/typo-pool.yml"
+  printf 'gate_pool:\n  - id: typo-gate\n    command: "exit 1"\n    applies_to: [shell]\n    category: lint\n    blocking: %s\n' \
+    "$blocking_literal" > "$pool"
+  WF_TASK_GATE_POOL="$pool" WF_SPEC_GATES="typo-gate" \
+    wf_vi_run_union_gates sample-spec "$TMPDIR_T/specs/sample-spec" "$TMPDIR_T/gate.log"
+}
+
+# BUG 1: non-bool blocking must fail closed → a failing gate forces "reopen".
+test_run_union_nonbool_blocking_fails_closed() {
+  local out; out="$(_run_union_with_blocking maybe)"
+  local verdict; verdict="$(printf '%s' "$out" | jq -r .verdict)"
+  assert_eq "reopen" "$verdict"
+}
+
+# BUG 2: emitted verdict line is always valid JSON; .blocking is a real boolean
+# even when the pool declared a non-bool literal.
+test_run_union_nonbool_blocking_emits_valid_json_boolean() {
+  local out; out="$(_run_union_with_blocking yes)"
+  # whole line must parse
+  printf '%s' "$out" | jq -e . >/dev/null || { echo "  invalid JSON: $out"; return 1; }
+  local btype; btype="$(printf '%s' "$out" | jq -r '.gate_failures[0].blocking | type')"
+  assert_eq "boolean" "$btype"
+  local bval; bval="$(printf '%s' "$out" | jq -r '.gate_failures[0].blocking')"
+  assert_eq "true" "$bval"
+}
+
+# Legitimate blocking:false must be preserved (not over-corrected to true):
+# a failing non-blocking gate records blocking=false and does NOT force reopen.
+test_run_union_explicit_false_preserved() {
+  local out; out="$(_run_union_with_blocking false)"
+  local verdict; verdict="$(printf '%s' "$out" | jq -r .verdict)"
+  assert_eq "" "$verdict"
+  local bval; bval="$(printf '%s' "$out" | jq -r '.gate_failures[0].blocking')"
+  assert_eq "false" "$bval"
+}
+
 echo "=== test-validate-impl.sh ==="
 run_test "parse_frs extracts FR-1..FR-3"                  test_parse_frs_extracts_three_ids
 run_test "build_prompt contains FRs / scope / tasks / FR matrix instructions" test_build_prompt_contains_all_inputs
@@ -249,6 +298,9 @@ run_test "task_diff_range loud-fails (rc 5) when unresolvable"  test_task_diff_r
 run_test "write_task_coverage_report complete → pass"     test_write_task_coverage_report_complete_pass
 run_test "write_task_coverage_report reopen → high/medium llm findings" test_write_task_coverage_report_reopen_findings
 run_test "emit_coverage_start/done pass category allowlist" test_emit_coverage_helpers_in_allowlist
+run_test "run_union: non-bool blocking fails closed → reopen"   test_run_union_nonbool_blocking_fails_closed
+run_test "run_union: non-bool blocking emits valid JSON boolean" test_run_union_nonbool_blocking_emits_valid_json_boolean
+run_test "run_union: explicit blocking:false preserved"          test_run_union_explicit_false_preserved
 
 echo "=== $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

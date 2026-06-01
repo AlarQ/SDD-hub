@@ -232,12 +232,21 @@ update_frontmatter() {
   body=$(tail -n +"$((second_delim + 1))" "$file")
   local updated_frontmatter
   updated_frontmatter=$(echo "$frontmatter" | _wf_yq eval "$expression" -)
+  # Guard against an empty result (e.g. expression resolves to null): refuse to
+  # write rather than silently wiping the frontmatter. Original file untouched.
+  [ -z "$updated_frontmatter" ] && die "Refusing to write empty frontmatter to $file (expression: $expression)"
+  # Atomic write: build the new file in the same directory, then mv into place
+  # so the original is never truncated on interruption / disk-full.
+  local tmp
+  tmp=$(mktemp "${file}.XXXXXX")
   {
     echo "---"
     echo "$updated_frontmatter"
     echo "---"
-    [ -n "$body" ] && printf '%s\n' "$body"
-  } > "$file"
+    # `if` (not `&&`) so an empty body does not make the group exit non-zero.
+    if [ -n "$body" ]; then printf '%s\n' "$body"; fi
+  } > "$tmp" || { rm -f "$tmp"; die "Failed to write updated frontmatter for $file"; }
+  mv -f "$tmp" "$file" || { rm -f "$tmp"; die "Failed to move updated frontmatter into $file"; }
 }
 
 # Resolve the spec dir for a task file (parent of tasks/) and return its repo

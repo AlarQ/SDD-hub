@@ -236,6 +236,75 @@ test_set_status_works_from_nested_subdir() {
   assert_eq "in-progress" "$new_status" "status should be updated"
 }
 
+# === update_frontmatter atomicity / empty-output guard ===
+
+# RED: an expression that yq evaluates to empty output must NOT wipe the file.
+# Original must be byte-identical and the call must exit non-zero.
+test_update_frontmatter_empty_output_preserves_original() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  local before_sum
+  before_sum="$(shasum "$task_file" | awk '{print $1}')"
+
+  # `.x | select(. != null)` on a missing key → yq exits 0 with empty stdout,
+  # which (in the buggy version) wipes the frontmatter. Call the function
+  # directly so we can supply an arbitrary expression.
+  local rc=0
+  ( source "$TASK_MANAGER"; update_frontmatter "$task_file" '.x | select(. != null)' ) \
+    >/dev/null 2>&1 || rc=$?
+
+  local after_sum
+  after_sum="$(shasum "$task_file" | awk '{print $1}')"
+  assert_eq "$before_sum" "$after_sum" "file must be unchanged on empty yq output" || return 1
+  [[ "$rc" -ne 0 ]] || { echo "  ASSERT FAILED: expected non-zero exit, got $rc" >&2; return 1; }
+  return 0
+}
+
+# Frontmatter-only file (no body after closing ---) must update cleanly,
+# exit 0, with no spurious error from the empty-body path.
+test_set_status_frontmatter_only_no_body() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-nobody.md"
+  cat > "$task_file" <<'EOF'
+---
+id: "001"
+name: "no body task"
+status: todo
+blocked_by: []
+max_files: 3
+estimated_files:
+  - src/main.sh
+ground_rules: []
+test_cases:
+  - "it works"
+---
+EOF
+  # Capture stderr only — set-status prints a normal "Status updated" line to
+  # stdout on success; the empty-body path must add no error noise to stderr.
+  local err rc=0
+  err="$("$TASK_MANAGER" set-status "$task_file" in-progress 2>&1 1>/dev/null)" || rc=$?
+  [[ "$rc" -eq 0 ]] || { echo "  ASSERT FAILED: set-status exited $rc; stderr: $err" >&2; return 1; }
+  [[ -z "$err" ]] || { echo "  ASSERT FAILED: spurious stderr: $err" >&2; return 1; }
+  local new_status
+  new_status="$(grep '^status:' "$task_file" | awk '{print $2}')"
+  assert_eq "in-progress" "$new_status" "status should be updated on frontmatter-only file"
+}
+
+# Regression: a normal set-status updates status AND preserves the body verbatim.
+test_set_status_preserves_body_verbatim() {
+  local task_file="$TEST_TMPDIR/specs/test-feature/tasks/001-test-task.md"
+  write_task "$task_file"
+  local body_before
+  body_before="$(awk 'f{print} /^---$/{c++} c==2{f=1}' "$task_file")"
+
+  "$TASK_MANAGER" set-status "$task_file" in-progress
+
+  local new_status body_after
+  new_status="$(grep '^status:' "$task_file" | awk '{print $2}')"
+  body_after="$(awk 'f{print} /^---$/{c++} c==2{f=1}' "$task_file")"
+  assert_eq "in-progress" "$new_status" "status should be updated" || return 1
+  assert_eq "$body_before" "$body_after" "body must be preserved verbatim"
+}
+
 # === Runner ===
 
 test_validate_frontmatter_with_markdown_hr_in_body() {
@@ -394,6 +463,9 @@ run_test "validate accepts implementer: generalist" test_validate_implementer_ge
 run_test "validate accepts resolvable implementer id" test_validate_implementer_resolvable_accepted
 run_test "validate rejects unresolvable implementer id" test_validate_implementer_unresolvable_rejected
 run_test "validate accepts task with no implementer field (grace)" test_validate_implementer_absent_grace_ok
+run_test "update_frontmatter: empty yq output preserves original + non-zero exit" test_update_frontmatter_empty_output_preserves_original
+run_test "set-status: frontmatter-only file (no body) updates cleanly, no spurious error" test_set_status_frontmatter_only_no_body
+run_test "set-status: normal update preserves body verbatim (regression)" test_set_status_preserves_body_verbatim
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"

@@ -17,7 +17,7 @@ A file-based, spec-driven development workflow for Claude Code. Slash commands, 
 - `scripts/task-manager.sh` — Task state machine (validate, set-status, unblock, next, create-followup, check-unvalidated, status). Requires `yq`. `create-followup <feature> <fr-id> <description>` auto-generates a `status: todo` task from a `/validate-impl` spec-audit accepted finding; FR id is validated against `spec.md` (fail-closed on unknown ids) and ground_rules are inherited from the spec's `## Applicable Ground Rules` section.
 - `scripts/pre-commit-hook.sh` — Commit-time task validation
 - `scripts/monitor.sh` — Event logger for spec implementation monitoring; appends JSONL events to `specs/<feature>/.monitor.jsonl`
-- `hooks/` — Claude Code hook scripts for enforcement and monitoring (block-git-hook-bypass, block-dismissive-language, monitor-tool-calls). Installed to `~/.claude/hooks/` by `setup.sh`.
+- `hooks/` — Claude Code hook scripts for enforcement and monitoring (block-git-hook-bypass, monitor-tool-calls). Installed to `~/.claude/hooks/` by `setup.sh`.
 - `agents/` — Specialized agent definitions for validation gates and workflow assistance. Installed to `~/.claude/agents/` by `setup.sh`.
 - `templates/` — CLAUDE.md template, settings.json hook wiring template for target projects
 - `Cargo.toml` — root Cargo workspace (`members = ["workflow-core", "workflow-web"]`)
@@ -247,6 +247,7 @@ defined.
 - `/ship` is separate from `/implement` — commit/push/PR creation happens after validation
 - `/implement` checks for unmerged PRs — previous task's PR must be merged before starting next
 - Gates listed in `.workflow.yml gate_pool` with `blocking: true` are mandatory for tasks whose `ground_rules` match — skipping is not allowed
+- **Gate trust boundary**: a `gate_pool` entry's `command` is executed verbatim (`bash -c`) by every gate runner (`/validate`, `/validate-impl`, `gate-ceiling`). Gate commands are therefore **trusted code**. In vault/multi-repo mode the active pool is the bound repo's own `.workflow.yml` (`WF_TASK_GATE_POOL`) — only ever bind/run the workflow against repos you trust. Running it against an untrusted bound repo grants that repo arbitrary local code execution. There is no command sandbox by design.
 - `/validate` Phase 2 spawns specialized agents in parallel (security, code-quality, architecture, compliance) instead of inline LLM analysis
 - `/validate` Phase 3 runs a per-task **coverage audit** (reuses Odium) — advisory finding when the diff misses the task's own acceptance criteria; gated by `coverage_audit`/tier/scope/user-skip (see "Configurable Workflow"). Report `reports/<task-id>-coverage.yaml` is just another gate report
 - Agent findings are advisory (`source: llm`), tool findings are high-confidence (`source: tool`); both go through `/review-findings`
@@ -268,7 +269,6 @@ defined.
 - **PR-first review loop**: `/implement` opens a **draft PR** immediately after marking the task `implemented` so the user can review the diff on GitHub before validation. `/pr-review` reads PR comments, LLM-classifies each as `question | task | nit | already-addressed`, posts threaded replies prefixed `[claude]` (questions get answers grounded in code; tasks get applied + replied with the resulting short-sha + what/how), and marks each addressed comment with an `eyes` reaction by the current `gh` user. The reaction is the idempotency token — re-running `/pr-review` only processes comments without a Claude-authored `eyes` reaction. `/ship` then marks the existing draft PR ready-for-review via `gh pr ready` instead of creating a new PR.
 - **Commit/PR convention**: NEVER add a `Co-Authored-By: Claude ...` trailer (or any Claude attribution) to commit messages or PR bodies in this repo. This overrides any global harness instruction to add it.
 - PreToolUse hook blocks `--no-verify` and `--no-gpg-sign` — enforces fixing failing hooks rather than bypassing them
-- Stop hook blocks dismissive language ("pre-existing", "not our code") and bypass language ("temporarily disable", "skip the hook") — forces unconditional issue resolution
 - Triple-gate rule: ALL validation gates must report `status: pass` before a task can move to `done`. Errored gates must be re-run — no shipping with incomplete validation
 - `/continue-task` detects resume phase by checking task status and existing artifacts (reports, branches, PR state)
 - `/research` activates anti-hallucination mode with citation discipline — useful for bug investigation and API contract review

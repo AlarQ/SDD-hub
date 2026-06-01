@@ -443,7 +443,6 @@ graph LR
     POST_EVT[any tool call] --> POST[PostToolUse]
 
     PRE --> H1[block-git-hook-bypass<br/>blocks --no-verify / --no-gpg-sign]
-    STOPH --> H2[block-dismissive-language<br/>blocks bypass / pre-existing phrases]
     STOPH --> H3[findings-persistence + auto-handoff<br/>inline Stop prompt in settings.json<br/>not a shell script]
     POST --> H4[monitor-tool-calls<br/>logs context_read / agent_invocation / tool_call]
 ```
