@@ -734,7 +734,45 @@ test_loader_coverage_audit_export_emits_line() {
   echo "$out" | grep -qE "^WF_COVERAGE_AUDIT='?false'?$"
 }
 
+test_loader_tier_ceiling_zero_preserved() {
+  require_yq || return 0
+  # Explicit tier_ceiling.tasks: 0 must survive — the falsy-default trap in
+  # wf__json_get used to collapse it to the .tiers.<tier> fallback (empty here).
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\ntier_ceiling:\n  tasks: 0\n  files: 0\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_TIER_TASK_CEILING" == "0" ]] \
+      && [[ "$WF_TIER_FILE_CEILING" == "0" ]] )
+}
+
+test_loader_has_dotdot_segment_accurate() {
+  # F6: segment-accurate guard rejects real `..` traversal but not names that
+  # merely contain a `..` substring (e.g. foo..bar).
+  ( source "$LOADER"
+    wf__has_dotdot "a/../b"     && \
+    wf__has_dotdot ".."         && \
+    ! wf__has_dotdot "foo..bar" && \
+    ! wf__has_dotdot "a/foo..bar/c" )
+}
+
+test_loader_repos_missing_name_fails_closed() {
+  require_yq || return 0
+  # A repos[] entry with no `name` must fail-closed (exit 4). Regression guard:
+  # the batched @tsv read must emit an EMPTY field (via `// ""`), not the literal
+  # string "null" — otherwise the entry would slip past the [[ -n ]] / name-regex
+  # check and silently bind a repo literally named "null".
+  local repo; repo="$(mk_repo)"
+  printf 'tier: small\nrepos:\n  - path: %s\n' "$repo" > "$repo/specs/demo/config.yml"
+  local rc=0
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo ) 2>"$TEST_TMPDIR/err"; rc=$?
+  [[ "$rc" == "4" ]] || return 1
+  grep -q "repos\[0\].name missing" "$TEST_TMPDIR/err"
+}
+
 echo "=== test-config-loader.sh ==="
+run_test "tier_ceiling.tasks: 0 preserved (not collapsed to default)" test_loader_tier_ceiling_zero_preserved
+run_test "wf__has_dotdot is segment-accurate (foo..bar allowed)" test_loader_has_dotdot_segment_accurate
+run_test "repos[] entry missing name fails closed exit 4 (no 'null' bind)" test_loader_repos_missing_name_fails_closed
 run_test "loader exports WF_SPEC_STORAGE from valid .workflow.yml" test_loader_exports_wf_spec_storage
 run_test "missing .workflow.yml fails closed exit 2 naming /bootstrap" test_loader_missing_workflow_fails_exit_2
 run_test "malformed inline gate_pool fails closed exit 2" test_loader_malformed_gate_pool_exit_2
