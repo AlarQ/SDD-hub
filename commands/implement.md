@@ -184,7 +184,7 @@ Then jump to the `single-branch` final instruction below. Review is deferred to 
 4. Save the returned PR URL to the task file frontmatter via `~/.claude/scripts/task-manager.sh set-pr-url <task-file> <url>`. Then persist the task-file change (single-repo: commit in repo root and push; vault mode: commit in vault repo if it's a git repo, else warn — same persistence pattern as `/ship` step 10).
 5. Emit monitor event: `~/.claude/scripts/monitor.sh log_event $ARGUMENTS pr_opened_draft <task-id> '{"pr_url":"<url>"}'`.
 
-If PR creation fails (e.g. `gh auth` missing, no remote), report the failure and instruct the user to create the PR manually, then re-run nothing — `/pr-review` will pick up `pr_url` from frontmatter.
+If PR creation fails (e.g. `gh auth` missing, no remote), report the failure and instruct the user to create the PR manually — `/pr-review` resolves the PR from the current branch once one exists.
 
 IMPORTANT:
 - Do NOT start the next task automatically — serial execution, one task in flight at a time.

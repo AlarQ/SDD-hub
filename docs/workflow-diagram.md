@@ -395,11 +395,17 @@ graph LR
 
 ### 5e. `/pr-review` — PR comment handling
 
+Self-contained: no config load, no agents, no multi-repo. Resolves the current
+branch's PR (or a PR-number arg), classifies each comment `informational | change`,
+and walks a per-comment confirm loop posting `[claude]` replies.
+
 ```mermaid
 graph LR
-    PRR["/pr-review"] --> CFG0{Step 0: load config.yml}
-    CFG0 -->|missing → exit 4| STOP_PRR[stop]
-    CFG0 -->|loaded| CR[engineering-code-reviewer]
+    PRR["/pr-review"] --> RESOLVE{resolve PR<br/>current branch or arg}
+    RESOLVE -->|no open PR| STOP_PRR[stop: No PR found]
+    RESOLVE -->|OPEN| FETCH[fetch + filter comments]
+    FETCH --> CLS[classify informational/change]
+    CLS --> LOOP[per-comment confirm + address]
 ```
 
 ### 5f. `/validate-impl` — implementation-completion audit

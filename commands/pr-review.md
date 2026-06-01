@@ -1,161 +1,95 @@
-Fetch and respond to PR review comments, with agent-powered code review analysis.
+Read the current PR's review comments and address them.
 
-Feature name: $ARGUMENTS
+Optional argument: a PR number to target. If omitted, the PR is resolved from the current git branch.
 
-**Note:** `/pr-review` runs against the **draft PR** opened by `/implement` (pre-validation human review loop) or against a ready PR opened by `/ship`. In both cases, task status is unchanged — comment resolution happens entirely on the PR. The loop is idempotent: comments already addressed (marked with a Claude-authored `eyes` reaction on the original comment) are skipped on re-runs.
+PR number (optional): $ARGUMENTS
 
-## Prerequisites
-1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
-1a. **Branch-strategy short-circuit (run before any branch-name parsing).** Quick-load `WF_BRANCH_STRATEGY`:
-   ```bash
-   bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "%s\n" "${WF_BRANCH_STRATEGY:-per-task}"'
-   ```
-   If `single-branch` **and** the current branch is exactly `feat/$ARGUMENTS` (no sub-path) **and** there is no `OPEN` PR with head `feat/$ARGUMENTS` → base `main`: refuse cleanly and **stop before Prerequisite 2** — do not run the task-branch regex. Print: "No PR until the final `/ship` under single-branch strategy — review is deferred. Run `/validate $ARGUMENTS` / `/implement $ARGUMENTS`." If `single-branch` and the spec PR exists, skip the task-branch regex in Prerequisite 2 and resolve the PR via `(cd "$WF_TASK_REPO_PATH" && gh pr view --json number,state,isDraft)` from `feat/$ARGUMENTS`. If `per-task`, continue to Prerequisite 2 normally.
-2. Identify the task (`per-task`, or `single-branch` with an existing spec PR): extract task ID from the current branch name (`feat/$ARGUMENTS/{task-id}-{task-name}`) and read the matching task file from `specs/$ARGUMENTS/tasks/`
-   - If not on a task branch, check if `$ARGUMENTS` was provided and look for `done` tasks with a `pr_url` — use the most recently shipped one
-   - If no task can be identified, refuse and say: "Cannot determine which task this PR belongs to. Run from a task branch or provide the feature name."
-3. Read the task's `ground_rules`, resolving prefixes per `$WF_GENERAL_KB/_rules.md`
+This command reads a PR's comments, sorts each into **informational** (asking for an explanation/answer) or **change** (requesting a code change), and addresses each accordingly — posting a `[claude]` reply on every comment it handles. Task status is unchanged; everything happens on the PR.
 
-## Step 0 — Load Spec Config
+## 1. Resolve the PR
 
-Load the spec config before spawning any agent (substitute actual feature name for `$ARGUMENTS`):
-
-```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_PR_REVIEW=%s\nWF_BRANCH_STRATEGY=%s\n" "${WF_SPEC_AGENTS_PR_REVIEW:-}" "${WF_BRANCH_STRATEGY:-per-task}"'
-```
-
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_PR_REVIEW`, `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`; absent → `per-task`).
-
-**`single-branch` gate** — there is no per-task PR; review is deferred to the spec-level PR opened at the final `/ship`:
-- If no spec PR exists yet (no `OPEN` PR for `feat/$ARGUMENTS` → `main`): refuse cleanly, **do not crash the task-branch regex** — print: "No PR until the final `/ship` under single-branch strategy — review is deferred. Run `/validate $ARGUMENTS` / `/implement $ARGUMENTS`." Stop.
-- If the spec PR exists: resolve it via `(cd "$WF_TASK_REPO_PATH" && gh pr view --json number,state,isDraft)` from `feat/$ARGUMENTS` (the branch is the PR head — **do not** parse a task-branch name). Then proceed with Phases 1–2 against that PR.
-
-If `WF_SPEC_AGENTS_PR_REVIEW` is non-empty, spawn those agent IDs instead of the default `engineering-code-reviewer`. Resolve each ID per the Agent ID grammar in `design.md §Backend Design §Agent ID grammar`. Unknown ID → stop with error.
-
-### Multi-repo resolution
-
-After Step 0, resolve the task's bound repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH`. Code Reviewer (and any agent in `WF_SPEC_AGENTS_PR_REVIEW`) receives `WF_TASK_REPO_PATH` plus the diff scoped to that repo (`git -C "$WF_TASK_REPO_PATH" diff <base>...HEAD`). All `gh pr` calls run from inside `WF_TASK_REPO_PATH` so they target the right remote.
-
-If the task identification step fell back to "most recent shipped task", read its `repo:` field from the task file before proceeding.
-
-## Phase 1: Agent-Powered Code Review
-
-Spawn the agent(s) from `WF_SPEC_AGENTS_PR_REVIEW` (if non-empty) or fall back to the default `Code Reviewer` agent (`engineering-code-reviewer`) when the list is empty. The agent(s) receive:
-- The full PR diff (`git diff <base-branch>...HEAD`)
-- The task file (scope, acceptance criteria, ground rules)
-- All `ground_rules` files referenced in the task (per `knowledge-base-rules.md`)
-- The project's `CLAUDE.md`
-
-### Agent Output Contract
-The agent must return findings using the structured output schema defined in the `Code Reviewer` agent definition (`📤 PR Review Output` section). All findings use `source: llm`.
-
-If the agent errors or times out, report the failure to the user and proceed directly to Phase 2 (human PR comments).
-
-### Presenting Agent Findings
-1. Group findings by priority: blockers first, then suggestions, then nits
-2. For each finding: print the finding details as plain output, then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — "Accept this fix?" options: `Accept`, `Reject`. One tool call per finding. Do NOT render accept/reject as a markdown question.
-3. On accept: apply fix, stage the change
-4. On reject: follow up with one `AskUserQuestion` call carrying two questions — (a) free-text "Reason?" and (b) "Promote to general KB rule?" `Yes`/`No`. Write to `$WF_GENERAL_KB/` only if Yes.
-5. After all agent findings are resolved, commit accepted fixes (if any) with message referencing the agent review
-
-## Phase 2: Human PR Comments — Classify & Address Loop
-
-This phase reads PR comments, classifies each (`question | task | nit | already-addressed`), executes them, and posts threaded `[claude]` replies on the original comment thread. Addressed comments are marked with an `eyes` reaction (by the current `gh` user) so re-running `/pr-review` only picks up new comments.
-
-### 1. Resolve the PR
-
-- Get PR number: `gh pr view --json number,state,isDraft` from the task branch.
-- If not on a task branch, fall back to the task's `pr_url` frontmatter (per Prerequisites step 2).
-- Fail-fast checks (each fatal, with explicit message):
-  - `gh auth status` — if not authenticated, exit with "Run `gh auth login` first."
+- First, fail-fast on auth: run `gh auth status`; if not authenticated, exit with "Run `gh auth login` first."
+- If `$ARGUMENTS` is a PR number, use it. Otherwise resolve from the current branch:
+  ```bash
+  gh pr view --json number,state,isDraft,headRepository
+  ```
+- `OWNER_REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)`
+- `ME=$(gh api user --jq .login)`
+- Remaining fail-fast checks (each fatal, with explicit message):
+  - No PR for the current branch → exit with "No PR found for this branch. Pass a PR number or open a PR first."
   - PR state not `OPEN` → exit with "PR is <state>. Nothing to address."
 
-### 2. Fetch comments (review + issue)
+## 2. Fetch comments (review + issue)
 
 ```bash
 PR=<number>
-OWNER_REPO=<owner/repo>  # gh repo view --json nameWithOwner --jq .nameWithOwner
 gh api "repos/$OWNER_REPO/pulls/$PR/comments" > /tmp/pr-review-comments.json
 gh api "repos/$OWNER_REPO/issues/$PR/comments" > /tmp/pr-issue-comments.json
-ME=$(gh api user --jq .login)
 ```
 
-Review comments (`pulls/.../comments`) have `path`, `line`, `in_reply_to_id`. Issue comments (`issues/.../comments`) are PR-wide, no file/line.
+- Review comments (`pulls/.../comments`) have `path`, `line`, `in_reply_to_id` — anchored to a file/line.
+- Issue comments (`issues/.../comments`) are PR-wide, no file/line.
 
-### 3. Filter already-addressed
+## 3. Filter out bot/self input
 
-For each comment, check reactions:
+Skip any comment where:
+- `user.login == $ME` (don't reply to your own threads), or
+- the body starts with `[claude]` (a previous reply from this command).
 
-```bash
-# review comments
-gh api "repos/$OWNER_REPO/pulls/comments/<id>/reactions" --jq '.[] | select(.user.login == env.ME and .content == "eyes")'
-# issue comments
-gh api "repos/$OWNER_REPO/issues/comments/<id>/reactions" --jq '.[] | select(.user.login == env.ME and .content == "eyes")'
-```
+There is no reaction-based dedup — re-running the command re-processes any human comment that is still open; use `Skip` in the loop below for ones you've already handled.
 
-If a matching reaction exists → skip. Also skip comments whose `user.login == $ME` (don't reply to own threads) and comments whose body starts with `[claude]`.
+## 4. Classify each remaining comment (inline)
 
-### 4. LLM-classify remaining comments
+For each comment, label it using the comment body plus the PR diff (`git diff <base>...HEAD`, base = the PR's base branch):
 
-Spawn one classification sub-agent (general-purpose) with:
-- The unaddressed comment list (id, body, file, line, hunk diff context)
-- The task file (scope, ground_rules)
-- The PR diff (`git -C "$WF_TASK_REPO_PATH" diff <base>...HEAD`)
+- **`informational`** — asks a question or requests an explanation; no code change needed.
+- **`change`** — requests a code modification.
 
-Agent output (YAML):
-```yaml
-- id: <comment_id>
-  kind: review | issue        # which API endpoint it came from
-  type: question | task | nit | already-addressed
-  summary: <one-line>
-  proposed_action: <answer text for questions | change description for tasks/nits | commit ref for already-addressed>
-```
+(Old `nit` comments are just small `change`s.)
 
-### 5. User confirmation
+Print a one-line-per-comment classification table (id, kind `review|issue`, type, one-line summary) before the loop.
 
-Print the classification table. Then invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — one tool call per comment with options `Apply as classified`, `Re-classify`, `Skip`. On `Re-classify`, follow up with options `question`, `task`, `nit`, `skip`.
+## 5. Per-comment loop
 
-### 6. Execute per confirmed item
+For each classified comment, invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`) — one tool call per comment with options `Apply`, `Re-classify`, `Skip`. On `Re-classify`, follow up with options `informational`, `change`, `skip`.
 
-Reply endpoint depends on `kind`:
-- `review` comments → threaded reply: `gh api repos/$OWNER_REPO/pulls/$PR/comments -f body="[claude] …" -F in_reply_to=<id>`
-- `issue` comments → top-level reply quoting original: `gh pr comment $PR --body "[claude] re: <short-quote>\n\n<reply body>"`
+Reply and (for changes) commit per the comment's `kind`:
 
-Reaction endpoint also depends on `kind`:
-- `review` → `gh api repos/$OWNER_REPO/pulls/comments/<id>/reactions -f content=eyes`
-- `issue` → `gh api repos/$OWNER_REPO/issues/comments/<id>/reactions -f content=eyes`
+- **`review`** comment → threaded reply:
+  ```bash
+  gh api "repos/$OWNER_REPO/pulls/$PR/comments" -f body="[claude] …" -F in_reply_to=<id>
+  ```
+- **`issue`** comment → top-level reply quoting the original:
+  ```bash
+  gh pr comment $PR --body "[claude] re: <short-quote>
 
-Actions:
+  <reply body>"
+  ```
 
-- **`question`**: compose an answer (LLM, grounded in code). Post threaded reply:
+### Actions
+
+- **`informational`**: compose a direct answer (grounded in the code), post the reply:
   ```
   [claude] <direct answer in 1-3 sentences>.
-  Source: <file:line> | spec section <id> | (none — design choice)
+  Source: <file:line> | (none — design choice)
   ```
-  React `eyes` on original. Emit `pr_comment_answered`.
 
-- **`task`**: apply code change (Edit/Write), stage, commit with message `pr-review: address comment <id>`, push to task branch. Then reply:
+- **`change`**: apply the code change (Edit/Write), then stage **only the files you just edited** for this comment (not `git add -A` — avoid sweeping in unrelated dirty files), commit, and push:
+  ```bash
+  git add <files edited for this comment> && git commit -m "pr-review: address comment <id>"
+  git push   # upstream already exists — the command required an OPEN PR for this branch
+  ```
+  Reply citing the resulting short-sha:
   ```
   [claude] addressed in <short-sha>.
   What: <bullet list of changes>
   How: <one-line technique / approach>
   ```
-  React `eyes`. Emit `pr_comment_task_applied`.
 
-- **`nit`**: same path as `task` (apply + reply with sha) OR defer:
-  ```
-  [claude] nit acknowledged, deferred — <reason>.
-  ```
-  React `eyes`. Emit `pr_comment_task_applied` or `pr_comment_skipped`.
+## 6. Tail
 
-- **`already-addressed`**: reply `[claude] already addressed in <short-sha>` (sha from `git log --oneline -S "<keyword>"` or user-provided). React `eyes`. Emit `pr_comment_skipped`.
-
-Use `~/.claude/scripts/monitor.sh log_event $ARGUMENTS <event> <task-id> '{"comment_id":"<id>","type":"<type>"}'` for each.
-
-### 7. Tail
-
-After loop:
-- If any remaining unaddressed comments (user chose `Skip` without acting) → print: "Some comments deferred. Re-run `/pr-review $ARGUMENTS` after addressing, or run `/validate $ARGUMENTS` to proceed regardless."
-- Else → print: "All comments addressed. Run `/validate $ARGUMENTS` next."
+After the loop:
+- If any comments were `Skip`ped → print: "Some comments deferred. Re-run `/pr-review` after addressing, or run `/validate` to proceed regardless."
+- Else → print: "All comments addressed. Run `/validate` next."
 
 Never auto-invoke the next command.

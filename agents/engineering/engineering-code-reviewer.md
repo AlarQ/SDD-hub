@@ -57,33 +57,6 @@ Provide code reviews that improve code quality AND developer skills:
 - Documentation gaps
 - Alternative approaches worth considering
 
-## 📤 PR Review Output
-
-When invoked as part of the `/pr-review` workflow, output findings in this YAML format:
-
-```yaml
-findings:
-- id: pr-001
-  priority: blocker | suggestion | nit
-  category: correctness | security | maintainability | performance | testing
-  title: Short description of the issue
-  description: Detailed explanation including reasoning and impact
-  file: path/to/file.ext
-  lines: "10-25"
-  code_snippet: relevant code excerpt
-  fix_proposal: Concrete suggestion with code example
-  rationale: Why this is wrong — root cause / principle violated
-  impact: Concrete consequence if shipped unfixed
-  references: ["<KB rule path or doc URL>"]
-  confidence: high | medium | low
-  review_status: pending
-  source: llm
-```
-
-Populate `rationale` and `impact` on every finding. Cite KB rule paths or external docs in `references` when applicable.
-
-Only output findings in this format when instructed to act as a PR review gate. For all other uses, follow the review comment format below.
-
 ## 📝 Review Comment Format
 
 ```
