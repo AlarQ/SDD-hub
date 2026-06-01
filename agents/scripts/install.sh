@@ -269,14 +269,27 @@ install_claude_code() {
   local dest="${HOME}/.claude/agents"
   local count=0
   mkdir -p "$dest"
-  local dir f first_line
+  # Track destination basenames already copied THIS run. The flat $dest layout
+  # means two categories with a same-named agent (e.g. design/analyst.md and
+  # engineering/analyst.md) both resolve to $dest/analyst.md; without this guard
+  # the later category silently overwrites the earlier file (data loss) and
+  # over-reports count. bash 3.2 has no associative arrays, so we use a
+  # space-delimited seen-list (each name wrapped in spaces for exact matching).
+  local seen=" "
+  local dir f first_line base
   for dir in design engineering game-development marketing paid-media sales product project-management \
               testing support spatial-computing specialized; do
     [[ -d "$REPO_ROOT/$dir" ]] || continue
     while IFS= read -r -d '' f; do
       first_line="$(head -1 "$f")"
       [[ "$first_line" == "---" ]] || continue
+      base="$(basename "$f")"
+      if [[ "$seen" == *" $base "* ]]; then
+        err "Claude Code: name collision -- '$f' skipped; an agent named '$base' was already installed this run."
+        continue
+      fi
       cp "$f" "$dest/"
+      seen="$seen$base "
       (( count++ )) || true
     done < <(find "$REPO_ROOT/$dir" -name "*.md" -type f -print0)
   done

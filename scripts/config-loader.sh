@@ -2,7 +2,7 @@
 # config-loader.sh — sourced loader for .workflow.yml (inline gate_pool), per-spec config.yml.
 # ADR-006: sourced; ADR-005: walk-up .workflow.yml; fail closed on every error path.
 # Depends only on config-paths.sh (leaf). Sources no other workflow script.
-# shellcheck disable=SC1090,SC1091,SC2088,SC2317,SC2034
+# shellcheck disable=SC1090,SC1091,SC2088,SC2317
 
 if [[ "${WF_CONFIG_LOADED:-0}" == "1" && -z "${WF_RELOAD:-}" ]]; then
   return 0 2>/dev/null || exit 0
@@ -42,6 +42,15 @@ wf__yq_json() {
   wf__timeout 5 yq e -o=json '.' "$1" 2>/dev/null
 }
 
+# wf__has_dotdot <path> — true iff any `/`-separated segment is exactly `..`.
+# Segment-accurate (mirrors realpath_safe) so legit names like `foo..bar` are
+# not false-rejected by a naive `*".."*` substring match.
+wf__has_dotdot() {
+  local IFS=/ s
+  for s in $1; do [[ "$s" == ".." ]] && return 0; done
+  return 1
+}
+
 wf__resolve_path() {
   local raw="$1" root="$2"
   case "$raw" in
@@ -53,15 +62,22 @@ wf__resolve_path() {
 
 wf__json_get() {
   # wf__json_get <json> <yq-path> [default]
+  # Callers always run wf__yq_json first, which gates `yq` loudly — no local
+  # existence check needed here.
   local json="$1" path="$2" def="${3:-}"
-  if ! command -v yq >/dev/null 2>&1; then
-    wf__err "yq not installed (required by config-loader.sh; brew install yq)"
-    return 5
-  fi
   local out
   out="$(printf '%s' "$json" | wf__timeout 5 yq e -r "$path // \"__WF_NULL__\"" - 2>/dev/null)" || return 5
   [[ "$out" == "__WF_NULL__" ]] && out="$def"
   printf '%s' "$out"
+}
+
+# wf__json_get_raw <json> <yq-path>
+# Like wf__json_get but with NO `// "__WF_NULL__"` default — returns the raw
+# literal so falsy values (`false`/`0`/empty) and a missing key (yq prints
+# literal "null") stay distinct. Use when a boolean/numeric field must not be
+# silently coerced to a default by the alternative operator.
+wf__json_get_raw() {
+  printf '%s' "$1" | wf__timeout 5 yq e -r "$2" - 2>/dev/null || return 5
 }
 
 wf_load_config() {
@@ -86,7 +102,7 @@ wf_load_config() {
   wf__resolve_pool_path() {
     # <raw> <repo_root> <field> — prints abs path on stdout; returns non-zero on reject
     local rr="$1" rt="$2" fn="$3" abs
-    if [[ "$rr" == *".."* ]]; then
+    if wf__has_dotdot "$rr"; then
       wf__err "$WF_CONFIG_FILE: $fn has '..' segment: $rr"; return 1
     fi
     abs="$(wf__resolve_path "$rr" "$rt")"
@@ -158,12 +174,23 @@ wf_load_config() {
   done
   WF_REPO_ROOT="$root"
 
-  # spec_storage_mode parsed EARLY: gate-pool resolution and {project}
-  # substitution both branch on it (must precede spec_storage + gate_pool).
-  local storage_mode
-  storage_mode="$(wf__json_get "$cfg_json" '.spec_storage_mode' 'repo')" || {
-    wf__err "$WF_CONFIG_FILE: spec_storage_mode extraction failed"; wf__unset_partials; return 5
+  # Batched single-fork read of the top-level scalar settings (perf: one yq
+  # exec instead of five). Null/missing fields emit the "__WF_NULL__" sentinel
+  # and map to their per-field defaults below; each field keeps its own
+  # downstream validation/enum/realpath block unchanged. spec_storage_mode is
+  # emitted here too so it is parsed before the storage-mode branch uses it —
+  # read order, not call order, is what matters.
+  local storage_mode storage_raw agent_pool_raw gkb_raw scope _tl_tsv
+  _tl_tsv="$(printf '%s' "$cfg_json" | wf__timeout 5 yq e -r \
+    '[(.spec_storage_mode // "__WF_NULL__"), (.spec_storage // "__WF_NULL__"), (.agent_pool // "__WF_NULL__"), (.general_kb_path // "__WF_NULL__"), (.validate_scope // "__WF_NULL__")] | @tsv' - 2>/dev/null)" || {
+    wf__err "$WF_CONFIG_FILE: top-level config extraction failed"; wf__unset_partials; return 5
   }
+  IFS=$'\t' read -r storage_mode storage_raw agent_pool_raw gkb_raw scope <<<"$_tl_tsv"
+  [[ "$storage_mode"   == "__WF_NULL__" ]] && storage_mode="repo"
+  [[ "$storage_raw"    == "__WF_NULL__" ]] && storage_raw="specs/"
+  [[ "$agent_pool_raw" == "__WF_NULL__" ]] && agent_pool_raw="$HOME/.claude/agents"
+  [[ "$gkb_raw"        == "__WF_NULL__" ]] && gkb_raw=""
+  [[ "$scope"          == "__WF_NULL__" ]] && scope="per-task"
   case "$storage_mode" in
     repo|vault) ;;
     *) wf__err "$WF_CONFIG_FILE: spec_storage_mode invalid: '$storage_mode' (expected: repo, vault)"
@@ -185,11 +212,9 @@ wf_load_config() {
     wf__unset_partials; return 4
   fi
 
-  local raw storage_abs agent_pool_abs scope
-  raw="$(wf__json_get "$cfg_json" '.spec_storage' 'specs/')" || {
-    wf__err "$WF_CONFIG_FILE: spec_storage extraction failed"; wf__unset_partials; return 5
-  }
-  if [[ "$raw" == *".."* ]]; then
+  local raw storage_abs agent_pool_abs
+  raw="$storage_raw"
+  if wf__has_dotdot "$raw"; then
     wf__err "$WF_CONFIG_FILE: spec_storage has '..' segment: $raw"
     wf__unset_partials; return 2
   fi
@@ -243,9 +268,7 @@ wf_load_config() {
     WF_GATE_POOL="$WF_CONFIG_FILE"
   fi
 
-  raw="$(wf__json_get "$cfg_json" '.agent_pool' "$HOME/.claude/agents")" || {
-    wf__err "$WF_CONFIG_FILE: agent_pool extraction failed"; wf__unset_partials; return 5
-  }
+  raw="$agent_pool_raw"
   agent_pool_abs="$(wf__resolve_pool_path "$raw" "$root" agent_pool)" || { wf__unset_partials; return 2; }
   [[ -d "$agent_pool_abs" ]] || {
     wf__err "$WF_CONFIG_FILE: agent_pool not a directory: $agent_pool_abs"
@@ -255,15 +278,12 @@ wf_load_config() {
 
   # general_kb_path — REQUIRED. No backward-compat default. Path is absolute and
   # may live outside repo (e.g. master-brain vault), so allowed-root check is skipped.
-  local gkb_raw gkb_abs
-  gkb_raw="$(wf__json_get "$cfg_json" '.general_kb_path' '')" || {
-    wf__err "$WF_CONFIG_FILE: general_kb_path extraction failed"; wf__unset_partials; return 5
-  }
+  local gkb_abs
   if [[ -z "$gkb_raw" ]]; then
     wf__err "$WF_CONFIG_FILE: general_kb_path is required (no default). Add: general_kb_path: <abs-path-to-general-knowledge-base>"
     wf__unset_partials; return 2
   fi
-  if [[ "$gkb_raw" == *".."* ]]; then
+  if wf__has_dotdot "$gkb_raw"; then
     wf__err "$WF_CONFIG_FILE: general_kb_path has '..' segment: $gkb_raw"
     wf__unset_partials; return 2
   fi
@@ -278,9 +298,6 @@ wf_load_config() {
   }
   WF_GENERAL_KB="$gkb_abs"
 
-  scope="$(wf__json_get "$cfg_json" '.validate_scope' 'per-task')" || {
-    wf__err "$WF_CONFIG_FILE: validate_scope extraction failed"; wf__unset_partials; return 5
-  }
   validate_scope_enum_check "$scope" 2>/dev/null || {
     wf__err "$WF_CONFIG_FILE: validate_scope invalid: '$scope' (expected: per-task, per-spec, both)"
     wf__unset_partials; return 2
@@ -444,10 +461,10 @@ wf_load_config() {
     # escape hatch to skip the audit for this spec.
     # NOTE: cannot use wf__json_get here — its `// "__WF_NULL__"` alternative
     # operator treats a boolean `false` as falsy and returns the default, so
-    # `coverage_audit: false` would mis-read as unset → "true". Read the raw
-    # value directly; yq prints the literal "null" for a missing key.
+    # `coverage_audit: false` would mis-read as unset → "true". Use the raw
+    # reader; yq prints the literal "null" for a missing key.
     local coverage_audit
-    coverage_audit="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r '.coverage_audit' - 2>/dev/null)" || {
+    coverage_audit="$(wf__json_get_raw "$spec_json" '.coverage_audit')" || {
       wf__err "$spec_cfg: coverage_audit extraction failed"; wf__unset_partials; return 5
     }
     case "$coverage_audit" in
@@ -457,11 +474,18 @@ wf_load_config() {
     esac
     WF_COVERAGE_AUDIT="$coverage_audit"
 
+    # Ceilings use the raw reader so an explicit `tier_ceiling.tasks: 0` is
+    # preserved (wf__json_get's `// "__WF_NULL__"` default could collapse a
+    # falsy literal). Missing keys yield literal "null" — treat that and empty
+    # (not 0) as "unset" to fall back to .tiers.<tier>.*, then normalize a
+    # trailing "null" to "" for byte-identical legacy output.
     local tc fc as
-    tc="$(wf__json_get "$spec_json" ".tier_ceiling.tasks" '')"
-    fc="$(wf__json_get "$spec_json" ".tier_ceiling.files" '')"
-    [[ -z "$tc" ]] && tc="$(wf__json_get "$cfg_json" ".tiers.${tier}.tasks" '')"
-    [[ -z "$fc" ]] && fc="$(wf__json_get "$cfg_json" ".tiers.${tier}.files" '')"
+    tc="$(wf__json_get_raw "$spec_json" ".tier_ceiling.tasks")"
+    fc="$(wf__json_get_raw "$spec_json" ".tier_ceiling.files")"
+    [[ "$tc" == null || -z "$tc" ]] && tc="$(wf__json_get_raw "$cfg_json" ".tiers.${tier}.tasks")"
+    [[ "$fc" == null || -z "$fc" ]] && fc="$(wf__json_get_raw "$cfg_json" ".tiers.${tier}.files")"
+    [[ "$tc" == null ]] && tc=""
+    [[ "$fc" == null ]] && fc=""
     as="$(printf '%s' "$cfg_json" | wf__timeout 5 yq e -r ".tiers.${tier}.agent_skip[]?" - 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')"
     WF_TIER_TASK_CEILING="$tc"
     WF_TIER_FILE_CEILING="$fc"
@@ -469,25 +493,39 @@ wf_load_config() {
 
     # repos[] — multi-repo binding (optional under spec_storage_mode=repo,
     # required under vault). Validate each path is a git work tree.
-    local repos_count name path role abs_path names_acc="" paths_acc=""
+    local repos_count name path abs_path names_acc="" paths_acc=""
     repos_count="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r '(.repos // []) | length' - 2>/dev/null || echo 0)"
     [[ "$repos_count" =~ ^[0-9]+$ ]] || repos_count=0
     if [[ "$WF_SPEC_STORAGE_MODE" == "vault" && "$repos_count" -eq 0 ]]; then
       wf__err "$spec_cfg: repos[] required when spec_storage_mode=vault"
       wf__unset_partials; return 4
     fi
-    local i
-    for ((i = 0; i < repos_count; i++)); do
-      name="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r ".repos[$i].name // \"\"" - 2>/dev/null)"
-      path="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r ".repos[$i].path // \"\"" - 2>/dev/null)"
-      role="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r ".repos[$i].role // \"\"" - 2>/dev/null)"
+    # Per-repo fields read in ONE yq exec (perf: was 3 forks per repo). The
+    # Per-repo fields read in ONE yq exec (perf: was 3 forks per repo). Two
+    # subtleties drove the field encoding:
+    #   1. `// ""` is required so a missing/null field is an empty string, not
+    #      the literal "null" — preserving the old per-field `// ""` semantics
+    #      and the `[[ -n "$name" ]]` fail-closed check.
+    #   2. The delimiter is the ASCII unit separator (\x1f), NOT a tab: `read`
+    #      treats tab as IFS *whitespace* and would strip/collapse empty leading
+    #      or interior fields (a name-less entry would shift path into name).
+    #      \x1f is non-whitespace, so empty fields are preserved exactly.
+    # role is read into a throwaway (`_`) — kept for alignment, value unused.
+    # Guarded by repos_count>0 so a herestring over empty input never fabricates
+    # a phantom row.
+    local i=0 repos_rows="" _us
+    _us=$'\x1f'
+    if [[ "$repos_count" -gt 0 ]]; then
+      repos_rows="$(printf '%s' "$spec_json" | wf__timeout 5 yq e -r ".repos[] | [(.name // \"\"), (.path // \"\"), (.role // \"\")] | join(\"$_us\")" - 2>/dev/null)"
+    fi
+    while [[ "$repos_count" -gt 0 ]] && IFS="$_us" read -r name path _; do
       [[ -n "$name" ]] || { wf__err "$spec_cfg: repos[$i].name missing"; wf__unset_partials; return 4; }
       [[ "$name" =~ ^[a-z0-9][a-z0-9_-]{0,31}$ ]] || {
         wf__err "$spec_cfg: repos[$i].name invalid: '$name' (expected ^[a-z0-9][a-z0-9_-]{0,31}$)"
         wf__unset_partials; return 4
       }
       [[ -n "$path" ]] || { wf__err "$spec_cfg: repos[$i].path missing"; wf__unset_partials; return 7; }
-      [[ "$path" == *".."* ]] && { wf__err "$spec_cfg: repos[$i].path has '..': $path"; wf__unset_partials; return 7; }
+      wf__has_dotdot "$path" && { wf__err "$spec_cfg: repos[$i].path has '..': $path"; wf__unset_partials; return 7; }
       case "$path" in
         "~"|"~/"*) abs_path="${HOME}${path:1}" ;;
         /*)        abs_path="$path" ;;
@@ -515,7 +553,8 @@ wf_load_config() {
       fi
       names_acc+="${names_acc:+$'\n'}$name"
       paths_acc+="${paths_acc:+$'\n'}$abs_path"
-    done
+      i=$((i + 1))
+    done <<<"$repos_rows"
     WF_REPO_NAMES="$names_acc"
     WF_REPO_PATHS="$paths_acc"
 
@@ -659,6 +698,7 @@ wf_for_each_repo() {
 # from environment. Single source of truth for both wf_write_snapshot and
 # wf_check_snapshot_drift. Requires python3.
 _wf_snapshot_json() {
+  command -v python3 >/dev/null 2>&1 || { wf__err "python3 required for config snapshot"; return 6; }
   python3 -c "
 import os, json
 gates = sorted(l for l in os.environ.get('WF_SPEC_GATES', '').splitlines() if l)

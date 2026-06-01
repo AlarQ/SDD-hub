@@ -16,15 +16,27 @@ TASK_MANAGER="$HOME/.claude/scripts/task-manager.sh"
 for _loader in "$REPO_ROOT/scripts/config-loader.sh" "$HOME/.claude/scripts/config-loader.sh"; do
   if [[ -x "$_loader" ]]; then
     if [[ ! -f "$REPO_ROOT/.workflow.yml" ]]; then break; fi
-    _loader_out="$("$_loader" export 2>&1)" || {
-      echo "WARN: config-loader.sh failed: $_loader_out" >&2
+    # Capture stdout ONLY — stderr stays on the terminal so warnings/diagnostics
+    # can never be folded into the text we eval (would otherwise be RCE input).
+    _loader_out="$("$_loader" export)" || {
+      echo "WARN: config-loader.sh failed" >&2
       break
     }
-    eval "$_loader_out" || echo "WARN: config-loader.sh output malformed — WF_* vars not set" >&2
+    # Defense-in-depth: a poisoned/older repo-local loader (tried first) could
+    # emit arbitrary text. eval ONLY allowlisted WF_<NAME>=... lines; anything
+    # else is warned about and skipped, never executed.
+    while IFS= read -r _loader_line; do
+      [[ -z "$_loader_line" ]] && continue
+      if [[ "$_loader_line" =~ ^WF_[A-Z0-9_]+= ]]; then
+        eval "$_loader_line" || echo "WARN: config-loader.sh line rejected: ${_loader_line%%=*}" >&2
+      else
+        echo "WARN: config-loader.sh emitted non-WF line — skipped" >&2
+      fi
+    done <<< "$_loader_out"
     break
   fi
 done
-unset _loader _loader_out
+unset _loader _loader_out _loader_line
 
 if [ ! -x "$TASK_MANAGER" ]; then
   echo "WARNING: task-manager.sh not found at $TASK_MANAGER — skipping task validation"
