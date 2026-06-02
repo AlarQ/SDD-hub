@@ -177,7 +177,7 @@ Then jump to the `single-branch` final instruction below. Review is deferred to 
    ```
    (cd "$WF_TASK_REPO_PATH" && gh pr create --draft --base feat/$ARGUMENTS \
      --title "type(task-id): {task-title}" \
-     --body "<diff summary>
+     --body "<body per ~/.claude/scripts/pr-body-convention.md — ## Why + ## What changed + optional mermaid>
 
    Pre-validation draft for human review. Comment on the PR, then run \`/pr-review $ARGUMENTS\` to address comments. Run \`/validate $ARGUMENTS\` when ready.")
    ```

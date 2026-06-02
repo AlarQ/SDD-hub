@@ -65,7 +65,7 @@ If `WF_SPEC_STORAGE_MODE=vault`:
   ```
   gh pr create --base <default-branch> \
     --title "<conventional commit format title matching the commit>" \
-    --body "<summary of all changes in the branch>"
+    --body "<body per ~/.claude/scripts/pr-body-convention.md — ## Why + ## What changed + optional mermaid; no footer (no gates in quick-ship)>"
   ```
   - Use `$ARGUMENTS` as PR title if provided and a branch was not created from it
 - **If a PR already exists:**

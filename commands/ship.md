@@ -70,7 +70,7 @@ tail -50 specs/$ARGUMENTS/.monitor.jsonl 2>/dev/null | grep -q '"category":"spec
   ```
   (cd "$WF_TASK_REPO_PATH" && gh pr create --base main \
     --title "feat($ARGUMENTS): <spec title>" \
-    --body "<spec-level summary of all tasks>
+    --body "<body per ~/.claude/scripts/pr-body-convention.md at spec scope — ## Why + ## What changed across all tasks + mermaid (single-branch spec PRs are prime diagram candidates)>
 
   validation: pass")
   ```
@@ -87,7 +87,7 @@ tail -50 specs/$ARGUMENTS/.monitor.jsonl 2>/dev/null | grep -q '"category":"spec
      ```
      Then refresh the PR body to include the final post-validation diff summary + `validation: pass`:
      ```
-     (cd "$WF_TASK_REPO_PATH" && gh pr edit <pr_url> --body "<summary of changes>
+     (cd "$WF_TASK_REPO_PATH" && gh pr edit <pr_url> --body "<body per ~/.claude/scripts/pr-body-convention.md — ## Why + ## What changed + optional mermaid>
 
      validation: pass")
      ```
@@ -96,7 +96,9 @@ tail -50 specs/$ARGUMENTS/.monitor.jsonl 2>/dev/null | grep -q '"category":"spec
      ```
      (cd "$WF_TASK_REPO_PATH" && gh pr create --base feat/$ARGUMENTS \
        --title "type(task-id): {task-title}" \
-       --body "<summary of changes based on the diff>")
+       --body "<body per ~/.claude/scripts/pr-body-convention.md — ## Why + ## What changed + optional mermaid>
+
+     validation: pass")
      ```
    - **If `pr_url` exists but state is `MERGED` or `CLOSED`**: refuse and say: "PR <url> is already <state>. Nothing to ship."
 8. Clear monitor context: `$HOME/.claude/scripts/monitor.sh clear_context` (non-fatal — proceed even if this fails; stale context is overwritten by the next `/implement`)
