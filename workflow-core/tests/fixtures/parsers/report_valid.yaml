@@ -10,3 +10,5 @@ findings:
     file: src/lib.rs
     lines: "3"
     source: tool
+    review_status: accepted
+    auto_accepted: true

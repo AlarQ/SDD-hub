@@ -22,15 +22,47 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    - Each `missing` or `partial` FR row becomes one review unit (synthetic finding: `source: llm`, severity `high` for missing, `medium` for partial).
    - On **Accept** of a missing/partial FR review unit: invoke `~/.claude/scripts/task-manager.sh create-followup "$ARGUMENTS" "<FR-id>" "<FR description>"`. This subcommand validates the FR id against `spec.md` (fail-closed on unknown ids) and inherits `ground_rules` from the spec's `## Applicable Ground Rules` section.
    - On **Reject**: the finding remains in the report so `/learn-from-reports` can mine it as a general-KB rule candidate (no inline rule creation needed for spec-audit findings).
-2. Partition findings: separate `severity: info` findings (informational) from all others (actionable)
-3. Group actionable findings before presenting them:
+2. Partition findings: separate `severity: info` findings (informational) from all others (actionable).
+
+2a. **Partition actionable → AUTO | MANUAL.** Before grouping, classify each actionable finding into the **AUTO bucket** (fix applied by a spawned agent *before* the human is asked) or the **MANUAL bucket** (today's exact card + `Accept/Reject/Elaborate` flow). The human's backstop for AUTO fixes is the already-open **draft PR diff** — no new approval gate, no commits here.
+
+   A finding is **AUTO** iff either:
+   - **Mechanical:** `category` ∈ the allowlist **AND** `severity` ∈ {`info`, `low`, `medium`} **AND** `fix_proposal` is present (non-empty); **or**
+   - **Coverage:** `category` == `coverage` (exempt from the severity cap **and** the `fix_proposal` requirement — auto at any severity, with or without a `fix_proposal`).
+
+   Otherwise the finding is **MANUAL**.
+
+   - **Allowlist (hardcoded here, editable in this command):** `style`, `formatting`, `unused-import`, `dry-violation`, `coverage`. Matching is **your judgment** against each finding's free-form `category` string — there is no closed enum and no parser change. Treat near-synonyms sensibly (e.g. `unused_import`, `lint:unused-import` match `unused-import`; `code-style` matches `style`).
+   - **Severity cap:** `critical` / `high` mechanical findings always go MANUAL. Coverage ignores the cap.
+   - **`interaction` (afk/hitl) is NOT consulted** — same partition for all tasks.
+   - **spec-audit synthetic findings are out of scope** — the `missing`/`partial` FR review units synthesized in step 1 are NEVER auto-accepted (they create follow-up tasks, not code fixes). They always go MANUAL with their existing handling.
+
+2b. **Process the AUTO bucket** (skip this step entirely if the AUTO bucket is empty). For each AUTO finding, spawn a background fix agent reusing the existing accept-path spawn pattern (Agent tool, `run_in_background: true`, `model: "sonnet"` — mandatory, do not omit or change the model) and the **file-exclusivity rule** (step 5: same-file edits serialized, different files parallel). Multi-repo: resolve relative `file` paths against the owning task's `WF_TASK_REPO_PATH` (per `~/.claude/scripts/multi-repo-resolution.md`) and pass it to the agent so edits land in the bound repo.
+
+   Per finding, the agent:
+   - **`coverage` finding:** generate the missing/partial test from the gap description / acceptance criterion (no `fix_proposal` needed). Then run the bound repo's **test gate** — the `gate_pool` test gate command for `WF_TASK_REPO_PATH` (the same test command `/validate` runs). If the test is **green**, keep it. If it **won't go green**, discard the new test and **demote the finding to MANUAL** (it joins the manual bucket as a standard card).
+   - **Mechanical finding:** re-read the target file, then apply the `fix_proposal` (reverse line order if multiple on one file, to avoid offset drift).
+   - **On success:** set `review_status: accepted` **and** `auto_accepted: true` on the finding in its report YAML (use `yq` to preserve schema).
+   - **On error** (agent fails, edit doesn't apply, test won't go green): discard the attempt, leave the file unchanged, and **demote the finding to MANUAL** — nothing is silently lost.
+
+   Wait for all AUTO agents to complete, fold any demotions into the MANUAL bucket, then print a **read-only** summary:
+
+   ```
+   AUTO-FIXED (N)
+   - <title>  (<file>)  — review in PR diff
+   - …
+   ```
+
+   **No Keep/Revert, no commits.** Edits stay uncommitted in the working tree exactly like today's accept-path fixes; `/ship` commits them later. The draft PR diff + `/pr-review` are the backstop.
+
+3. Group **MANUAL-bucket** actionable findings before presenting them (AUTO findings are already fixed and excluded; demoted findings are included):
    a. Sort all actionable findings by file path, then by start line.
    b. **Pass 1 — Line proximity:** For findings targeting the same `file`, merge into one group if their `lines` ranges overlap or are within 5 lines of each other. Apply transitive closure: if finding C overlaps with B which is already grouped with A, C joins the {A, B} group.
    c. **Pass 2 — Same-file category match:** For still-ungrouped findings in the same file that share an identical `category` value, merge them into one group.
    d. Remaining ungrouped findings each become a singleton group.
    e. Sort groups by: highest severity within the group (critical > high > medium > low), then file path alphabetically.
    f. Track which files each group touches (needed for file exclusivity in step 5).
-4. **Snippet hydration** — before rendering any card, walk every actionable finding and ensure `code_snippet` has content:
+4. **Snippet hydration** — before rendering any card, walk every MANUAL-bucket actionable finding and ensure `code_snippet` has content:
    - If `code_snippet` is non-empty (after trimming whitespace), keep agent-provided text as-is.
    - Else if `file` and `lines` are both present:
      - Parse `lines` as `<start>-<end>` (single int → start=end).
@@ -99,7 +131,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 6. After all groups have been reviewed, wait for any in-flight fix sub-agents to complete. Report: "All N fix sub-agents completed." If any sub-agent errored, report which group/file failed and ask the user whether to retry or skip that fix (set review_status back to "pending" if retry, or "rejected" if skip).
 7. Set review_status to "noted" on all informational findings
 8. Display informational summary — compact list: title, file, and one-line description for each
-9. Report summary: X groups accepted (N findings), Y groups rejected (M findings), Z noted (informational), W new rules added
+9. Report summary: A auto-fixed (auto bucket), X groups accepted (N findings), Y groups rejected (M findings), Z noted (informational), W new rules added
 
 ## Status Update
 

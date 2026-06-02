@@ -42,6 +42,10 @@ fn valid_report_fixture_parses() {
     let report = parse_report(&content, "report_valid.yaml").unwrap();
     assert_eq!(report.gate, "lint");
     assert_eq!(report.findings.len(), 1);
+    assert!(
+        report.findings[0].auto_accepted,
+        "auto_accepted field parses from report YAML"
+    );
 }
 
 #[test]

@@ -41,6 +41,7 @@ findings: []               # see Finding schema below
   source: tool | llm
   review_notes: <optional, set on reject>
   rule_added: <optional bool, set when a reject spawns a project-KB rule>
+  auto_accepted: <optional bool, set when /review-findings auto-accepts + fixes mechanically>
 ```
 
 ### Field semantics
@@ -50,6 +51,7 @@ findings: []               # see Finding schema below
 - `impact` — *what breaks* if shipped unfixed (concrete, scoped — not generic warnings). Expected on `source: llm` findings.
 - `references` — pointer list users can jump to: KB rule path (e.g. `general:security/general.md`), CWE id (e.g. `CWE-89`), or doc URL.
 - `confidence` — LLM-source self-assessment of how certain the finding is. Guides reject heuristics in review.
+- `auto_accepted` — set `true` by `/review-findings` when a finding lands in the auto bucket (mechanical category within cap, or a `coverage` gap) and its fix is applied by a spawned agent without a human prompt. Always paired with `review_status: accepted`. `/learn-from-reports` skips `auto_accepted` findings when mining KB-rule candidates (mechanical, low-signal).
 
 Tool-source findings (shellcheck, lint) MAY omit `rationale` / `impact` / `confidence`. LLM-source findings SHOULD populate `rationale` and `impact`.
 
@@ -75,5 +77,5 @@ Body MUST contain an FR matrix section: one row per FR, marked `implemented | pa
 ## Lifecycle
 
 1. `/validate` / `/validate-impl` write reports with `review_status: pending` on every finding.
-2. `/review-findings` mutates `review_status` to `accepted` / `rejected` / `noted` and may set `review_notes`, `rule_added`.
+2. `/review-findings` mutates `review_status` to `accepted` / `rejected` / `noted` and may set `review_notes`, `rule_added`, `auto_accepted`.
 3. `/learn-from-reports` mines reports for KB rule patterns and owns deletion. Report deletion happens nowhere else.

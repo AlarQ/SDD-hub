@@ -15,7 +15,7 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
 
 1. **Load reports.** Read all YAML files in `specs/$ARGUMENTS/reports/`. If the directory is missing or empty, skip to step 6 (deletion is still centralized here).
 
-2. **Collect findings.** Flatten all findings across all report files. Annotate each with its source report path and gate. Skip findings where `rule_added: true` (already handled inline by `/review-findings`).
+2. **Collect findings.** Flatten all findings across all report files. Annotate each with its source report path and gate. Skip findings where `rule_added: true` (already handled inline by `/review-findings`). Also skip findings where `auto_accepted: true` — these are mechanical auto-bucket fixes (style/formatting/unused-import/dry-violation/coverage), low-signal for KB-rule mining.
 
 3. **Mine rule candidates.** Generate candidates from the following signals:
    - **Rejected + reasoned:** `review_status: rejected` with a non-empty `review_notes`. The reasoning often describes a convention that should be explicit. One candidate per distinct reasoning.

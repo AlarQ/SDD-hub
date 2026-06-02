@@ -421,8 +421,18 @@ graph LR
 graph LR
     RF["/review-findings"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_RF[stop]
-    CFG0 -->|loaded| TRIAGE[group + triage findings]
+    CFG0 -->|loaded| PART[partition info / actionable]
+    PART --> SPLIT{actionable → AUTO or MANUAL}
+    SPLIT -->|category allowlist + sev≤medium + fix_proposal, OR coverage| AUTO[AUTO bucket:<br/>bg agent applies fix /<br/>generates coverage test]
+    SPLIT -->|else / spec-audit FR| MANUAL[MANUAL bucket]
+    AUTO -->|success| MARK[review_status=accepted<br/>auto_accepted=true<br/>AUTO-FIXED summary]
+    AUTO -->|error or test not green| MANUAL
+    MANUAL --> TRIAGE[group + per-group<br/>Accept/Reject/Elaborate]
+    MARK --> DONE[status update<br/>→ /learn-from-reports]
+    TRIAGE --> DONE
 ```
+
+The AUTO bucket applies mechanical fixes (style/formatting/unused-import/dry-violation) and generates+green-checks coverage tests **before** any human prompt — no commits (working-tree edits, backstopped by the draft PR diff), failures fall back to MANUAL. `/learn-from-reports` skips `auto_accepted` findings when mining KB rules.
 
 ### 5h. `/ship` — commit, push, PR
 

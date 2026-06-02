@@ -48,6 +48,11 @@ pub struct Finding {
     pub review_status: String,
     #[serde(default)]
     pub source: String,
+    /// Set true when `/review-findings` auto-accepted and fixed this finding
+    /// without a human prompt (mechanical/coverage auto bucket). `/learn-from-reports`
+    /// skips these when mining KB-rule candidates.
+    #[serde(default)]
+    pub auto_accepted: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
