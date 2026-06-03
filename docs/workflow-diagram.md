@@ -149,9 +149,9 @@ stateDiagram-v2
 
 ## 3. Validation Gates
 
-`/validate` fans out gates in parallel. Four are agent-driven (via `Agent` tool); the `testing` gate is deterministic (language tools only, no agent). All-gates rule: every gate must report `status: pass` before task eligible for `done`. Any finding → task moves to `review`.
+`/validate` fans out gates in parallel. Deterministic gates (lint, typecheck, `testing`) run via the `gate-runner` subagent (language tools only); advisory gates are agent-driven (via `Agent` tool). All-gates rule: every gate must report `status: pass` before task eligible for `done`. Any finding → task moves to `review`.
 
-**Phase 1** computes the effective gate set as `WF_SPEC_GATES ∩ language-applicable gates from .workflow.yml gate_pool` (ceiling intersection). Gates outside the intersection emit a `gate_skip` event and are not run.
+**Phase 1** computes the effective gate set as `WF_SPEC_GATES ∩ language-applicable gates from .workflow.yml gate_pool` (ceiling intersection). Gates outside the intersection emit a `gate_skip` event and are not run. Resolution (effective-set, skip events, scope short-circuit, empty-set fail-closed) stays in the main session; **execution is delegated to the `gate-runner` subagent** — one subagent runs the whole effective set, converts each gate's output to the report schema, writes `reports/<task-id>-<gate>.yaml` itself, and returns only a compact verdict, so raw lint/test output never enters the main session.
 
 **Phase 2** reads the agent list from `WF_SPEC_AGENTS_VALIDATE` (set by config.yml) — not a hardcoded list. Each entry spawns one agent.
 
@@ -167,11 +167,13 @@ graph TD
     SCOPE -->|per-spec| PASS[write zero-gates pass report]
     SCOPE -->|per-task / both| CEIL["Phase 1: WF_SPEC_GATES ∩ .workflow.yml gate_pool applicable ∩ applies_to_repos"]
     CEIL -->|skipped gates| SKIP[gate_skip event]
-    CEIL -->|effective gates| AGT["Phase 2: agents from WF_SPEC_AGENTS_VALIDATE (config-driven, may be empty)"]
+    CEIL -->|effective gates → job spec| GR["gate-runner subagent<br/>(run + convert + write reports;<br/>returns compact verdict only)"]
+    GR --> REPORTS[reports/NNN-&lt;gate&gt;.yaml]
+    CEIL --> AGT["Phase 2: agents from WF_SPEC_AGENTS_VALIDATE (config-driven, may be empty)"]
 
-    AGT --> GATES["effective gate set<br/>(e.g. security, code-quality,<br/>architecture, compliance, testing)"]
+    AGT --> GATES["advisory agent set<br/>(e.g. security, code-quality,<br/>architecture, compliance)"]
     GATES --> AGENTS["matched agents per gate<br/>(e.g. Security Engineer, CQP,<br/>Software Architect, CMC)"]
-    AGENTS --> REPORTS[reports/NNN-&lt;gate&gt;.yaml]
+    AGENTS --> REPORTS
 
     AGENTS --> COVGATE{"Phase 3 coverage audit?<br/>(tier≠small, coverage_audit≠false,<br/>not user-skipped, scope≠per-spec)"}
     COVGATE -->|skip| COVSKIP[gate_skip event: gate=coverage]
@@ -386,7 +388,10 @@ After step 9 settles the backlog, `/implement` branches on the Task's `implement
 graph LR
     VA["/validate"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_VA[stop]
-    CFG0 -->|loaded| CEIL["WF_SPEC_GATES ∩ .workflow.yml gate_pool ceiling"]
+    CFG0 -->|loaded| APPR{Step 0.5: user approves gate set}
+    APPR -->|cancel| STOP_VA
+    APPR -->|approve| CEIL["WF_SPEC_GATES ∩ .workflow.yml gate_pool ceiling"]
+    CEIL -->|effective gates → job spec| GR["gate-runner subagent<br/>(Phase 1: run + write reports)"]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| SE[engineering-security-engineer]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| CQP[code-quality-pragmatist]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| SA[engineering-software-architect]

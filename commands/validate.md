@@ -124,9 +124,27 @@ After computing the effective set above and before step 4 below, branch on `WF_V
    - Read task frontmatter `empty_intersection_ok` field (default `false`).
    - If `empty_intersection_ok: true`: emit `gate_skip` event with `reason: empty_intersection_ok`, record 0 gates executed, treat as pass — skip to Phase 2.
    - If `false` (default): record a `critical` error finding (`"Empty effective gate set on code-bearing task — ceiling ∩ ground_rules yielded no gates. Verify spec config.yml gates and task ground_rules."`), set gate status to `error`, block transition to `done`.
-6. Run **every** gate in the effective set using its `command` from the gate pool (`.workflow.yml .gate_pool[]`) — skipping is not allowed.
-   - If a gate command is missing or fails to install, record it as an error finding.
-7. Collect all gate outputs and convert findings into the report schema.
+6. Build a self-contained **job spec** from the effective set. For each gate id `<g>` that survived all the filters above, pull its `command`, `cwd`, and `category` from the active gate pool — `WF_TASK_GATE_POOL` when set (vault mode), else `WF_GATE_POOL` (repo mode), the same precedence `gate-ceiling.sh` uses:
+   ```bash
+   source ~/.claude/scripts/gate-ceiling.sh
+   pool="${WF_TASK_GATE_POOL:-$WF_GATE_POOL}"
+   for g in $effective; do
+     cmd="$(wf_gc_gate_field "$pool" "$g" command)"
+     cwd="$(wf_gc_gate_field "$pool" "$g" cwd)"      # may be "null"/empty
+     cat="$(wf_gc_gate_field "$pool" "$g" category)"
+     # accumulate {gate_id: g, command: cmd, cwd: cwd, category: cat}
+   done
+   ```
+7. **Delegate execution to the `gate-runner` subagent** so raw gate output never enters the main session. Spawn **one** agent (`subagent_type: gate-runner`) for the whole effective set, passing only the mechanical job spec:
+   - `task_id` = the implemented task's id.
+   - `WF_TASK_REPO_PATH` = the path resolved in "Multi-repo task resolution" above.
+   - `report_dir` = `specs/$ARGUMENTS/reports/` (absolute).
+   - `report_schema_path` = `~/.claude/scripts/report-schema.md`.
+   - `gates` = the `[{gate_id, command, cwd, category}]` list built in step 6.
+
+   The subagent runs each gate (`(cd "$WF_TASK_REPO_PATH[/cwd]" && <command>)`), converts output to the report schema, **writes** `reports/<task-id>-<gate>.yaml` itself (`source: tool`), and returns **only** a compact per-gate verdict (`pass | findings(N) | error` + report path + totals). It performs no analysis, no fixes, no retries, and reads no KB/config/design files.
+
+   Do **not** ingest the raw gate output. On return, main reads the on-disk `reports/<task-id>-*.yaml` exactly as Gate Aggregation and Status Update below already do — including a missing or `status: error` report, which the existing "any gate error → re-run `/validate`" path re-spawns the whole set for (the subagent is stateless and never retries internally).
 
 ## Phase 2: Agent-Powered Analysis (advisory)
 
