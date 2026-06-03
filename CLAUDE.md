@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Status — LIVE, slated for deprecation
+
+This repo is the **currently-running** bash/markdown spec-driven workflow. It is
+actively used and maintained for now. It will be **deprecated** once its
+successor — the Rust binary `flowctl` + per-target adapters in the parent
+**Bondsmith** project (`future-proof-oss/`, see that repo's `CLAUDE.md` and
+`docs/src/adr/`) — reaches parity. ADR-0006 (parent) treats this repo as the
+behaviour checklist the rewrite must match.
+
+Implications while it is still live:
+- Bug fixes and small improvements here are fine.
+- Architectural friction found here (config-resolution god script, duplicated
+  repo-root/yq/escape helpers, scanner clones, command-prose duplication) is
+  also the **salvage checklist** for the Rust rewrite — name it, don't let it
+  silently reappear in `flowctl`.
+- Do not start large new feature surfaces here; build those in the successor.
+
 ## What This Repo Is
 
 A file-based, spec-driven development workflow for Claude Code. Slash commands, scripts, agents, hooks, and templates get installed globally to `~/.claude/` via `setup.sh`. Target projects get a `.workflow.yml` (with an inline `gate_pool:`) and `specs/` via `/bootstrap`. One external dependency: `yq` for YAML parsing.
