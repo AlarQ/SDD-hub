@@ -18,7 +18,8 @@ Lets the user crystallize an insight that emerged organically — from a code re
 
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for general KB prerequisites.
 2. Read `$WF_GENERAL_KB/_index.md` to understand existing coverage, categories, and file layout.
-3. Read and follow `~/.claude/scripts/universal-rule-authoring.md` — the captured rule MUST conform to its phrasing, snippet, and rejection criteria.
+3. Read and follow `$WF_GENERAL_KB/_authoring.md` — the captured rule MUST conform to its **format** (grade keyword `MUST`/`SHOULD`/`MAY` opening every rule; `description:` frontmatter written as an "Apply when …" trigger; trigger blocks only for known over-appliers).
+4. Read and follow `~/.claude/scripts/universal-rule-authoring.md` — the captured rule MUST conform to its **phrasing, snippet, and rejection** criteria (universality: no project-specific names/paths/tooling).
 
 ## Steps
 
@@ -90,11 +91,10 @@ Display the final rule preview (title, target path, body bullets, optional synth
 
 On Accept:
 
-a. **File.** If the target file exists, read it first, then append `## <Section>` plus the bullets. If the file does not exist:
+a. **File.** Conform to `$WF_GENERAL_KB/_authoring.md` in all cases. If the target file exists, read it first, then append the new graded rule(s) — each opening with a `MUST`/`SHOULD`/`MAY` keyword, code snippets verbatim, trigger blocks only for known over-appliers. If the file does not exist:
    - Create parent directories as needed (`mkdir -p` via Bash)
-   - Scaffold the file starting with `# <Topic>` header (match existing general KB style — see `$WF_GENERAL_KB/security/general.md` or `$WF_GENERAL_KB/languages/rust/error-handling.md` for shape)
-   - Then append the rule section
-   - **No frontmatter.** General KB files are plain markdown.
+   - Scaffold per `_authoring.md` — a `description:` frontmatter trigger ("Apply when …"), a `# <Topic>` header, then the graded rule(s). Use a converted file such as `$WF_GENERAL_KB/security/authz.md` or `$WF_GENERAL_KB/testing/test-quality.md` as the shape exemplar.
+   - **Frontmatter required.** Topic files carry a `description:` trigger — it is the only signal the harness uses to select the file into a task's `ground_rules:`. (The earlier "no frontmatter" instruction was wrong and is superseded by `_authoring.md`.)
 
 b. **Index.** Update `$WF_GENERAL_KB/_index.md` — preserve the existing table format. Add a new row `| <category>/<file>.md | <Category Title> | <one-line description> |` for new files, or leave existing rows untouched when appending to an existing file. If the description for an existing file is now stale because the appended section materially expands its scope, update the description in place.
 
@@ -117,7 +117,7 @@ Open a PR in the dev-workflow repo to make it permanent.
 
 - **General KB only.** Only ever write under `$WF_GENERAL_KB/`.
 - **No spec/feature coupling.** Runs from any cwd, any repo, with or without an active spec.
-- **No frontmatter** on rule files.
+- **Conform to `$WF_GENERAL_KB/_authoring.md`** — graded rules (`MUST`/`SHOULD`/`MAY`) and a `description:` trigger in frontmatter. Rule files DO carry frontmatter.
 - **No agent spawning** — main command does synthesis directly.
 - **No monitor events** — this is not part of spec flow.
 - **All prompts use `AskUserQuestion`** per `~/.claude/scripts/ask-user-protocol.md`. No plain-text menus.

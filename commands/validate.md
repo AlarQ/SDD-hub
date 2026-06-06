@@ -169,6 +169,17 @@ Each agent gate operates independently. No agent should trust or defer to anothe
 ### Agent Output Contract
 Each agent must return findings in the report schema (below). When constructing the prompt for each agent, instruct it to output findings as a YAML list matching the report schema. Mark all agent findings with `source: llm`.
 
+#### Grade → severity mapping (graded KB rules)
+KB topic files grade each rule with a leading keyword (`MUST` / `SHOULD` / `MAY`) per `$WF_GENERAL_KB/_authoring.md`. When an agent reports a finding for a violated graded rule, it MUST set the finding `severity` from the violated rule's grade:
+
+| Violated rule grade | Finding `severity` | Disposition |
+|---|---|---|
+| `MUST`   | `high`   | blocking — routes the task to `review` |
+| `SHOULD` | `medium` | advisory |
+| `MAY`    | `low`    | note / informational |
+
+Instruct each advisory agent in its prompt: *"Each KB rule opens with a grade keyword. A violated `MUST` is a `high` (blocking) finding; a violated `SHOULD` is `medium` (advisory); a violated `MAY` is `low` (note). Carry the grade into the finding severity; do not invent severities."* Deterministic pass/fail stays in the Phase 1 linters/gates — this mapping governs only the advisory (`source: llm`) findings.
+
 ### Collecting Results
 After all agents complete, merge their findings into per-gate YAML reports. If an agent errors or times out, record a single `error` finding for that gate (do not block other gates).
 
