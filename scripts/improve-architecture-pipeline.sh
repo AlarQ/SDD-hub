@@ -1,0 +1,408 @@
+#!/usr/bin/env bash
+# Architecture-improvement pipeline: find architectural deepening opportunities
+# in a target repo, write them as reports/*.md, gate for review, then open one
+# PR per finding via the parallel worktree scheduler (address-reports.sh).
+#
+# Two stages, gated by default:
+#   Stage 1 (find)    — one deep arch analysis (Opus), writes reports/*.md.
+#   Gate              — list reports + open-finding count; stop unless --yes.
+#   Stage 2 (address) — hand the reports to address-reports.sh (Sonnet workers).
+#
+# See plan: ~/.claude/plans/starry-crafting-hennessy.md
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly SCRIPT_NAME
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+readonly EXIT_SUCCESS=0
+readonly EXIT_FAILURE=1
+readonly EXIT_INVALID_ARGS=2
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  C_RESET=$'\033[0m'; C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m'; C_MAGENTA=$'\033[35m'; C_CYAN=$'\033[36m'
+else
+  C_RESET=''; C_DIM=''; C_BOLD=''; C_RED=''; C_GREEN=''
+  C_YELLOW=''; C_BLUE=''; C_MAGENTA=''; C_CYAN=''
+fi
+
+# Tag coloring mirrors address-reports.sh so stage-1 + stage-2 logs read alike.
+_colorize_tag() {
+  local msg="$1" head rest color
+  head="${msg%%[[:space:]]*}"
+  rest="${msg#"$head"}"
+  case "$head" in
+    SCAN)        color="$C_BOLD$C_CYAN" ;;
+    REPORT)      color="$C_BOLD$C_CYAN" ;;
+    GATE)        color="$C_BOLD$C_YELLOW" ;;
+    STAGE2)      color="$C_BOLD$C_BLUE" ;;
+    MANIFEST)    color="$C_BOLD$C_MAGENTA" ;;
+    SKIP)        color="$C_YELLOW" ;;
+    INTERRUPTED) color="$C_BOLD$C_RED" ;;
+    FAILED|ERROR|ABORT) color="$C_BOLD$C_RED" ;;
+    DONE)        color="$C_BOLD$C_GREEN" ;;
+    pipeline)    color="$C_BOLD$C_GREEN" ;;
+    *)           color="" ;;
+  esac
+  if [[ -n "$color" ]]; then
+    printf '%s%s%s%s' "$color" "$head" "$C_RESET" "$rest"
+  else
+    printf '%s' "$msg"
+  fi
+}
+
+log() {
+  local ts colored
+  ts="$(date -Iseconds 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ -n "$C_RESET" ]]; then
+    colored="$(_colorize_tag "$*")"
+  else
+    colored="$*"
+  fi
+  printf '%s%s%s %s|%s %s\n' "$C_DIM" "$ts" "$C_RESET" "$C_DIM" "$C_RESET" "$colored"
+  # $LOG may be unset during very early failures; guard.
+  [[ -n "${LOG:-}" ]] && printf '%s | %s\n' "$ts" "$*" >>"$LOG" || true
+}
+die() { log "ERROR $*"; exit "$EXIT_FAILURE"; }
+
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME [options] [<repo-path>]
+
+Find architectural deepening opportunities in <repo-path> (default: .), write
+them as reports/*.md, gate for review, then open one PR per finding via
+isolated git worktrees.
+
+Arguments:
+    <repo-path>   Target git repository (default: current directory).
+
+Options:
+    --yes         Chain past the review gate straight into stage 2 (address).
+                  Without it, the pipeline stops after writing reports.
+    --limit N     Address at most N findings this run (passed to the scheduler;
+                  the PR unit is the finding). Env: MAX_FINDINGS.
+    --resume      Self-healing re-run: skip a fresh scan if reports exist and
+                  pass --resume to the scheduler (reconcile shipped findings,
+                  re-dispatch dead workers — no duplicate PRs).
+    --rescan      Force a fresh stage 1 (clears prior reports/*.md first).
+    --cleanup     Delegate to the scheduler's --cleanup (sweep stale worktrees
+                  for the existing reports), then exit.
+    -h, --help    Show this help.
+
+Environment:
+    ARCH_FIND_MODEL  Model for stage 1 analysis (default: claude-opus-4-8).
+    CLAUDE_MODEL     Model for stage 2 workers (default: claude-sonnet-4-6).
+    MAX_PARALLEL     Stage 2 worker pool size (default: 2).
+    MAX_FINDINGS     Default for --limit (default: 0 = no limit).
+    NO_COLOR=1       Disable ANSI.
+
+Output:
+    <repo>/reports/*.md            One report per finding (gitignored scratch).
+    <repo>/reports/.pipeline.log   Stage 1 + orchestrator events.
+    <repo>/reports/.scheduler.log  Stage 2 scheduler events.
+
+Examples:
+    $SCRIPT_NAME ~/code/myrepo
+    $SCRIPT_NAME --yes --limit 2 ~/code/myrepo
+    $SCRIPT_NAME --resume ~/code/myrepo
+    $SCRIPT_NAME --rescan ~/code/myrepo
+    $SCRIPT_NAME --cleanup ~/code/myrepo
+EOF
+}
+
+parse_args() {
+  TARGET_ARG="."
+  YES=0
+  RESUME=0
+  RESCAN=0
+  CLEANUP=0
+  LIMIT="${MAX_FINDINGS:-0}"
+  local got_target=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)  usage; exit "$EXIT_SUCCESS" ;;
+      --yes)      YES=1; shift ;;
+      --resume)   RESUME=1; shift ;;
+      --rescan)   RESCAN=1; shift ;;
+      --cleanup)  CLEANUP=1; shift ;;
+      --limit)    shift; [[ $# -gt 0 ]] || { echo "$SCRIPT_NAME: --limit requires an argument" >&2; exit "$EXIT_INVALID_ARGS"; }; LIMIT="$1"; shift ;;
+      --limit=*)  LIMIT="${1#*=}"; shift ;;
+      --)         shift; [[ $# -gt 0 ]] && { TARGET_ARG="$1"; got_target=1; shift; } ;;
+      -*)         usage >&2; exit "$EXIT_INVALID_ARGS" ;;
+      *)          if [[ $got_target -eq 1 ]]; then echo "$SCRIPT_NAME: only one <repo-path> allowed" >&2; exit "$EXIT_INVALID_ARGS"; fi; TARGET_ARG="$1"; got_target=1; shift ;;
+    esac
+  done
+  [[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "$SCRIPT_NAME: --limit must be a non-negative integer: $LIMIT" >&2; exit "$EXIT_INVALID_ARGS"; }
+  if [[ "$RESCAN" == "1" && "$RESUME" == "1" ]]; then
+    echo "$SCRIPT_NAME: --rescan and --resume are mutually exclusive" >&2
+    exit "$EXIT_INVALID_ARGS"
+  fi
+}
+
+validate_env() {
+  command -v git >/dev/null 2>&1 || die "git not found in PATH"
+  [[ -d "$TARGET_ARG" ]] || die "repo path not a directory: $TARGET_ARG"
+  REPO_ROOT="$(git -C "$TARGET_ARG" rev-parse --show-toplevel 2>/dev/null)" \
+    || die "not a git repository: $TARGET_ARG"
+  REPORTS_DIR="$REPO_ROOT/reports"
+  mkdir -p "$REPORTS_DIR"
+  LOG="$REPORTS_DIR/.pipeline.log"
+  : >>"$LOG"
+
+  git -C "$REPO_ROOT" remote get-url origin >/dev/null 2>&1 \
+    || die "target repo has no 'origin' remote (needed to open PRs)"
+
+  command -v claude >/dev/null 2>&1 || die "claude CLI not found in PATH"
+  command -v gh     >/dev/null 2>&1 || die "gh CLI not found in PATH"
+
+  SCHEDULER="$SCRIPT_DIR/address-reports.sh"
+  if [[ ! -x "$SCHEDULER" ]]; then
+    SCHEDULER="$(command -v address-reports.sh 2>/dev/null || true)"
+  fi
+  [[ -n "$SCHEDULER" && -x "$SCHEDULER" ]] \
+    || die "address-reports.sh scheduler not found next to $SCRIPT_NAME or on PATH"
+
+  ARCH_FIND_MODEL="${ARCH_FIND_MODEL:-claude-opus-4-8}"
+}
+
+# Append reports/ to the target repo's .gitignore if not already ignored.
+# Reports are ephemeral scratch in the main checkout; never committed.
+ensure_reports_gitignored() {
+  if git -C "$REPO_ROOT" check-ignore -q reports 2>/dev/null; then
+    return 0
+  fi
+  local gi="$REPO_ROOT/.gitignore"
+  printf '\n# Architecture-pipeline scratch (uncommitted findings)\n/reports/\n' >>"$gi"
+  log "pipeline added /reports/ to $gi"
+}
+
+# Count open H2 findings in a report (mirrors scheduler parse_open_findings).
+count_open() {
+  local report="$1"
+  grep -nE '^## ' "$report" 2>/dev/null | awk -F: '
+    { h = substr($0, index($0,":")+1) }
+    h ~ /RESOLVED/         { next }
+    h ~ / - DONE$/         { next }
+    h ~ /^## Summary/      { next }
+    h ~ /^## Already Resolved/ { next }
+    { c++ }
+    END { print c+0 }
+  '
+}
+
+# Glob of real report files (exclude dotfiles like .scheduler.log/.pipeline.log).
+report_files() {
+  find "$REPORTS_DIR" -maxdepth 1 -type f -name '*.md' ! -name '.*' 2>/dev/null | sort
+}
+
+reports_exist_nonempty() {
+  local f
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    [[ -s "$f" ]] && return 0
+  done < <(report_files)
+  return 1
+}
+
+STAGE1_PROMPT='Run the /improve-codebase-architecture analysis on THIS repository in SCAN-ONLY, headless mode.
+
+CRITICAL behavior overrides (this is an automated batch run, no human present):
+- Do steps 1-2 of the skill (Explore + identify deepening opportunities) ONLY.
+- SKIP step 2 candidate-presentation-to-user and SKIP step 3 grilling loop entirely. Do NOT ask the user anything. Do NOT call AskUserQuestion or ExitPlanMode. Never wait for input.
+- For EACH deepening opportunity you would have presented, instead WRITE it to disk as a finding report in the audit-finding format.
+
+Output contract — write findings as report files:
+- One H2 finding per opportunity. Group findings by their owning code unit (crate/package/module): all findings whose primary file lives in unit <U> go into reports/architecture-<U>.md (kebab-case unit slug).
+- Create reports/ if missing. Create each report file with this header if it does not exist:
+
+  # Findings: `<unit>`
+
+  **Date**: <today YYYY-MM-DD>
+  **Scope**: `<unit>`
+
+  ---
+
+- Then append each finding as exactly one H2 block:
+
+  ## [architecture] <short specific title>
+
+  **Severity**: <High|Medium|Low>
+
+  **Files**:
+  - `<path>:<line>` (concrete file:line, not vague)
+  - `<additional file>`
+
+  **Problem**:
+  <Why the current architecture causes friction — shallow module, leaky seam, missing locality, etc. Use the deletion test.>
+
+  **Fix**:
+  <Concrete deepening: what interface/seam changes, what moves where. Point at files.>
+
+  ---
+
+Hard rules:
+- Every finding MUST cite at least one concrete file:line. No vague "consider restructuring X" findings.
+- Heading text must be unique after slugify within a file. If a finding with the same slug already exists, skip it.
+- No YAML frontmatter in report files. Only reserved meta-H2s allowed: ## Summary, ## Already Resolved.
+- Do NOT fix anything. Do NOT edit source code. Your only writes are the report files under reports/.
+- When done, print a one-line summary: how many findings written across how many report files.'
+
+# Stage 1: run the arch scan headless. Skips by default if reports already
+# exist (avoids a duplicate expensive Opus pass on an accidental re-run).
+run_scan() {
+  ensure_reports_gitignored
+  if [[ "$RESCAN" == "1" ]]; then
+    log "SCAN --rescan: clearing prior reports/*.md"
+    local f
+    while IFS= read -r f; do [[ -n "$f" ]] && rm -f "$f"; done < <(report_files)
+  elif reports_exist_nonempty; then
+    log "SKIP stage 1 — reports already exist (use --rescan to force a fresh scan)"
+    return 0
+  fi
+
+  log "SCAN start model=$ARCH_FIND_MODEL repo=$REPO_ROOT"
+  local rc=0
+  ( cd "$REPO_ROOT" && claude -p "$STAGE1_PROMPT" \
+      --model "$ARCH_FIND_MODEL" \
+      --permission-mode bypassPermissions \
+      --output-format stream-json --verbose ) >>"$LOG" 2>&1 || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    die "stage 1 scan failed (claude rc=$rc; see $LOG)"
+  fi
+
+  local f n
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    n="$(count_open "$f")"
+    log "REPORT created $f findings=$n"
+  done < <(report_files)
+  reports_exist_nonempty || log "SCAN produced no report files (no findings)"
+}
+
+# Gate: tally open findings; stop unless --yes.
+gate() {
+  local total=0 f n
+  GATE_REPORTS=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    n="$(count_open "$f")"
+    (( n > 0 )) || continue
+    GATE_REPORTS+=("$f")
+    total=$((total + n))
+  done < <(report_files)
+
+  log "GATE ${total} open findings across ${#GATE_REPORTS[@]} report(s)"
+
+  if (( total == 0 )); then
+    log "DONE no open findings — nothing to address."
+    exit "$EXIT_SUCCESS"
+  fi
+
+  if [[ "$YES" != "1" ]]; then
+    log "GATE stopped (review reports, then re-run with --yes to address)"
+    local limflag=""
+    (( LIMIT > 0 )) && limflag=" --limit $LIMIT"
+    echo ""
+    echo "  Reports written:"
+    local r
+    for r in "${GATE_REPORTS[@]}"; do echo "    - $r"; done
+    echo ""
+    echo "  Next: $SCRIPT_NAME --yes${limflag} $REPO_ROOT"
+    exit "$EXIT_SUCCESS"
+  fi
+}
+
+# Stage 2: hand reports to the scheduler. Inherits CLAUDE_MODEL + MAX_PARALLEL
+# from the environment; passes --limit / --resume through.
+run_address() {
+  local -a sched_flags=()
+  [[ "$RESUME" == "1" ]] && sched_flags+=("--resume")
+  (( LIMIT > 0 )) && sched_flags+=("--limit" "$LIMIT")
+
+  log "STAGE2 handoff scheduler=$SCHEDULER reports=${#GATE_REPORTS[@]} flags=[${sched_flags[*]:-}]"
+
+  # Snapshot pre-run open counts for the manifest. Indexed array aligned to
+  # GATE_REPORTS by position (bash 3.2 — macOS default — has no associative
+  # arrays or namerefs). Global so `manifest` can read it without a nameref.
+  PRE_OPEN_BY_IDX=()
+  local i
+  for i in "${!GATE_REPORTS[@]}"; do
+    PRE_OPEN_BY_IDX[$i]="$(count_open "${GATE_REPORTS[$i]}")"
+  done
+
+  local rc=0
+  ( cd "$REPO_ROOT" && "$SCHEDULER" "${sched_flags[@]+"${sched_flags[@]}"}" "${GATE_REPORTS[@]}" ) || rc=$?
+
+  manifest "$rc"
+  return "$rc"
+}
+
+# Final manifest block: per report → addressed/remaining count, then per finding
+# → its PR# (scraped from the scheduler's "WORKER done <base>:<slug> #<pr>"
+# lines), then kept-worktree count. The per-finding PR attribution is the useful
+# audit unit — a flat PR list loses which finding shipped where.
+manifest() {
+  local rc="$1"
+  local sched_log="$REPORTS_DIR/.scheduler.log"
+  log "MANIFEST stage 2 finished (scheduler rc=$rc)"
+  local i f base post pre addressed line
+  for i in "${!GATE_REPORTS[@]}"; do
+    f="${GATE_REPORTS[$i]}"
+    base="$(basename "$f" .md)"
+    post="$(count_open "$f" 2>/dev/null || echo 0)"
+    pre="${PRE_OPEN_BY_IDX[$i]:-0}"
+    addressed=$(( pre - post ))
+    (( addressed < 0 )) && addressed=0
+    log "MANIFEST $(basename "$f") addressed=$addressed remaining=$post"
+    # Per-finding PR lines for this report's basename, e.g.
+    #   "WORKER done architecture-foo:leaky-seam #123 (pending ...)"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      log "MANIFEST   $line"
+    done < <(grep -oE "WORKER done ${base}:[^ ]+ #[0-9]+" "$sched_log" 2>/dev/null \
+               | sed -E 's/^WORKER done //' | sort -u || true)
+  done
+  local kept
+  kept="$(find "$REPO_ROOT/../.worktrees" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ' || echo 0)"
+  log "MANIFEST kept worktrees: $kept (run --cleanup to sweep)"
+  if (( rc == 0 )); then
+    log "DONE pipeline complete."
+  else
+    log "FAILED stage 2 reported failures — inspect $sched_log + kept worktrees."
+  fi
+}
+
+on_interrupt() {
+  local yesflag=""
+  [[ "$YES" == "1" ]] && yesflag=" --yes"
+  log "INTERRUPTED signal received — reports + worktrees left intact (resumable)"
+  log "INTERRUPTED resume with: $SCRIPT_NAME --resume${yesflag} ${REPO_ROOT:-$TARGET_ARG}"
+  exit "$EXIT_FAILURE"
+}
+
+main() {
+  parse_args "$@"
+  validate_env
+  trap on_interrupt INT TERM
+
+  if [[ "$CLEANUP" == "1" ]]; then
+    local -a rs=()
+    local f
+    while IFS= read -r f; do [[ -n "$f" ]] && rs+=("$f"); done < <(report_files)
+    if [[ ${#rs[@]} -eq 0 ]]; then
+      log "DONE cleanup: no report files to key worktrees off — nothing to sweep."
+      exit "$EXIT_SUCCESS"
+    fi
+    log "pipeline delegating --cleanup to scheduler for ${#rs[@]} report(s)"
+    ( cd "$REPO_ROOT" && "$SCHEDULER" --cleanup "${rs[@]}" )
+    exit "$EXIT_SUCCESS"
+  fi
+
+  run_scan
+  gate          # exits here unless --yes and there are open findings
+  run_address
+}
+
+main "$@"

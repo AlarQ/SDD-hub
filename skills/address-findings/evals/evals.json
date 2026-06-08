@@ -1,0 +1,27 @@
+{
+  "skill_name": "address-findings",
+  "notes": "Each eval runs the skill through its Implement+verify stage only (steps 1-3); review/ship stages are out of scope for the harness. Baseline = pre-TDD snapshot of the skill. Discriminating behavior: test-first for behavior-changing findings, no fake test for structure-only ones.",
+  "evals": [
+    {
+      "id": 0,
+      "name": "behavior-changing-bug",
+      "prompt": "Address the next finding in reports/findings.md.",
+      "expected_output": "Skill classifies the finding behavior-changing, writes a test asserting applyDiscount(100,20)===80 that FAILS before the code fix (red), then divides rate by 100 so it passes (green). Existing zero-discount test stays green. node --test passes.",
+      "files": ["fixtures/eval-A-bug"]
+    },
+    {
+      "id": 1,
+      "name": "structure-only-dup-delete",
+      "prompt": "Address the next finding in reports/findings.md.",
+      "expected_output": "Skill classifies the finding structure-only, deletes formatFullName, repoints greet.js at formatName, and relies on the existing suite (no new fake test added). node --test passes.",
+      "files": ["fixtures/eval-B-dupdelete"]
+    },
+    {
+      "id": 2,
+      "name": "refactor-flavored-behavior-change",
+      "prompt": "Address the next finding in reports/findings.md.",
+      "expected_output": "Despite the DRY/refactor phrasing, skill recognizes the consolidation changes the admin path's behavior (gains a length cap), classifies it behavior-changing, and writes a test pinning that the shared validator rejects >20-char usernames before consolidating. node --test passes.",
+      "files": ["fixtures/eval-C-refactor-behavior"]
+    }
+  ]
+}
