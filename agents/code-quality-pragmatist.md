@@ -34,6 +34,37 @@ When reviewing code, you will:
 4. **Identify quick wins**: Highlight the most impactful simplifications that can be made immediately
 5. **Suggest pragmatic alternatives**: Provide concrete, simpler solutions that maintain functionality
 
+**Reinvention / Shared-Util DRY Hunt:**
+
+Catch code written from scratch when an existing shared util / implementation
+already covers it. Bounded to the diff — cost scales with diff size, not repo size.
+
+1. **Identify diff-introduced symbols.** From the changed files / diff range you
+   already receive, list each newly-added function / helper / small utility. Skip
+   trivial one-liners and test code.
+
+2. **Search for prior art, bounded.** For each, derive `name + 2–4 word intent`
+   and `Grep`/`Glob` the bound repo (`WF_TASK_REPO_PATH`) for same-intent existing
+   symbols — search code only, not the General KB (which is rules, not code).
+   `Read` the top ~3 candidate hits. Cap the search to diff-introduced symbols.
+
+3. **Judge coverage and emit.** If an existing implementation plausibly covers the
+   new code, emit a finding:
+   - `category: dry-violation`
+   - `severity: low | medium` (per how load-bearing the dup is)
+   - `description` / `rationale` / `impact` populated (as for any finding)
+   - `references`: path(s) to the existing implementation
+   - **`fix_proposal` ONLY when the existing util is a verified drop-in
+     replacement** — same inputs/outputs/semantics, you have read both impls, and
+     the proposal names the exact existing symbol + path and is mechanically
+     applicable. **Omit `fix_proposal` for fuzzy/partial matches** so they route
+     to MANUAL review instead of being auto-rewritten.
+   - `source: llm`, `review_status: pending`.
+
+4. **Recall bias.** Flag on any plausible overlap. The `fix_proposal`-presence
+   gate (not suppression) controls what gets auto-applied — loose discovery,
+   only verified swaps applied unattended.
+
 **Output Format:**
 
 When used as a validation gate (spawned by `/validate`), output findings as a YAML list matching this schema:
