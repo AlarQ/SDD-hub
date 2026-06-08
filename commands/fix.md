@@ -73,13 +73,29 @@ All git ops, regression-test execution, lint, and ship steps below run inside `W
 
 Sections: `## Repro`, `## Root Cause`, `## Fix Plan`, `## Regression Test`.
 
-## Step 4 — Pre-fix test capture
+**Steps 4–5 are test-driven** — follow the `tdd` skill at `~/.claude/skills/tdd/SKILL.md` (tracer-bullet RED→GREEN, then refactor). A bug is one behavior: the regression test is the tracer bullet. RED = Step 4 (test fails), GREEN = Step 5 (minimal fix passes), then the refactor sub-step. The full multi-behavior backlog / planning gate from the skill does not apply here — `/fix` is single-behavior by design.
+
+## Step 4 — RED: pre-fix test capture
 
 Run the regression test and **assert it fails**. Capture stderr/stdout into `$fix_dir/pre-fix.log`. If the test passes pre-fix, abort: the test is wrong (does not actually exercise the bug). Loop back to Step 2.
 
-## Step 5 — Implement fix
+Once the test fails for the expected reason, emit:
 
-Apply the fix inline. Single branch `fix/<slug>` off `main`. No separate task files. Run regression test → must pass. Run lint.
+```bash
+bash ~/.claude/scripts/monitor.sh log_event "fixes/$slug" tdd_red "" \
+  "$(printf '{"behavior":"%s"}' "$regression_test")"
+```
+
+## Step 5 — GREEN + refactor: implement fix
+
+Apply the **minimal** fix inline — only enough to make the regression test pass, no speculative changes. Single branch `fix/<slug>` off `main`. No separate task files. Run regression test → must pass. Emit:
+
+```bash
+bash ~/.claude/scripts/monitor.sh log_event "fixes/$slug" tdd_green "" \
+  "$(printf '{"behavior":"%s"}' "$regression_test")"
+```
+
+**Refactor** (tdd skill §4): once GREEN, tidy the touched code — extract duplication, deepen the change behind a clean interface where natural. Rerun the regression test after each step; never refactor while RED. Then run lint.
 
 ## Step 6 — Validate
 

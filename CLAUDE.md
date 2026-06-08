@@ -232,11 +232,11 @@ Monitor events: `repo_bound`, `repo_missing`, `gate_repo_switch`.
 
 Standalone command for production bugs/regressions. Skips `/explore` and `/propose` entirely. Artifact: `specs/fixes/<slug>/fix.md` (frontmatter `type: fix`, sections: Repro, Root Cause, Fix Plan, Regression Test).
 
-Flow: `/fix <slug>` → BDD repro → spawn `ultrathink-debugger` for root cause → write `fix.md` → capture pre-fix test failure → apply fix → regression test must pass → lint + ground-rule-matched gates (skip Phase-2 agent gates by default unless diff touches auth/crypto/migrations) → `/ship` (PR title prefix `fix:`).
+Flow: `/fix <slug>` → BDD repro → spawn `ultrathink-debugger` for root cause → write `fix.md` → **test-driven via the `tdd` skill** (RED: pre-fix test must fail → GREEN: minimal fix, regression test must pass → refactor) → lint + ground-rule-matched gates (skip Phase-2 agent gates by default unless diff touches auth/crypto/migrations) → `/ship` (PR title prefix `fix:`). Steps 4–5 follow the `tdd` skill (`~/.claude/skills/tdd/SKILL.md`) by path-pointer, same mechanism as `/implement`; a bug is single-behavior so the regression test is the tracer bullet — no multi-behavior backlog or planning gate.
 
 No `design.md`, no `test-strategy`, no `/validate-impl`, no tier system. Use `task-manager.sh init-fix <slug>` to scaffold the artifact.
 
-Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
+Monitor events: `fix_started`, `fix_root_cause`, `tdd_red`, `tdd_green`, `fix_shipped`.
 
 ## Domain Docs (`CONTEXT.md` / `docs/adr/`)
 

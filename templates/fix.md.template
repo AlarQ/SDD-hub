@@ -31,5 +31,6 @@ Affected files:
 
 - Name: `<TEST_NAME>`
 - Location: `<path>`
-- Pre-fix behavior: **must fail** (captured in `pre-fix.log`)
-- Post-fix behavior: must pass
+- Pre-fix behavior: **must fail** (captured in `pre-fix.log`) — RED
+- Post-fix behavior: must pass — GREEN
+- Refactor: <none | what was tidied; regression test kept green>

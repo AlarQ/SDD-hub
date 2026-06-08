@@ -111,17 +111,18 @@ graph LR
 
 ### `/fix` — bug-fix flow
 
-Standalone entry. Bypasses `/explore`, `/propose`, `/validate-impl`, and the tier system. Artifact: `specs/fixes/<slug>/fix.md`.
+Standalone entry. Bypasses `/explore`, `/propose`, `/validate-impl`, and the tier system. Artifact: `specs/fixes/<slug>/fix.md`. Steps 4–5 are test-driven via the `tdd` skill (tracer-bullet RED→GREEN, then refactor).
 
 ```mermaid
 graph LR
     FIX["/fix &lt;slug&gt;"] --> REPRO[BDD repro]
     REPRO --> UD[ultrathink-debugger]
     UD --> FIXMD[write fix.md<br/>Root Cause + Fix Plan + Regression Test]
-    FIXMD --> PRE[pre-fix test<br/>must FAIL]
-    PRE --> APPLY[apply fix]
-    APPLY --> POST[regression test<br/>must PASS]
-    POST --> GATES[lint + ground-rule-matched gates<br/>Phase-2 agents skipped unless<br/>auth/crypto/migrations in diff]
+    FIXMD --> RED[RED: pre-fix test<br/>must FAIL<br/>emit tdd_red]
+    RED --> APPLY[apply minimal fix]
+    APPLY --> GREEN[GREEN: regression test<br/>must PASS<br/>emit tdd_green]
+    GREEN --> REFACTOR[refactor<br/>keep green]
+    REFACTOR --> GATES[lint + ground-rule-matched gates<br/>Phase-2 agents skipped unless<br/>auth/crypto/migrations in diff]
     GATES --> SH["/ship (PR title: fix:)"]
 ```
 

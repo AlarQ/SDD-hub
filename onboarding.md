@@ -367,19 +367,19 @@ Standalone command for production bugs, regressions, and hotfixes. Skips `/explo
 
 Scaffold via `task-manager.sh init-fix <slug>`.
 
-**Step list.**
+**Step list.** Steps 4–6 are test-driven via the `tdd` skill (`~/.claude/skills/tdd/SKILL.md`, by path-pointer like `/implement`); a bug is single-behavior, so the regression test is the tracer bullet — no multi-behavior backlog or planning gate.
 1. BDD repro captured into `fix.md`.
 2. Spawn `ultrathink-debugger` for root cause.
 3. Write `fix.md` (Root Cause + Fix Plan + Regression Test).
-4. Pre-fix test must fail (recorded).
-5. Apply fix.
-6. Regression test must pass.
+4. **RED** — pre-fix test must fail (recorded); emit `tdd_red`.
+5. **GREEN** — apply minimal fix; regression test must pass; emit `tdd_green`.
+6. **Refactor** — tidy the touched code, keep the regression test green.
 7. Lint + ground-rule-matched gates run. Phase-2 agent gates are skipped by default unless the diff touches auth/crypto/migrations.
 8. `/ship` with PR title prefix `fix:`.
 
 **Not run:** `/explore`, `/propose`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants a new general-KB rule).
 
-Monitor events: `fix_started`, `fix_root_cause`, `fix_shipped`.
+Monitor events: `fix_started`, `fix_root_cause`, `tdd_red`, `tdd_green`, `fix_shipped`.
 
 ## Multi-repo specs (vault mode)
 
