@@ -4,6 +4,7 @@ description: Reads repo signal files, gates registry, and agent pool to produce 
 color: blue
 emoji: 🔍
 vibe: Reads what's in the repo, infers what gates and agents make sense, proposes a config.
+model: sonnet
 ---
 
 # Config Inferencer Agent
