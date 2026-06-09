@@ -1,17 +1,18 @@
 ---
 name: address-findings
-description: Walk one finding from a violations/audit report (e.g. files under `reports/` like `dry-violations-*.md`, `docs-*.md`) through plan → implement → multi-agent review → ship. Use whenever the user says "address findings", "next finding", "process the report", "/address-findings", or hands over a report path containing H2 finding sections with severity/files/fix structure. Handles exactly one finding per invocation, marks it `— RESOLVED (YYYY-MM-DD)` in the source report (or deletes the report when that finding was the last open one), and ships via `/quick-ship`. Trigger even when the user only names a report file and asks to "work through it" or "knock out the next item".
+description: Walk one work unit (1+ related findings) from a violations/audit report (e.g. files under `reports/` like `dry-violations-*.md`, `docs-*.md`) through plan → implement → multi-agent review → ship. Use whenever the user says "address findings", "next finding", "process the report", "/address-findings", or hands over a report path containing H2 finding sections with severity/files/fix structure. Handles exactly one unit per invocation (the scheduler bundles duplicate/coupled findings into one unit), marks each member `— RESOLVED (YYYY-MM-DD)` in the source report (or deletes the report when those were the last open ones), and ships via `/quick-ship`. Trigger even when the user only names a report file and asks to "work through it" or "knock out the next item".
 ---
 
 # Address Findings
 
-Single-purpose orchestration skill: take a markdown report of findings/violations, pick the next un-done one, fully address it, and stop.
+Single-purpose orchestration skill: take a markdown report of findings/violations, pick the next un-done **work unit** (one finding, or a scheduler-bundled cluster of duplicate/coupled findings), fully address every member, and stop.
 
 ## Inputs
 
 - **Report path** — required, passed as arg or named in the user's message. Absolute or repo-relative path to a markdown file.
 - If no path supplied → ask user for it. Don't guess.
-- **`--finding <slug>`** — optional. When present, target the open H2 whose kebab-case slug matches `<slug>` (lowercase, non-alnum → `-`, trimmed). If no open H2 matches, abort with an explicit error (do NOT fall back to picking the first open finding). Used by `scripts/address-reports.sh` to assign a specific finding to a worker. When absent, behavior is unchanged: pick the first open H2 top-to-bottom.
+- **`--finding <report>:<slug>`** — optional and **repeatable**. Each occurrence names one member of the unit to address: the open H2 whose kebab-case slug matches `<slug>` (lowercase, non-alnum → `-`, trimmed) in the report at `<report>` (absolute or repo-relative path). A unit may span **two reports**, so the per-member `<report>` prefix is load-bearing — don't assume all members live in the report-path arg. Used by `scripts/address-reports.sh` to assign one work unit (1+ findings) to a worker. If **any** named member is missing or already RESOLVED, abort with an explicit error (do NOT fall back, do NOT partially address). When no `--finding` is given, behavior is unchanged: pick the first open H2 top-to-bottom as a single-member unit.
+- **`--finding <slug>` (bare, no `<report>:` prefix)** — back-compat form. Resolves against the single report-path arg. Same repeatable semantics as the prefixed form above.
 
 ## Report format assumptions
 
@@ -35,43 +36,43 @@ Execute these steps in order. Do not skip. Do not auto-advance past step 8.
 When in auto mode (env var `ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg), the following are **forbidden**. Treat as compiler errors — if you find yourself about to do any of these, STOP and skip the operation:
 
 1. **Do NOT read, write, edit, or `git add` the report file** beyond step 1's slug lookup. Specifically: no `Edit`, no `Write`, no shell `sed`/`awk` on the report path. The scheduler (`scripts/address-reports.sh`) is the sole writer of RESOLVED markers and runs in a separate process — any worker write races with sibling workers and corrupts shared state.
-2. **Do NOT re-invoke `/address-findings` for any other finding.** This skill processes exactly one finding per invocation. Step 8 is "stop"; obey it. The scheduler will start the next worker.
+2. **Do NOT re-invoke `/address-findings` for any other unit.** This skill processes exactly **one work unit (1+ findings) per invocation** — you address every member named by `--finding`, then stop. Do not reach for findings outside the named set. Step 8 is "stop"; obey it. The scheduler will start the next worker.
 3. **Do NOT interpret marks on other H2 headings as completion of your own finding.** Your finding is fixed when your code change is shipped (PR open) — not when you see somebody else's heading marked.
 
 Violating any of these will be caught by review; more importantly, it produces silently inconsistent reports.
 
-### 1. Locate next finding
+### 1. Locate the work unit's members
 
-Read the report. Scan H2 headings top-to-bottom.
+Read the report(s). Scan H2 headings top-to-bottom.
 
-- If invoked with `--finding <slug>`: compute the kebab-case slug of each open H2 (lowercase, non-alnum → `-`, trimmed) and pick the one matching `<slug>`. If no open H2 matches (not found, or already RESOLVED), abort with `ABORT: --finding <slug> not found among open H2 findings in <report>` — do NOT fall back.
-- Otherwise: the first heading that is NOT done = target. If none, tell user "All findings DONE in `<report>`" and stop.
+- If invoked with one or more `--finding <report>:<slug>` args: for **each** member, open its `<report>`, compute the kebab-case slug of each open H2 (lowercase, non-alnum → `-`, trimmed), and pick the one matching `<slug>`. Resolve **every** named member. If **any** member fails to resolve (not found, or already RESOLVED), abort the whole unit — do NOT fall back, and do NOT address the members that did resolve (no partial work units). On abort, first give the operator full context on the bad unit: quote the H2 headings of all members that DID successfully resolve (with each one's report basename), then name the offending `--finding <report>:<slug>` (and whether it was missing or already RESOLVED), e.g. `ABORT: --finding <report>:<slug> not found among open H2 findings (resolved members: "<heading>" in <basename>, ...)`. Abort the whole unit after stating this — no partial fix.
+- Otherwise: the first heading that is NOT done = a single-member unit. If none, tell user "All findings DONE in `<report>`" and stop.
 
-State which finding you picked (quote the heading) before continuing.
+State the unit you picked — quote **every** member heading (and its report basename when the unit spans reports) — before continuing.
 
 ### 2. Plan
 
-Extract the finding body. Produce a short plan:
-- Files to touch (only those named in the finding, unless the fix obviously requires a sibling file — call that out explicitly).
+Extract **every member's** body. Produce a short plan covering the whole unit:
+- Files to touch (only those named across the unit's members, unless the fix obviously requires a sibling file — call that out explicitly). For a duplicate/coupled unit the members overlap by construction; plan the single coordinated edit that resolves all of them.
 - Concrete change per file (1–2 lines each).
 - Verification command (e.g. `make check`, `cargo test -p <crate>`).
 
-**Classify the finding — this decides how step 3 runs.** A fix falls into one of two buckets, and the difference is whether a test can express what the fix changes:
+**Classify each member — this decides how step 3 runs.** A unit may mix buckets (one member behavior-changing, another structure-only); classify per member. A fix falls into one of two buckets, and the difference is whether a test can express what the fix changes:
 
 - **Behavior-changing** — corrects a bug, changes output/logic/validation, adds or removes a code path a caller can observe. A test can name the wrong behavior and assert the right one. Examples: off-by-one, wrong operator, missing null guard, incorrect status code, a regex that over-matches.
 - **Structure-only** — pure refactor, dead-code or duplicate-impl deletion, rename, move, comment/doc edit, config or formatting change. No observable behavior delta exists for a *new* test to pin; the existing suite is what proves you changed nothing.
 
-State the bucket in the plan (one word: `behavior-changing` or `structure-only`) and, for behavior-changing, name the test that will express the fix. When genuinely unsure, treat it as behavior-changing — a redundant test costs little; a silent behavior change costs a lot. This classification is a judgement call about *this* finding, not a label on the finding's category — a "DRY" finding that collapses two impls into one can be either, depending on whether the impls actually behaved identically.
+State the bucket per member in the plan (one word each: `behavior-changing` or `structure-only`) and, for each behavior-changing member, name the test that will express its fix. When genuinely unsure, treat it as behavior-changing — a redundant test costs little; a silent behavior change costs a lot. This classification is a judgement call about *this* finding, not a label on the finding's category — a "DRY" finding that collapses two impls into one can be either, depending on whether the impls actually behaved identically.
 
 Present via `ExitPlanMode`. If user rejects → exit, no changes.
 
 **Headless/auto mode**: if auto mode is active (env var `ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg, scheduler-driven, e.g. `scripts/address-reports.sh`), skip `ExitPlanMode` entirely — print the plan to stdout and proceed directly to step 3. No human is present to approve.
 
-**Scope discipline**: do not introduce new abstractions, helper modules, or refactors beyond what the finding requires. Repo `CLAUDE.md` and global code-quality rules forbid scope creep. A finding that says "delete two impls" means delete two impls — nothing else.
+**Scope discipline**: do not introduce new abstractions, helper modules, or refactors beyond what the unit requires. The budget is the **union of the members' stated scope** — nothing more. Repo `CLAUDE.md` and global code-quality rules forbid scope creep. A unit whose members say "delete two impls" means delete two impls — nothing else.
 
 ### 3. Implement
 
-How you implement depends on the bucket from step 2. The point of splitting them is that a test is only worth writing when it can fail for the right reason — that's what makes it evidence rather than decoration.
+Implement **all members of the unit in this one worktree** — one coordinated change set, one eventual PR. For a duplicate unit that is a single edit that satisfies every member; for a coupled unit it is the set of edits to the shared code; for a multi-member independent unit (rare — the scheduler usually splits those) address each in turn. How you implement each member depends on its bucket from step 2. The point of splitting buckets is that a test is only worth writing when it can fail for the right reason — that's what makes it evidence rather than decoration.
 
 **Behavior-changing → test-first (red → green → refactor).**
 
@@ -108,26 +109,27 @@ Spawn three agents in a **single message, three Agent tool calls** so they run c
 Each gets the same self-contained brief:
 
 ```
-Reviewing fix for a finding from <report path>.
+Reviewing the fix for a work unit (1+ related findings) from <report path(s)>.
 
-## Finding (verbatim)
-<paste H2 heading and full body>
+## Findings in this unit (verbatim)
+<paste EVERY member's H2 heading and full body; for a duplicate/coupled unit
+note the relationship — these were judged to share code>
 
 ## Files changed
 - <path>: <one-line summary of change>
 - ...
 
 ## Diff
-<paste `git diff` output, or if >300 lines, paste the command and a summary>
+<paste the combined `git diff` for the whole unit, or if >300 lines, paste the command and a summary>
 
 ## Your job
 Under 200 words. Focus only on this diff:
-1. Does it actually fix the finding?
+1. Does it actually fix every finding in the unit?
 2. Any correctness, security, or architecture concern specific to these changes?
-3. Any scope creep (changes unrelated to the finding)?
-4. If the fix changes behavior, is there a test that would fail without the code change (i.e. one that genuinely exercises the fix, not a trivial pass)? If it's a pure refactor/deletion, is existing coverage enough to trust it? Flag a missing or toothless test; don't demand a test for a finding where none is meaningful.
+3. Any scope creep (changes unrelated to the unit's findings)?
+4. For each member that changes behavior, is there a test that would fail without the code change (i.e. one that genuinely exercises the fix, not a trivial pass)? For pure refactor/deletion members, is existing coverage enough to trust it? Flag a missing or toothless test; don't demand a test for a finding where none is meaningful.
 
-Do not suggest broader refactors. Do not propose work outside this finding's stated scope.
+Do not suggest broader refactors. Do not propose work outside the unit's stated scope.
 ```
 
 ### 5. Address review feedback
@@ -141,13 +143,13 @@ Apply only the items the user agrees with (or, in auto mode, the clearly-correct
 
 **Auto mode (`ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg)**: SKIP THIS STEP ENTIRELY — including the last-finding check and any deletion. Do not open, mark, `git rm`, or `git add` the report; do not "preview the diff that would result". Proceed directly to step 7. The scheduler (`scripts/address-reports.sh`) owns all report bookkeeping — marking RESOLVED *and* removing a fully-resolved report — because it serializes those writes across parallel workers; a worker doing it races and corrupts the shared report. See Auto-mode hard rules above.
 
-**Interactive mode**: first decide whether this finding was the **last open one** in the report. After your target is resolved, scan every other H2 heading: if none remain open (all carry a done marker — `— RESOLVED`, `**Status**: done`, or legacy ` - DONE`), this was the last finding. Otherwise, open findings remain.
+**Interactive mode**: mark **every member of this unit** RESOLVED, then decide whether they were the **last open ones** in the report(s). After all of the unit's targets are resolved, scan every other H2 heading (in each touched report): if none remain open (all carry a done marker — `— RESOLVED`, `**Status**: done`, or legacy ` - DONE`), this was the last finding in that report. Otherwise, open findings remain.
 
-- **Open findings remain** → edit the report file: append `— RESOLVED (YYYY-MM-DD)` (em-dash + today's ISO date) to the target H2 heading. Preserve everything else.
+- **Open findings remain** → edit the report file(s): append `— RESOLVED (YYYY-MM-DD)` (em-dash + today's ISO date) to **each** member H2 heading. Preserve everything else.
 
   ```
-  git add <report path>
-  git commit -m "docs(findings): mark '<heading>' RESOLVED"
+  git add <report path(s)>
+  git commit -m "docs(findings): mark <N> finding(s) RESOLVED"
   ```
 
 - **This was the last open finding** → delete the whole report instead of marking it. A report with every finding resolved is spent — leaving an all-RESOLVED file behind is just stale clutter that the next scheduler/invocation has to scan and skip. Don't bother writing the RESOLVED marker first; the deletion supersedes it.
@@ -163,7 +165,7 @@ Commit the report change (mark or delete) **on its own**, before shipping the fi
 
 ### 7. Ship fix
 
-Invoke `/quick-ship` skill via the Skill tool to commit + push + open PR for the code fix. The commit/PR message should reference the finding's heading. The report bookkeeping commit from step 6 (RESOLVED marker, or the report deletion when this was the last finding) is included automatically since it's already on the branch.
+Invoke `/quick-ship` skill via the Skill tool to commit + push + open **one** PR for the whole unit's change set. The commit/PR body should **enumerate every finding addressed** (one line per member heading); for a duplicate/coupled unit, note that they were resolved together because they share code. The report bookkeeping commit from step 6 (RESOLVED markers, or the report deletion when these were the last findings) is included automatically since it's already on the branch.
 
 ### 8. Stop
 
@@ -184,7 +186,7 @@ Do not look for the next finding. Do not call `/address-findings` again. Do not 
 
 ## Notes
 
-- One finding per invocation is intentional — keeps review units small and ships incrementally.
+- One **work unit** per invocation is intentional — keeps review units small and ships incrementally. A unit is usually a single finding; the scheduler bundles **duplicate/coupled** findings into one unit because they share code and are best reviewed together (reviewing them apart would mean reviewing the same diff twice, or worse, two conflicting half-fixes).
 - The `— RESOLVED (YYYY-MM-DD)` suffix convention is load-bearing: future invocations and the `scripts/address-reports.sh` scheduler rely on it to skip completed work. Do not use a different marker. (Legacy ` - DONE` from older reports is recognised as done for back-compat, but new work always writes RESOLVED.)
 - A report is deleted once its **last** open finding is resolved (interactive mode, step 6). The whole point of these reports is to track outstanding work — an all-RESOLVED file is finished business, and keeping it around just makes every later scan re-read a file with nothing left to do. Deletion is the natural terminal state, not a marker. Only the final finding triggers it; earlier ones get the RESOLVED marker so siblings stay visible.
 - Reviewer parallelism matters for latency. Always single-message three-tool-call.

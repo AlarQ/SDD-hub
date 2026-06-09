@@ -2,3 +2,7 @@ initial-thoughts.md
 target/
 specs/*/reports/
 .monitor-context
+# address-reports.sh scheduler artifacts
+reports/.scheduler.log
+reports/.triage.json
+reports/.sessions/
