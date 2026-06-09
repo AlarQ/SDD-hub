@@ -9,7 +9,7 @@ Feature name: $ARGUMENTS
    - **`single-branch`**: there is no per-task PR, so `pr_url` is not the unshipped marker. Operate on the highest-numbered `done` task. "Shipped" here means *its commits are pushed on `feat/$ARGUMENTS`*; only the **final** task additionally opens the spec PR (see Step 7). Defer the commit-range / push state checks to Steps 1–3 below (which hard-refuse on absent `task_base_sha`) — do **not** evaluate `${task_base_sha}..HEAD` here, since an unset `task_base_sha` would expand to `..HEAD` and mislead `git log`. If, after Steps 1–3 confirm `task_base_sha`, the range is already pushed to `origin/feat/$ARGUMENTS` **and** this is not the last task, report "Already pushed; run `/implement $ARGUMENTS` for the next task" and stop.
 3. Verify all validation gates passed for this task: check `specs/$ARGUMENTS/reports/` for report files matching this task's ID
    - If any report has `status: findings` or `status: error`, refuse and say: "Validation gate(s) have unresolved findings or errors. Run `/review-findings $ARGUMENTS` first."
-   - If no reports directory exists or all reports show `status: pass` (or reports were already cleaned up by `/validate`), proceed
+   - If no reports directory exists or all reports show `status: pass`, proceed (reports are retained as an audit trail; their presence with `status: pass` is expected and does not block)
 4. If multiple unshipped `done` tasks exist, ship the lowest-numbered one first
 
 ## Step 0 — Load Spec Config

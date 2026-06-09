@@ -31,8 +31,7 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing. When implementation completes, stop and instruct: "Run `/validate $ARGUMENTS` next." |
 | `implemented`, no reports in `specs/$ARGUMENTS/reports/` for this task | Validation needed | Stop and instruct: "Run `/validate $ARGUMENTS` next." |
 | `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Stop and instruct: "Run `/review-findings $ARGUMENTS` next." |
-| `done`, reports still exist in `specs/$ARGUMENTS/reports/` (mining did not run) | Mining needed | Stop and instruct: "Run `/learn-from-reports $ARGUMENTS` next." |
-| `done`, no `pr_url` in task frontmatter | Ship needed | Stop and instruct: "Run `/ship $ARGUMENTS` next." |
+| `done`, no `pr_url` in task frontmatter | Mining + ship pending | Stop and instruct: "Run `/learn-from-reports $ARGUMENTS <task-id>` next; it chains to `/ship`." (Reports are now retained, so their presence no longer signals whether mining ran — re-running mining is idempotent: `rule_added:true` findings are skipped.) |
 | `done`, `pr_url` exists, PR state is `OPEN` | Merge needed | Remind: "Merge the PR, then run `/implement $ARGUMENTS` for the next task" |
 
 **`single-branch`** — there is no task sub-branch and no per-task PR; use `task_base_sha` (frontmatter) for start/mid detection:
@@ -43,8 +42,7 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, `${task_base_sha}..HEAD` has commits | Implementation (mid) | Stay on `feat/$ARGUMENTS`, continue coding/testing. When done, stop: "Run `/validate $ARGUMENTS` next." |
 | `implemented`, no reports for this task | Validation needed | Stop: "Run `/validate $ARGUMENTS` next." |
 | `implemented` or `review`, reports with actionable pending findings | Review findings | Stop: "Run `/review-findings $ARGUMENTS` next." |
-| `done`, reports still exist (mining did not run) | Mining needed | Stop: "Run `/learn-from-reports $ARGUMENTS` next." |
-| `done`, no `pr_url` (non-final task — normal under single-branch) | Ship needed | Stop: "Run `/ship $ARGUMENTS` next." (`/ship` handles last-vs-non-last: non-last pushes only, last opens the spec PR) |
+| `done`, no `pr_url` | Mining + ship pending | Stop: "Run `/learn-from-reports $ARGUMENTS <task-id>` next; it chains to `/ship`." (Reports are retained, so presence no longer signals whether mining ran — re-running mining is idempotent. `/ship` handles last-vs-non-last: non-last pushes only, last opens the spec PR.) |
 | `done`, final task, `pr_url` exists, spec PR `OPEN` | Merge spec PR | Remind: "Merge the spec PR into `main`, then the spec is shipped." |
 
 ## Steps

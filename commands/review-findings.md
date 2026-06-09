@@ -135,6 +135,6 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 
 ## Status Update
 
-Reports are NOT deleted here — `/learn-from-reports` mines them first and owns deletion.
+Reports are NOT deleted here — reports are retained (local audit trail); nothing deletes them anywhere. `/learn-from-reports` mines them in place.
 
-- Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS` next."
+- Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS <task-file id>` next." (pass the task-id so mining is scoped to this task)

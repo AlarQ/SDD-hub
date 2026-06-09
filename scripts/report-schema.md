@@ -78,4 +78,4 @@ Body MUST contain an FR matrix section: one row per FR, marked `implemented | pa
 
 1. `/validate` / `/validate-impl` write reports with `review_status: pending` on every finding.
 2. `/review-findings` mutates `review_status` to `accepted` / `rejected` / `noted` and may set `review_notes`, `rule_added`, `auto_accepted`.
-3. `/learn-from-reports` mines reports for KB rule patterns and owns deletion. Report deletion happens nowhere else.
+3. `/learn-from-reports` mines reports for KB rule patterns **in place** (scoped by task-id). Reports are **retained** as a local audit trail — never deleted, here or anywhere else.

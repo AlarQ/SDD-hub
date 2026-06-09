@@ -1,10 +1,11 @@
 Mine validation reports for patterns worth promoting into the general knowledge base.
 
-Feature name: $ARGUMENTS
+Feature name: $1
+Task id: $2 (optional)
 
 ## Purpose
 
-Cross-finding pattern mining that complements `/review-findings` step 4 (inline rule creation on reject). This command runs after `/review-findings` completes — or after `/validate` produces zero findings — and before reports are deleted. It surfaces rule candidates the user did not flag in-flow: repeated categories, clustered LLM findings, rejection reasoning worth codifying, and accepted fixes describing a generalizable convention. Accepted candidates become new general knowledge-base rules so the same class of finding does not recur in future tasks.
+Cross-finding pattern mining that complements `/review-findings` step 4 (inline rule creation on reject). This command runs after `/review-findings` completes — or after `/validate` produces zero findings. Reports are **retained** (local audit trail); this command mines them in place. It surfaces rule candidates the user did not flag in-flow: repeated categories, clustered LLM findings, rejection reasoning worth codifying, and accepted fixes describing a generalizable convention. Accepted candidates become new general knowledge-base rules so the same class of finding does not recur in future tasks.
 
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules.
@@ -13,7 +14,7 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
 
 ## Steps
 
-1. **Load reports.** Read all YAML files in `specs/$ARGUMENTS/reports/`. If the directory is missing or empty, skip to step 6 (deletion is still centralized here).
+1. **Load reports.** Load only the current task's per-task reports — `specs/$1/reports/<task-id>-*.yaml`. Resolve `<task-id>` from arg `$2`; if absent, fall back to the `task_id` of the most-recently-modified per-task report in `specs/$1/reports/` (exclude spec-level reports `spec-audit-*`/`spec-consistency.yaml`, which carry no task-id prefix). If no per-task reports exist, skip to step 6.
 
 2. **Collect findings.** Flatten all findings across all report files. Annotate each with its source report path and gate. Skip findings where `rule_added: true` (already handled inline by `/review-findings`). Also skip findings where `auto_accepted: true` — these are mechanical auto-bucket fixes (style/formatting/unused-import/dry-violation/coverage), low-signal for KB-rule mining.
 
@@ -43,21 +44,10 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
    - Update `$WF_GENERAL_KB/_index.md` with the new or updated rule entry.
    - Set `rule_added: true` on all source findings in their report YAML files (use `yq` to preserve schema).
 
-6. **Delete per-task reports.** Scoped delete — preserve spec-level reports (`spec-audit-*.md` from `/validate-impl`, `spec-consistency.yaml` from `/propose`) which audit the whole spec and remain valid across tasks; only rotate per-task gate reports:
+> **Reports are retained.** Nothing is deleted here (or anywhere) — reports persist on disk as a local audit trail for the spec's lifetime. Mining is scoped to the resolved task-id via the step 1 load filter, not enforced by deletion.
 
-   ```bash
-   find specs/$ARGUMENTS/reports -maxdepth 1 -type f \
-     ! -name 'spec-audit-*.md' \
-     ! -name 'spec-consistency.yaml' \
-     -delete
-   ```
-
-   Deletion is centralized here so both the `/review-findings` path and the `/validate` zero-findings path converge through mining first. Spec-level reports are owned by the `/validate-impl` and `/propose` lifecycles, not per-task cleanup.
-
-   **Guard.** If no per-task reports existed on entry to step 1 (i.e., this command had nothing to mine — count files matching `<task-id>-<gate>.yaml`, excluding spec-level reports), warn before deleting: `WARNING: no per-task reports on entry — possible rogue deletion upstream (only /learn-from-reports may delete per-task reports). Check git/archived dirs before continuing.` Still proceed with the (no-op) cleanup, but surface the anomaly so the user can investigate.
-
-7. **Report summary.** "Mined N findings: C candidates proposed, A accepted, R rejected, E edited. Reports deleted."
+6. **Report summary.** "Mined N findings: C candidates proposed, A accepted, R rejected, E edited."
 
 ## Next Step
 
-After step 7 completes, stop and instruct the user: "Mining done. Run `/ship $ARGUMENTS` next."
+After step 6 completes, stop and instruct the user: "Mining done. Run `/ship $1` next."

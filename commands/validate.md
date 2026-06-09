@@ -246,8 +246,8 @@ Before determining the final status, verify ALL gates produced a report:
 - If zero findings across all gates and all gates have `status: pass`:
   1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
   2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
-  3. Do NOT delete reports here — `/learn-from-reports` mines passing reports for borderline LLM advisories and owns deletion.
-  4. Stop and instruct the user: "All gates pass. Run `/learn-from-reports $ARGUMENTS` next."
+  3. Do NOT delete reports here — reports are retained (local audit trail); nothing deletes them. `/learn-from-reports` mines passing reports for borderline LLM advisories in place.
+  4. Stop and instruct the user: "All gates pass. Run `/learn-from-reports $ARGUMENTS <task-id>` next." (pass the task-id resolved above so mining is scoped to this task)
 
 Report schema: see `~/.claude/scripts/report-schema.md`. All findings written here use `review_status: pending`; tool gates set `source: tool`, advisory agents set `source: llm`.
 
