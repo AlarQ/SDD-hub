@@ -192,9 +192,10 @@ count_open() {
   '
 }
 
-# Glob of real report files (exclude dotfiles like .scheduler.log/.pipeline.log).
+# Glob of real report files (exclude dotfiles like .scheduler.log/.pipeline.log
+# and the authoring template _TEMPLATE.md, whose placeholder H2s are not findings).
 report_files() {
-  find "$REPORTS_DIR" -maxdepth 1 -type f -name '*.md' ! -name '.*' 2>/dev/null | sort
+  find "$REPORTS_DIR" -maxdepth 1 -type f -name '*.md' ! -name '.*' ! -name '_TEMPLATE.md' 2>/dev/null | sort
 }
 
 reports_exist_nonempty() {

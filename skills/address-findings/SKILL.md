@@ -64,7 +64,7 @@ Extract **every member's** body. Produce a short plan covering the whole unit:
 
 State the bucket per member in the plan (one word each: `behavior-changing` or `structure-only`) and, for each behavior-changing member, name the test that will express its fix. When genuinely unsure, treat it as behavior-changing — a redundant test costs little; a silent behavior change costs a lot. This classification is a judgement call about *this* finding, not a label on the finding's category — a "DRY" finding that collapses two impls into one can be either, depending on whether the impls actually behaved identically.
 
-Present via `ExitPlanMode`. If user rejects → exit, no changes.
+Present via `ExitPlanMode`. If user rejects → exit, no changes. If the plan concludes the finding warrants **no code change** (the suggested fix is wrong/harmful/not worth it), do not silently stop — that path is **step 5b (won't-fix)**, and it still requires the step-4 review to confirm before exiting.
 
 **Headless/auto mode**: if auto mode is active (env var `ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg, scheduler-driven, e.g. `scripts/address-reports.sh`), skip `ExitPlanMode` entirely — print the plan to stdout and proceed directly to step 3. No human is present to approve.
 
@@ -139,6 +139,22 @@ Consolidate the three reports. Surface to user as a short list:
 
 Apply only the items the user agrees with (or, in auto mode, the clearly-correct correctness/security items; punt taste calls to user). Re-run verification.
 
+### 5b. Won't-fix (no code change warranted) — terminal
+
+A finding can legitimately resolve to **no code change**: on inspection the report's suggested fix is wrong, harmful, or not worth it, **and** the step-4 review is **unanimous** (all three reviewers) that the current code is correct as-is — e.g. "idiomatic, no viable abstraction", "the duplication is cosmetic, not behavioral, and an abstraction would fight the type system". This is a real disposition, **not** an escape hatch. It requires the three-reviewer consensus from step 4 — if you reach this conclusion earlier (at step 2 plan time), you must still run step 4's review to confirm before taking this exit. A finding you merely find tedious is **not** won't-fix; only unanimous "the code is right as written" qualifies.
+
+When the unit is won't-fix:
+
+- **Auto mode (`ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg)**: write a `WONTFIX` sentinel file in the worktree root (current working directory) whose **first line** is a one-sentence rationale citing the reviewer consensus, then **STOP**. Do NOT call `/quick-ship`; do NOT read, edit, or `git add` the report. The scheduler (`scripts/address-reports.sh`) consumes `WONTFIX`, marks every member H2 `— RESOLVED (YYYY-MM-DD, wontfix)`, and drops the worktree — same bookkeeping ownership as the PR path (see Auto-mode hard rules). Write it with a literal command, not prose:
+
+  ```
+  printf '%s\n' 'Idiomatic Axum — each handler carries distinct command/repo/response types; no viable abstraction (3-reviewer consensus).' > WONTFIX
+  ```
+
+  This is the only sanctioned no-PR success exit in auto mode. Without the `WONTFIX` sentinel, a worker that ships no PR is treated as **FAILED** and its worktree kept for inspection — so a genuine won't-fix MUST write the file, and a worker that just gave up MUST NOT.
+
+- **Interactive mode**: surface the won't-fix rationale to the user via `AskUserQuestion` and let them choose (a) **accept won't-fix** → mark every member H2 `— RESOLVED (YYYY-MM-DD, wontfix)` using step 6's interactive mechanics (commit the report change), skip step 7 (no PR); or (b) **implement anyway** → return to step 3. Never write a `WONTFIX` file in interactive mode — that sentinel is scheduler-only.
+
 ### 6. Mark RESOLVED + commit report
 
 **Auto mode (`ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg)**: SKIP THIS STEP ENTIRELY — including the last-finding check and any deletion. Do not open, mark, `git rm`, or `git add` the report; do not "preview the diff that would result". Proceed directly to step 7. The scheduler (`scripts/address-reports.sh`) owns all report bookkeeping — marking RESOLVED *and* removing a fully-resolved report — because it serializes those writes across parallel workers; a worker doing it races and corrupts the shared report. See Auto-mode hard rules above.
@@ -179,6 +195,7 @@ Do not look for the next finding. Do not call `/address-findings` again. Do not 
 | No open findings (at step 1) | Report "all RESOLVED", stop. (A spent report should already be deleted by step 6 of the prior run; if one lingers, point it out.) |
 | Target was the last open finding | Interactive: `git rm` the report instead of marking it (step 6). Auto: scheduler handles deletion — worker does nothing. |
 | Verification fails after implementation | Stop, surface error, do not review/ship |
+| Plan/review concludes no code change warranted (unanimous) | Step 5b won't-fix. Auto: write `WONTFIX` sentinel (rationale line 1), stop — scheduler marks RESOLVED (wontfix). Interactive: ask user via `AskUserQuestion`. |
 | User rejects plan in step 2 | Exit cleanly, no file changes |
 | Finding body lacks `**Files**` | Ask user to clarify scope before planning |
 | Reviewer flags genuine bug | Fix before shipping; re-run verification |

@@ -767,11 +767,17 @@ pin_base() {
 }
 
 # Append " — RESOLVED (YYYY-MM-DD, #PR)" to the H2 at given line in the report.
+# The sentinel "wontfix" (worker + reviewers agreed no code change is warranted)
+# yields " — RESOLVED (YYYY-MM-DD, wontfix)" instead of a #PR ref.
 # Scheduler-only writer → no concurrency.
 mark_resolved() {
   local report_abs="$1" lineno="$2" pr="$3" today suffix tmp
   today="$(date -u +%Y-%m-%d)"
-  suffix=" — RESOLVED (${today}, #${pr})"
+  if [[ "$pr" == "wontfix" ]]; then
+    suffix=" — RESOLVED (${today}, wontfix)"
+  else
+    suffix=" — RESOLVED (${today}, #${pr})"
+  fi
   tmp="$(mktemp)"
   if awk -v ln="$lineno" -v sfx="$suffix" 'NR==ln {print $0 sfx; next} {print}' "$report_abs" >"$tmp" \
     && mv "$tmp" "$report_abs"; then
@@ -803,6 +809,7 @@ extract_pr_num_from_gh() {
 # (would race with sibling workers). Writes a status sentinel for the
 # scheduler to consume post-wait.
 #   success → $SESSIONS_DIR/<slug>.success containing "<lineno> <pr>"
+#   wontfix → skill wrote $wt/WONTFIX; sentinel carries "<lineno> wontfix" (no PR)
 #   failure → no .success file; worktree kept with FAILED marker
 run_worker() {
   local idx="$1" slug="$2" heading="$3" lineno="$4"
@@ -869,6 +876,20 @@ run_worker() {
     log "FAILED $tag (claude rc=$rc; worktree kept at $wt; log $session_log)"
     touch "$wt/FAILED"
     return 1
+  fi
+
+  # Won't-fix lane: the skill reached a terminal "no code change warranted"
+  # disposition (plan or unanimous review) and wrote $wt/WONTFIX with the
+  # rationale on line 1. This is a clean resolution, not a failure — there is no
+  # PR by design. Mark the unit RESOLVED (wontfix) and drop the worktree. Drop
+  # the sentinel file first so the worktree is clean for `worktree remove`.
+  if [[ -f "$wt/WONTFIX" ]]; then
+    local reason
+    reason="$(head -n1 "$wt/WONTFIX" 2>/dev/null)"
+    rm -f "$wt/WONTFIX"
+    printf '%s wontfix\n' "$lineno" >"$SESSIONS_DIR/${idx}-${slug}.success"
+    log "WORKER done $tag (wontfix: ${reason:-no rationale given}; pending scheduler mark + cleanup)"
+    return 0
   fi
 
   pr="$(extract_pr_num "$session_log")"
@@ -1121,6 +1142,10 @@ main() {
   for idx in "${!REPORT_ABS_BY_IDX[@]}"; do
     report_abs="${REPORT_ABS_BY_IDX[$idx]}"
     report_base="${REPORT_BASE_BY_IDX[$idx]}"
+    if [[ "$(basename "$report_abs")" == "_TEMPLATE.md" ]]; then
+      log "REPORT skip $report_base (authoring template, not a real report)"
+      continue
+    fi
     per_report="$(parse_open_findings "$report_abs")"
     if [[ -z "$per_report" ]]; then
       log "REPORT skip $report_base (no open findings)"
