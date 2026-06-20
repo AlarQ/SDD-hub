@@ -418,7 +418,7 @@ cmd_set_status() {
 }
 
 # Write pr_url to task frontmatter atomically. Used by /implement (draft PR open)
-# and /ship (fallback PR create). Validates basic URL shape; idempotent overwrite.
+# and the shared ship procedure (fallback PR create). Validates basic URL shape; idempotent overwrite.
 cmd_set_pr_url() {
   local file="${1:-}" url="${2:-}"
   [ -z "$file" ] || [ -z "$url" ] && die "Usage: task-manager.sh set-pr-url <task-file> <url>"

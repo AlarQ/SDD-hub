@@ -56,7 +56,7 @@
 #                   PR (base feat/$FEATURE).
 #   single-branch = one feat/$FEATURE branch off main; no per-task sub-branch;
 #                   commits accumulate; no per-task PR. One spec PR opened/
-#                   readied at the final /ship (base main). For tightly-coupled
+#                   readied at the final task's inline ship (base main). For tightly-coupled
 #                   refactors/spikes where per-task PR overhead is unwanted.
 #                   TDD red/green/refactor commits preserved (no squash).
 

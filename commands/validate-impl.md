@@ -36,7 +36,7 @@ bash ~/.claude/scripts/monitor.sh log_event "$ARGUMENTS" validate_impl_skipped "
   '{"reason":"tier_small"}'
 ```
 
-Print: "Spec tier is `small` — `/validate-impl` skipped. Mark spec `done` directly and run `/ship`." Exit 0.
+Print: "Spec tier is `small` — `/validate-impl` skipped. Each task already shipped at its own `/validate` / `/review-and-ship`; mark the spec `done` and merge the open task PR(s)." Exit 0.
 
 ## Step 1 — Emit `spec_audit_start`
 
@@ -141,7 +141,7 @@ wf_vi_emit_done "$ARGUMENTS" "$verdict" "$report_path"
 ## Step 6 — Verdict Routing
 
 - `verdict: complete` → `wf_vi_set_spec_shipped "$spec_dir"` then `wf_vi_emit_complete "$ARGUMENTS"`.
-- `verdict: reopen` → `wf_vi_emit_reopen "$ARGUMENTS"`. Hand the report path to `/review-findings $ARGUMENTS`. Each `missing` / `partial` FR row in the report becomes one review unit; **Accept** invokes `task-manager.sh create-followup "$ARGUMENTS" <FR-id> "<description>"`, which fail-closes on unknown FR ids and inherits ground_rules from `spec.md`. After the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` (because the most-recent guard event is `spec_reaudit_requested`, not `spec_audit_done`) and `/validate-impl` runs again — cycle converges when verdict = `complete`.
+- `verdict: reopen` → `wf_vi_emit_reopen "$ARGUMENTS"`. Hand the report path to `/review-and-ship $ARGUMENTS` (spec-level triage — no task is at status `review`, so its ship tail is a no-op; it only creates follow-up tasks). Each `missing` / `partial` FR row in the report becomes one review unit; **Accept** invokes `task-manager.sh create-followup "$ARGUMENTS" <FR-id> "<description>"`, which fail-closes on unknown FR ids and inherits ground_rules from `spec.md`. After the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` (because the most-recent guard event is `spec_reaudit_requested`, not `spec_audit_done`) and `/validate-impl` runs again — cycle converges when verdict = `complete`.
 
 ## Notes
 

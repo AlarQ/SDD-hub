@@ -43,16 +43,16 @@ Flag any unhealthy states that need human attention:
 - **Deadlocked**: All remaining tasks are `blocked` with none `todo` or `in-progress` — nothing can progress. Suggest: "Check dependency IDs for errors. A task may reference a non-existent dependency."
 - **Orphan dependency**: A task's `blocked_by` references an ID that doesn't exist in any task file. Suggest: "Fix the `blocked_by` field — ID not found."
 - **Circular dependency**: Tasks that form a cycle where A blocks B blocks A (directly or transitively). Suggest: "Break the cycle by removing one dependency."
-- **Unvalidated work**: Tasks stuck at `implemented` or `review` — blocking further implementation. Suggest: "Run `/validate $ARGUMENTS`" or "Run `/review-findings $ARGUMENTS`."
+- **Unvalidated work**: Tasks stuck at `implemented` or `review` — blocking further implementation. Suggest: "Run `/validate $ARGUMENTS`" or "Run `/review-and-ship $ARGUMENTS`."
 - **Blocked by non-done**: A `blocked` task whose dependencies are all present but some are stuck at unhealthy statuses themselves (not progressing toward `done`).
 
 If no health issues are found, say: "No health issues detected."
 
 ### 6. Suggest next action
 Based on the current state, suggest what the user should do next:
-- If a task is `implemented` or `review`: "Run `/validate $ARGUMENTS`" or "Run `/review-findings $ARGUMENTS`"
+- If a task is `implemented` or `review`: "Run `/validate $ARGUMENTS`" or "Run `/review-and-ship $ARGUMENTS`"
 - If a task is `todo` and none is `in-progress`: "Run `/implement $ARGUMENTS`"
-- If all tasks are `done`: "All tasks complete! Create the final PR: `gh pr create --base main`"
+- If all tasks are `done`: "All tasks complete and shipped (each `done` task shipped inline — PR ready). Merge the open PR(s). On `single-branch` the final task's inline ship already opened the spec PR → `main`. For `medium`/`large` specs, run `/validate-impl $ARGUMENTS` for the final completion audit."
 - If deadlocked or stuck: Explain what manual fix is needed
 
 ## Output format

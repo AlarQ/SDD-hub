@@ -11,9 +11,9 @@ Visual map of the spec-driven development workflow: slash commands, agent spawns
 
 ## 1. Command Chain
 
-Each command runs only when the user invokes it. There is no auto-chaining between slash commands — every command terminates after its own work and prints the next command to run. The per-task sequence is `/implement` (opens draft PR) → `/pr-review` (optional; loops until PR comments resolved) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship` (marks draft PR ready). Human gates appear at PR comment review (on GitHub), finding review, rule-candidate review, and PR merge. Side commands (`/spec-status`, `/continue-task`, etc.) are invokable anytime.
+Each command runs only when the user invokes it. There is no auto-chaining between slash commands — every command terminates after its own work and prints the next command to run. **Shipping is a shared inline procedure (`scripts/ship-procedure.md`), not a command** — it runs inline at the two terminal points of the per-task flow, so the "no auto-chaining" rule still holds. The per-task sequence is `/implement` (opens draft PR) → `/pr-review` (optional; loops until PR comments resolved) → `/validate` (zero findings → ships inline, marks PR ready) → (`/review-and-ship` if findings — addresses them, then ships inline) → `/learn-from-reports` (final manual step; task already shipped) → merge PR → `/implement` (next task). Reaching `done` coincides with shipping. Human gates appear at PR comment review (on GitHub), finding review, rule-candidate review, and PR merge. Side commands (`/spec-status`, `/continue-task`, etc.) are invokable anytime.
 
-When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event. `/implement` surfaces this event and instructs the user to run `/validate-impl` (implementation-completion audit via Odium, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec shipped; verdict `reopen` routes through `/review-findings`, where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
+When the last task in a spec transitions to `done`, `task-manager.sh` emits a `spec_last_task_done` event. `/implement` surfaces this event and instructs the user to run `/validate-impl` (implementation-completion audit via Odium, per ADR-008 of the configurable-workflow spec). Audit verdict `complete` marks the spec done; verdict `reopen` routes through `/review-and-ship` (spec-level triage — no task in `review`, so its ship tail is a no-op), where each accepted `missing`/`partial` FR finding invokes `task-manager.sh create-followup` to auto-create a `status: todo` follow-up task (FR id validated against `spec.md`, ground_rules inherited from the spec). When the follow-up tasks reach `done`, the T015 detector re-fires `spec_last_task_done` if the user has appended a `spec_reaudit_requested` sentinel via `/validate-impl --reaudit` (event log is append-only — prior `spec_audit_done` is never mutated). Cycle converges when verdict = `complete`.
 
 Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and the gate union runs once inside `/validate-impl`.
 
@@ -21,7 +21,7 @@ Under `validate_scope: per-spec` (ADR-007), per-task `/validate` is skipped and 
 
 `/explore` step 0 also sets `WF_SPEC_TRACK` (`feature` default | `technical`), orthogonal to tier. On the **technical track** `/propose` writes **tasks/ only at every tier** (no spec.md/design.md/test-strategy.md; rationale comes from `docs/adr/` + `CONTEXT.md`), and hard-refuses for `medium`/`large` until the `/explore` Step −1 grill pass has produced a non-empty `docs/adr/` (`small` is exempt). Per-task `technical_acceptance` seeds the `/implement` TDD backlog; `/validate-impl` adds an advisory finding if those items lack red→green evidence. All other flow (validate gates, state machine, ship) is unchanged.
 
-`/explore` step 0 also sets `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`), orthogonal to tier/track. Under **per-task** the chain is unchanged: per-task sub-branch, draft PR, `/pr-review`, one PR per task into `feat/$FEATURE`. Under **single-branch** there is no per-task sub-branch and **no draft PR** — `/implement` → `tier-check` → `/validate` directly (no DPR/PRR node); commits accumulate on `feat/$FEATURE` with a per-task `task_base_sha`; the serial gate is "preceding task `done`". On a **non-last** task `/ship` only pushes (`/ship` → `/implement` next); on the **last** task `/ship` opens/readies **one spec PR with base `main`**. `/pr-review` mid-spec is an intended clean dead-end. See `docs/adr/0003-branch-strategy.md`. (ADR-0003)
+`/explore` step 0 also sets `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`), orthogonal to tier/track. Under **per-task** the chain is unchanged: per-task sub-branch, draft PR, `/pr-review`, one PR per task into `feat/$FEATURE`. Under **single-branch** there is no per-task sub-branch and **no draft PR** — `/implement` → `tier-check` → `/validate` directly (no DPR/PRR node); commits accumulate on `feat/$FEATURE` with a per-task `task_base_sha`; the serial gate is "preceding task `done`". On a **non-last** task the inline ship only pushes (→ `/implement` next); on the **last** task it opens/readies **one spec PR with base `main`**. `/pr-review` mid-spec is an intended clean dead-end. See `docs/adr/0003-branch-strategy.md`. (ADR-0003)
 
 ```mermaid
 graph LR
@@ -48,9 +48,9 @@ graph LR
         TCHK{tier-check.sh}
         PROMO["/promote-tier"]
         VAL["/validate"]
-        REV["/review-findings"]
+        REV["/review-and-ship"]
+        SHIPPROC(["ship procedure (inline)<br/>commit · push · mark PR ready"])
         LEARN["/learn-from-reports"]
-        SHIP["/ship<br/>(mark PR ready)"]
     end
 
     subgraph Audit["Implementation-completion audit"]
@@ -82,15 +82,15 @@ graph LR
     PRR -->|re-loop / new comments| PRR
     PRR --> VAL
     VAL -->|findings| REV
-    VAL -->|zero findings| LEARN
-    VAL -.->|small: lint+tests only| LEARN
-    VAL -.->|scope=per-spec: zero-gates pass report| LEARN
-    REV --> LEARN
-    LEARN --> SHIP
-    SHIP -.->|per-task: PR merged| IMPL
-    SHIP -->|single-branch: non-last task, push only| IMPL
-    SHIP -.->|single-branch: last task| SBPR2["spec PR → main<br/>opened/readied once"]
+    VAL -->|zero findings| SHIPPROC
+    VAL -.->|small: lint+tests only| SHIPPROC
+    VAL -.->|scope=per-spec: zero-gates pass report| SHIPPROC
+    REV -->|task was at review| SHIPPROC
+    SHIPPROC --> LEARN
+    SHIPPROC -.->|single-branch: last task| SBPR2["spec PR → main<br/>opened/readied once"]
     SBPR2 -.->|merged| Core
+    LEARN -.->|per-task: PR merged| IMPL
+    LEARN -->|single-branch: non-last task| IMPL
     IMPL -.->|medium/large: last task done| VIMPL
     IMPL -.->|small: skip audit| Core
     VIMPL --> ODIUM
@@ -104,7 +104,7 @@ graph LR
     CONT -.-> VAL
     CONT -.-> REV
     CONT -.-> LEARN
-    CONT -.-> SHIP
+    CONT -.-> SHIPPROC
     CONT -.-> PRR
     STAT -.-> Core
 ```
@@ -123,7 +123,7 @@ graph LR
     APPLY --> GREEN[GREEN: regression test<br/>must PASS<br/>emit tdd_green]
     GREEN --> REFACTOR[refactor<br/>keep green]
     REFACTOR --> GATES[lint + ground-rule-matched gates<br/>Phase-2 agents skipped unless<br/>auth/crypto/migrations in diff]
-    GATES --> SH["/ship (PR title: fix:)"]
+    GATES --> SH["/quick-ship (PR title: fix:)"]
 ```
 
 ---
@@ -141,9 +141,9 @@ stateDiagram-v2
     todo --> in_progress: /implement start
     in_progress --> implemented: code written
     implemented --> review: /validate (findings)
-    implemented --> done: /validate (zero findings)
-    review --> done: /review-findings
-    done --> [*]: /ship PR merged
+    implemented --> done: /validate (zero findings, ships inline)
+    review --> done: /review-and-ship (ships inline)
+    done --> [*]: PR merged
 ```
 
 ---
@@ -226,7 +226,7 @@ graph TB
         end
         subgraph GitSB["single-branch"]
             SBC[commits accumulate on feat/$FEATURE<br/>task_base_sha per task]
-            SBPR[one spec PR → main<br/>opened at final /ship only]
+            SBPR[one spec PR → main<br/>opened at final task's inline ship only]
         end
         FEAT --> TBR
         FEAT --> SBC
@@ -275,27 +275,29 @@ graph TB
     SBC --> VA
     TBR --> VA["/validate"]
     VA --> REPORTS
-    REPORTS --> RF["/review-findings"]
+    REPORTS --> RF["/review-and-ship"]
     RF -.->|inline new rules| GKB
     REPORTS --> LFR["/learn-from-reports"]
     LFR -.->|mined new rules| GKB
 
-    TBR --> SH["/ship"]
-    SBC --> SH
-    SNAP -.->|drift check| SH
-    SH -->|per-task| PR
-    SH -.->|single-branch: last task only| SBPR
+    TBR --> SHP(["ship procedure (inline)"])
+    SBC --> SHP
+    VA -.->|zero findings: ship inline| SHP
+    RF -.->|task at review: ship inline| SHP
+    SNAP -.->|drift check| SHP
+    SHP -->|per-task| PR
+    SHP -.->|single-branch: last task only| SBPR
     PR --> FEAT
     WTRP -.->|git -C scoped| IM
     WTRP -.->|gates cd into| VA
-    WTRP -.->|gh pr in this repo only| SH
+    WTRP -.->|gh pr in this repo only| SHP
 ```
 
 ---
 
 ## 5. Command → Agent Spawns
 
-One diagram per command. Solid arrow = always spawned. Dashed arrow = conditional (keyword/context-triggered or error-triggered). Agents listed only for commands that spawn them — other commands (`/bootstrap`, `/ship`, `/quick-ship`, `/spec-status`, `/continue-task`, `/research`, `/workflow-summary`) do not spawn agents directly. `/review-findings` spawns background sub-agents to apply accepted fix groups in parallel (not shown as a separate diagram — the agents are generic fix-appliers, not role-specialized).
+One diagram per command. Solid arrow = always spawned. Dashed arrow = conditional (keyword/context-triggered or error-triggered). Agents listed only for commands that spawn them — other commands (`/bootstrap`, `/quick-ship`, `/spec-status`, `/continue-task`, `/research`, `/workflow-summary`) and the shared ship procedure do not spawn agents directly. `/review-and-ship` spawns background sub-agents to apply accepted fix groups in parallel (not shown as a separate diagram — the agents are generic fix-appliers, not role-specialized).
 
 ### 5a. `/explore` — domain sharpening + requirements clarification
 
@@ -351,7 +353,7 @@ graph LR
     PR -.->|feature + ai kw| AIE[engineering-ai-engineer]
     SPM --> SR[engineering-spec-reviewer<br/>final consistency check<br/>all tiers + tracks]
     SR -->|pass| OK_PR[→ /implement]
-    SR -->|findings| RFP[→ /review-findings<br/>then /implement<br/>no /propose re-run]
+    SR -->|findings| RFP[→ /review-and-ship<br/>then /implement<br/>no /propose re-run]
 ```
 
 ### 5c. `/implement` — task execution
@@ -421,11 +423,11 @@ graph LR
     VIMPL["/validate-impl"] --> ODIUM[odium]
 ```
 
-### 5g. `/review-findings` — finding triage
+### 5g. `/review-and-ship` — finding triage + inline ship
 
 ```mermaid
 graph LR
-    RF["/review-findings"] --> CFG0{Step 0: load config.yml}
+    RF["/review-and-ship"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_RF[stop]
     CFG0 -->|loaded| PART[partition info / actionable]
     PART --> SPLIT{actionable → AUTO or MANUAL}
@@ -434,22 +436,27 @@ graph LR
     AUTO -->|success| MARK[review_status=accepted<br/>auto_accepted=true<br/>AUTO-FIXED summary]
     AUTO -->|error or test not green| MANUAL
     MANUAL --> TRIAGE[group + per-group<br/>Accept/Reject/Elaborate]
-    MARK --> DONE[status update<br/>→ /learn-from-reports]
-    TRIAGE --> DONE
+    MARK --> UPD[status update<br/>set-status done + unblock]
+    TRIAGE --> UPD
+    UPD -->|task was at review| SHIPTAIL([ship procedure inline<br/>one commit · push · PR ready])
+    UPD -.->|spec-level reuse: no task at review| NOOP[ship tail no-op]
+    SHIPTAIL --> NEXT[→ /learn-from-reports]
+    NOOP --> NEXT
 ```
 
-The AUTO bucket applies mechanical fixes (style/formatting/unused-import/dry-violation) and generates+green-checks coverage tests **before** any human prompt — no commits (working-tree edits, backstopped by the draft PR diff), failures fall back to MANUAL. `/learn-from-reports` skips `auto_accepted` findings when mining KB rules.
+The AUTO bucket applies mechanical fixes (style/formatting/unused-import/dry-violation) and generates+green-checks coverage tests **before** any human prompt — no commits (working-tree edits, backstopped by the draft PR diff), failures fall back to MANUAL. `/learn-from-reports` skips `auto_accepted` findings when mining KB rules. The ship tail runs only when the current task is at status `review` (the normal per-task finding flow); `/propose` spec-consistency and `/validate-impl` reopen triage reuse this command at the spec level where no task is in `review`, so the tail is a no-op.
 
-### 5h. `/ship` — commit, push, PR
+### 5h. Ship procedure (inline) — commit, push, PR ready
+
+Not a slash command. The shared prose procedure `scripts/ship-procedure.md`, run inline at the two terminal points of the per-task flow: `/validate`'s zero-findings PASS path and `/review-and-ship`'s tail (task at `review`). `/fix` is the exception — it ships via `/quick-ship`.
 
 ```mermaid
 graph LR
-    SH["/ship"] --> CFG0{Step 0: load config.yml}
-    CFG0 -->|missing → exit 4| STOP_SH[stop]
-    CFG0 -->|loaded| DRIFT{snapshot drift check}
+    CALLER["/validate (zero findings)<br/>or /review-and-ship (tail)"] --> DRIFT{snapshot drift check}
     DRIFT -->|.monitor-context-snapshot vs current config| DRIFT_DEC{drift detected?}
-    DRIFT_DEC -->|yes → stop| STOP_DRIFT[stop]
-    DRIFT_DEC -->|no| COMMIT[commit / push / PR]
+    DRIFT_DEC -->|yes → stop, re-run /validate| STOP_DRIFT[stop]
+    DRIFT_DEC -->|no| COMMIT[commit / push / mark PR ready]
+    COMMIT -.->|single-branch: last task| SPECPR[spec PR → main]
 ```
 
 ---
@@ -479,10 +486,10 @@ Notes:
 ## Key Invariants
 
 - **Serial execution** — one task `in-progress` at a time (gate: per-task = preceding PR merged; single-branch = preceding task `done`)
-- **Per-task sequence** — `/implement` → `/pr-review` (optional loop) → `/validate` → (`/review-findings` if findings) → `/learn-from-reports` → `/ship`, each invoked explicitly by the user. Under `branch_strategy: per-task` (default) `/implement` opens a draft PR and `/ship` marks it ready; under `single-branch` there is no per-task draft PR and `/pr-review` is an inert dead-end mid-spec (see ADR-0003)
+- **Per-task sequence** — `/implement` → `/pr-review` (optional loop) → `/validate` → (`/review-and-ship` if findings) → `/learn-from-reports` → merge PR, each invoked explicitly by the user. Shipping (commit/push/PR-ready) is a shared inline procedure (`scripts/ship-procedure.md`), not a command — it runs at `/validate`'s zero-findings pass and `/review-and-ship`'s tail, so reaching `done` coincides with shipping. Under `branch_strategy: per-task` (default) `/implement` opens a draft PR and the inline ship marks it ready; under `single-branch` there is no per-task draft PR and `/pr-review` is an inert dead-end mid-spec (see ADR-0003)
 - **All-gates** — all configured validation gates (from `WF_SPEC_AGENTS_VALIDATE` ∩ ceiling) must pass before `done`
 - **Single KB** — one knowledge base (`$WF_GENERAL_KB`); no project-KB layer (ADR-0002). Feedback loop writes learned rules here.
-- **PR shape per `branch_strategy`** — `per-task` (default): one PR per task, base `feat/$FEATURE`. `single-branch`: no per-task PR; one spec PR opened/readied at the final `/ship`, base `main` (ADR-0003)
+- **PR shape per `branch_strategy`** — `per-task` (default): one PR per task, base `feat/$FEATURE`. `single-branch`: no per-task PR; one spec PR opened/readied at the final task's inline ship, base `main` (ADR-0003)
 - **Ground rules** — bare `$WF_GENERAL_KB`-relative paths (e.g. `security/general.md`). Legacy `general:`/`project:`/`repo:<name>:` prefixes stripped by migration shim + one-time-per-process deprecation warn. Missing `$WF_GENERAL_KB` → exit 7.
 - **Vault mode** — `spec_storage_mode: vault` + thin-pointer `.workflow.yml` (workflow settings + `general_kb_path` only; no vault `gate_pool` except self-hosting exception). `spec_storage` uses `{project}` token. Per-spec `repos[]` bind code repos; gates resolve per-task from the bound repo's thin `.workflow.yml gate_pool` (`WF_TASK_REPO_PATH`, `WF_TASK_GATE_POOL`). One task = one repo. PR opens in that repo's remote only. `/bootstrap`: vault-init once + repo-gate-init per target repo.
 - **No YAML edits** — all status changes via `task-manager.sh`

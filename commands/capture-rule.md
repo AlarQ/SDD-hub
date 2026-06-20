@@ -2,7 +2,7 @@ Capture an ad-hoc rule from the current conversation into the general knowledge 
 
 ## Purpose
 
-Lets the user crystallize an insight that emerged organically — from a code review, a cross-repo pattern, a PR discussion, files just read, a correction the user just made — into a durable rule in the **general KB** (`$WF_GENERAL_KB/`). Unlike `/review-findings` and `/learn-from-reports` (which write general-KB rules mined from spec validation reports), this command captures an ad-hoc rule directly from the current conversation, with no active spec required.
+Lets the user crystallize an insight that emerged organically — from a code review, a cross-repo pattern, a PR discussion, files just read, a correction the user just made — into a durable rule in the **general KB** (`$WF_GENERAL_KB/`). Unlike `/review-and-ship` and `/learn-from-reports` (which write general-KB rules mined from spec validation reports), this command captures an ad-hoc rule directly from the current conversation, with no active spec required.
 
 > **Durability note:** Changes to `$WF_GENERAL_KB/` are local to this machine. Running `setup.sh --force` from the dev-workflow repo will overwrite them. To make a captured rule permanent, commit it to the general-KB source (the vault/repo backing `$WF_GENERAL_KB`).
 

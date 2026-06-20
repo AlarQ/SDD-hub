@@ -82,7 +82,7 @@ cmd_status() {
       diagnostics+=("unvalidated: Task ${task_ids[$i]} (${task_names[$i]}) is implemented but not validated. Run /validate.")
     fi
     if [ "${task_statuses[$i]}" = "review" ]; then
-      diagnostics+=("pending_review: Task ${task_ids[$i]} (${task_names[$i]}) has findings awaiting review. Run /review-findings.")
+      diagnostics+=("pending_review: Task ${task_ids[$i]} (${task_names[$i]}) has findings awaiting review. Run /review-and-ship.")
     fi
   done
 

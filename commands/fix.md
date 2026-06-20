@@ -105,7 +105,7 @@ No `/validate-impl`. No `/learn-from-reports` unless a finding is rejected and p
 
 ## Step 7 — Ship
 
-Reuse `/ship` machinery. PR title prefix `fix:`. Body includes Repro + Root Cause + Regression Test name. Set `status: done` in `fix.md`. Emit `fix_shipped`.
+Ship via `/quick-ship` — `/fix` has no task file / spec config / branch strategy, so it does not use the shared `ship-procedure.md`. PR title prefix `fix:` (`/quick-ship` infers it from the diff, or pass it via `$ARGUMENTS`); `/quick-ship` works in any git repo. Body includes Repro + Root Cause + Regression Test name. Set `status: done` in `fix.md`. Emit `fix_shipped`.
 
 ## Notes
 
@@ -113,4 +113,4 @@ Reuse `/ship` machinery. PR title prefix `fix:`. Body includes Repro + Root Caus
 - Tier system does not apply (no `tier:` in `fix.md` frontmatter).
 - Refuse to run if any other workflow has an in-flight task (`status: in-progress` or `implemented` in `specs/<other>/tasks/`) — prevents interleaved branches.
 
-Run `/ship` next.
+PR opened via `/quick-ship`. Merge it to close out the fix.

@@ -1,6 +1,6 @@
 # Multi-Repo Task Resolution
 
-Canonical snippet for resolving a task's bound repo path under `spec_storage_mode: vault`. Linked from `/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`, `/quick-ship`.
+Canonical snippet for resolving a task's bound repo path under `spec_storage_mode: vault`. Linked from `/implement`, `/validate`, `/review-and-ship`, `/pr-review`, `/fix`, `/quick-ship` (the shared ship procedure consumes the already-resolved `WF_TASK_REPO_PATH`).
 
 ## Vault invocation
 

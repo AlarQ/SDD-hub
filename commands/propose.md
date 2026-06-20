@@ -366,9 +366,9 @@ Write the agent's YAML output verbatim to `specs/$ARGUMENTS/reports/spec-consist
 
 Branch on the agent's `status`:
 - `pass` (or empty `findings: []`) — print one line: `Spec consistency: pass.` Continue to Next Step.
-- `findings` — print: `Spec consistency check found N findings. Run /review-findings $ARGUMENTS to resolve, then /implement $ARGUMENTS. Do NOT re-run /propose.` Then **stop with non-success exit** so the user does not silently fall through to `/implement`. `/propose` does not re-run the subagent after `/review-findings`; once findings are resolved the user runs `/implement` directly.
+- `findings` — print: `Spec consistency check found N findings. Run /review-and-ship $ARGUMENTS to resolve, then /implement $ARGUMENTS. Do NOT re-run /propose.` Then **stop with non-success exit** so the user does not silently fall through to `/implement`. `/propose` does not re-run the subagent after `/review-and-ship`; once findings are resolved the user runs `/implement` directly. (No task is at status `review` here, so `/review-and-ship`'s ship tail is a no-op — it only triages the spec-consistency findings.)
 - `error` — surface the agent error verbatim; instruct the user to re-run `/propose $ARGUMENTS`.
 
 ## Next Step
 
-Run `/implement $ARGUMENTS` next (or `/review-findings $ARGUMENTS` first if the consistency check produced findings).
+Run `/implement $ARGUMENTS` next (or `/review-and-ship $ARGUMENTS` first if the consistency check produced findings).

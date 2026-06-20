@@ -2,7 +2,7 @@
 
 Shared prerequisites and `ground_rules` path-resolution rules. Linked from every
 workflow command (`/explore`, `/propose`, `/implement`, `/validate`, `/pr-review`,
-`/review-findings`, `/learn-from-reports`) instead of duplicating KB instructions
+`/review-and-ship`, `/learn-from-reports`) instead of duplicating KB instructions
 inline. Canonical resolver: `scripts/task-manager.sh` `resolve_ground_rule_path`.
 Multi-repo machinery: `scripts/multi-repo-resolution.md`.
 
@@ -11,7 +11,7 @@ Multi-repo machinery: `scripts/multi-repo-resolution.md`.
 One KB: the **general KB** at `$WF_GENERAL_KB` (from `general_kb_path` in
 `.workflow.yml`). Required — loader exits 2 if absent. Holds all rules: security,
 architecture, testing, style, language, and project conventions. The workflow
-feedback loop (`/review-findings`, `/learn-from-reports`, `/capture-rule`) writes
+feedback loop (`/review-and-ship`, `/learn-from-reports`, `/capture-rule`) writes
 learned rules **here** (ADR-0002 — single KB replaces the old dual layer).
 
 There is no separate project KB and no `knowledge-base/` directory in any repo

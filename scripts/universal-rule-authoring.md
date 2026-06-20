@@ -1,6 +1,6 @@
 # Universal Rule Authoring
 
-Canonical guidance for drafting general knowledge-base rules. Sourced by `/learn-from-reports`, `/review-findings`, and `/capture-rule`. Every rule written to `$WF_GENERAL_KB/` MUST follow this doc.
+Canonical guidance for drafting general knowledge-base rules. Sourced by `/learn-from-reports`, `/review-and-ship`, and `/capture-rule`. Every rule written to `$WF_GENERAL_KB/` MUST follow this doc.
 
 A general-KB rule is a **universal convention** — it must read as advice for any project in any repo, not as commentary on a specific finding or codebase.
 

@@ -444,7 +444,7 @@ wf_load_config() {
     # Branch strategy resolution: spec config.yml `branch_strategy` (optional,
     # default per-task). per-task = current behavior (per-task sub-branch +
     # per-task draft PR). single-branch = one feat/$FEATURE branch, commits
-    # accumulate, review deferred to one spec PR at final /ship.
+    # accumulate, review deferred to one spec PR at the final task's inline ship.
     local branch_strategy
     branch_strategy="$(wf__json_get "$spec_json" '.branch_strategy' '')" || {
       wf__err "$spec_cfg: branch_strategy extraction failed"; wf__unset_partials; return 5

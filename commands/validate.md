@@ -185,7 +185,7 @@ After all agents complete, merge their findings into per-gate YAML reports. If a
 
 ## Phase 3: Per-Task Coverage Audit (advisory)
 
-Reuses the generic **Odium** agent (`agents/odium.md`, **do not edit**) to verify the implemented diff covers **this task's own** acceptance criteria — `## Acceptance` Given/When/Then rows + `## Implements` FR refs on the feature track, or `technical_acceptance:` frontmatter on the technical track. It is **advisory**: any gap becomes a `source: llm` finding in `reports/<task-id>-coverage.yaml` and flows through the existing Gate Aggregation → `review` → `/review-findings` pipeline. No new hard-block path; no new status.
+Reuses the generic **Odium** agent (`agents/odium.md`, **do not edit**) to verify the implemented diff covers **this task's own** acceptance criteria — `## Acceptance` Given/When/Then rows + `## Implements` FR refs on the feature track, or `technical_acceptance:` frontmatter on the technical track. It is **advisory**: any gap becomes a `source: llm` finding in `reports/<task-id>-coverage.yaml` and flows through the existing Gate Aggregation → `review` → `/review-and-ship` pipeline. No new hard-block path; no new status.
 
 Source the helpers (same module `/validate-impl` uses):
 
@@ -242,12 +242,13 @@ Before determining the final status, verify ALL gates produced a report:
 
 ## Status Update
 - If any gate has `status: error`: report which gate(s) failed and instruct: "Re-run `/validate $ARGUMENTS` to retry the failed gate(s)."
-- If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`, then stop and instruct the user: "Findings present. Run `/review-findings $ARGUMENTS` next."
+- If any findings exist across any gate: run `~/.claude/scripts/task-manager.sh set-status <task-file> review`, then stop and instruct the user: "Findings present. Run `/review-and-ship $ARGUMENTS` next." (it addresses findings and ships the task inline)
 - If zero findings across all gates and all gates have `status: pass`:
   1. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`
   2. Run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`
   3. Do NOT delete reports here — reports are retained (local audit trail); nothing deletes them. `/learn-from-reports` mines passing reports for borderline LLM advisories in place.
-  4. Stop and instruct the user: "All gates pass. Run `/learn-from-reports $ARGUMENTS <task-id>` next." (pass the task-id resolved above so mining is scoped to this task)
+  4. **Ship the task inline.** Run the shared `~/.claude/scripts/ship-procedure.md` against `<task-file>` / `<task-id>` / `<task-title>` (config loaded in Step 0; `WF_TASK_REPO_PATH` resolved in "Multi-repo task resolution"). It commits, pushes, and marks the PR ready (drift check, branch strategy, single-branch last-task spec PR all owned by the procedure).
+  5. Stop and instruct the user: "All gates pass and task shipped (PR ready). Run `/learn-from-reports $ARGUMENTS <task-id>` next." (pass the task-id resolved above so mining is scoped to this task)
 
 Report schema: see `~/.claude/scripts/report-schema.md`. All findings written here use `review_status: pending`; tool gates set `source: tool`, advisory agents set `source: llm`.
 

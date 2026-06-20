@@ -31,7 +31,8 @@ Run from the dev-workflow repository root:
 
 This installs:
 - Slash commands to `~/.claude/commands/`:
-  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-impl`, `review-findings`, `learn-from-reports`, `ship`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `fix`, `promote-tier`
+  `bootstrap`, `explore`, `propose`, `implement`, `validate`, `validate-impl`, `review-and-ship`, `learn-from-reports`, `quick-ship`, `pr-review`, `spec-status`, `workflow-summary`, `continue-task`, `research`, `fix`, `promote-tier`
+  (commit/push/PR-ready is the shared inline procedure `scripts/ship-procedure.md`, not a command)
 - 2 scripts to `~/.claude/scripts/`:
   `task-manager.sh` (task state machine), `pre-commit-hook.sh` (commit-time validation)
 - 35+ agent definitions to `~/.claude/agents/`
@@ -178,11 +179,11 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 - `specs/<name>/spec.md` — functional spec with BDD scenarios (Given/When/Then)
 - `specs/<name>/design.md` — architectural decisions with rule references and rationale
 - `specs/<name>/tasks/NNN-task-name.md` — task files with `ground_rules`, `test_cases`, `blocked_by`, status (`todo` or `blocked`)
-- `specs/<name>/reports/spec-consistency.yaml` — final spec-coherence audit by the `Spec Reviewer` subagent (`engineering-spec-reviewer`). Runs on every tier and track. Findings hard-block `/propose` from returning success; resolved via `/review-findings <name>` (no `/propose` re-run — go straight to `/implement`).
+- `specs/<name>/reports/spec-consistency.yaml` — final spec-coherence audit by the `Spec Reviewer` subagent (`engineering-spec-reviewer`). Runs on every tier and track. Findings hard-block `/propose` from returning success; resolved via `/review-and-ship <name>` (spec-level triage — no task at `review`, so its ship tail is a no-op; no `/propose` re-run — go straight to `/implement`).
 
 **Requires:** `.workflow.yml` must exist.
 
-**Next:** Spec review (stage 3) — or `/review-findings <name>` first if spec-consistency produced findings.
+**Next:** Spec review (stage 3) — or `/review-and-ship <name>` first if spec-consistency produced findings.
 
 ### Stage 3: Spec review (conversational)
 
@@ -197,7 +198,7 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 **Next:** `/implement <name>`
 
-> **Per-task sequence:** Each command is invoked explicitly. After `/implement` finishes, the user runs `/validate`; after `/validate`, the user runs `/review-findings` (if findings) or `/learn-from-reports` (if zero findings); after `/learn-from-reports`, the user runs `/ship`. Every command prints the next command to run when it exits.
+> **Per-task sequence:** Each command is invoked explicitly. After `/implement` finishes, the user runs `/validate`; after `/validate`, the user runs `/review-and-ship` (if findings) or `/learn-from-reports` (if zero findings); after `/learn-from-reports`, the user merges the PR and runs `/implement` for the next task. Shipping (commit/push/PR-ready) is **not a command** — it is the shared inline procedure `scripts/ship-procedure.md` run at `/validate`'s zero-findings pass and `/review-and-ship`'s tail, so reaching `done` coincides with shipping. Every command prints the next command to run when it exits.
 
 ### Stage 4: `/implement <name>` (one task at a time)
 
@@ -234,11 +235,11 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 
 **Status update:**
 - Findings exist -> task moves to `review`
-- Zero findings -> task moves to `done`, blocked tasks are checked and unblocked
+- Zero findings -> task moves to `done`, blocked tasks are checked and unblocked, **and the task ships inline** (the shared `scripts/ship-procedure.md` commits, pushes, and marks the PR ready)
 
-**Next:** if findings exist, the user runs `/review-findings <name>`; otherwise the user runs `/learn-from-reports <name>` and then `/ship <name>`.
+**Next:** if findings exist, the user runs `/review-and-ship <name>`; otherwise (already shipped) the user runs `/learn-from-reports <name>`.
 
-### Stage 6: `/review-findings <name>` (interactive review)
+### Stage 6: `/review-and-ship <name>` (interactive review + inline ship)
 
 **What it does:** Partitions findings into **actionable** (severity: critical/high/medium/low) and **informational** (severity: info). Walks through actionable findings one-by-one for review, then displays informational findings as a compact summary list.
 
@@ -248,25 +249,22 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 - **Informational findings** — auto-acknowledged with `review_status: noted`. Displayed as a summary list (title, file, description) at the end. No action required.
 
 **Status update:**
-- Findings processed (any mix of accepted/rejected) -> task moves to `done`, blocked tasks unblocked. The user runs `/learn-from-reports <name>` then `/ship <name>`. No revalidation — PR review + (medium/large) `/validate-impl` are the downstream safety nets.
+- Findings processed (any mix of accepted/rejected) -> task moves to `done`, blocked tasks unblocked, **and — when the current task was at `review` — the task ships inline** (the shared `scripts/ship-procedure.md` makes one commit covering the applied fixes, pushes, and marks the PR ready). The user then runs `/learn-from-reports <name>`. No revalidation — PR review + (medium/large) `/validate-impl` are the downstream safety nets.
 
-**Next:** the user invokes the next command per the status update above.
+**Next:** (already shipped) the user runs `/learn-from-reports <name>`.
 
-### Stage 7: `/ship <name>` (commit, push, PR)
+### Shipping — inline procedure (commit, push, PR ready)
 
-**What it does:** Ships a completed task — commits all changes, pushes the task branch, and creates a PR targeting the integration branch (`feat/<name>`).
+Shipping is **not a command**. The deterministic commit/push/PR-ready logic lives in the shared prose procedure `scripts/ship-procedure.md`, run inline at the two terminal points of the per-task flow: `/validate`'s zero-findings PASS path, and `/review-and-ship`'s tail (only when the current task is at status `review`). `/fix` is the exception — it ships via `/quick-ship`.
 
-1. Finds the lowest-numbered `done` task without a PR yet
-2. Stages and commits changes using conventional commit format: `type(task-id): {task-title}`
-3. Pushes the task branch
-4. Creates PR: `gh pr create --base feat/<name>`
-5. Saves the PR URL to the task file frontmatter as `pr_url`
+The procedure (against the resolved task / branch):
+1. Snapshot-drift check (`.monitor-context-snapshot` vs current config) — stops with "re-run `/validate`" on drift
+2. Stages and commits using conventional commit format: `type(task-id): {task-title}` (idempotent — skips if clean and commits exist)
+3. Pushes per branch strategy (per-task sub-branch, or single-branch shared branch)
+4. Marks the PR ready (`gh pr ready` + body refresh, `validation: pass` footer); single-branch last task opens the spec PR → `main`
+5. Saves the PR URL to the task file frontmatter as `pr_url`; emits `pr_ready`
 
-**Produces:** A PR from the task branch into the integration branch.
-
-**Requires:** `.workflow.yml`, at least one `done` task without a PR.
-
-**Key detail:** `/ship` does NOT merge the PR — you review and merge it manually. The previous task's PR must be merged before `/implement` will start the next task.
+**Key detail:** the procedure does NOT merge the PR — you review and merge it manually. The previous task's PR must be merged before `/implement` will start the next task.
 
 **Next:** Merge the PR, then `/pr-review` if the PR gets review comments, or `/implement <name>` for the next task.
 
@@ -299,8 +297,8 @@ Reads both `_index.md` files, then asks clarifying questions about scope, securi
 - `in-progress` with no commits → continue implementing
 - `in-progress` with code changes → continue coding/testing
 - `implemented` with no reports → remind to run `/validate`
-- `review` with pending findings → remind to run `/review-findings`
-- `done` without PR → remind to run `/ship`
+- `review` with pending findings → remind to run `/review-and-ship`
+- `done` without PR → ship didn't finish → remind to re-run `/validate` (or `/review-and-ship`) to complete the inline ship
 - `done` with open PR → remind to merge
 
 **Requires:** `specs/<name>/tasks/` with at least one task in an active state.
@@ -375,7 +373,7 @@ Scaffold via `task-manager.sh init-fix <slug>`.
 5. **GREEN** — apply minimal fix; regression test must pass; emit `tdd_green`.
 6. **Refactor** — tidy the touched code, keep the regression test green.
 7. Lint + ground-rule-matched gates run. Phase-2 agent gates are skipped by default unless the diff touches auth/crypto/migrations.
-8. `/ship` with PR title prefix `fix:`.
+8. `/quick-ship` with PR title prefix `fix:`.
 
 **Not run:** `/explore`, `/propose`, `/validate-impl`, `/learn-from-reports` (the last only runs if a rejected finding warrants a new general-KB rule).
 
@@ -387,7 +385,7 @@ When specs live in a master-brain Obsidian vault and span multiple code repos (e
 
 **Setup.** Run `/bootstrap` from inside the vault directory (which must not itself be a git repo). Pick `vault` mode and add bindings (`name`, `path`, `role`) for each code repo. Default bindings land in `default_repos[]` and pre-populate every new spec's `repos[]`.
 
-**Per-task `repo:` field.** Hard rule: one task = one repo. `task-manager.sh validate` enforces membership in `repos[].name`. Cross-repo work splits into sibling tasks under the same spec. `ground_rules` are bare `$WF_GENERAL_KB`-relative paths (legacy prefixes stripped + deprecation-warned). Each command (`/implement`, `/validate`, `/ship`, `/pr-review`, `/fix`) resolves `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and runs git/gates/PR creation inside that path.
+**Per-task `repo:` field.** Hard rule: one task = one repo. `task-manager.sh validate` enforces membership in `repos[].name`. Cross-repo work splits into sibling tasks under the same spec. `ground_rules` are bare `$WF_GENERAL_KB`-relative paths (legacy prefixes stripped + deprecation-warned). Each command (`/implement`, `/validate`, `/review-and-ship`, `/pr-review`, `/fix`) resolves `WF_TASK_REPO_PATH` per `scripts/multi-repo-resolution.md` and runs git/gates/PR creation inside that path (the shared ship procedure inherits the resolved path from its `/validate` / `/review-and-ship` caller).
 
 **Gate filter.** Gates may set `applies_to_repos: [<name>, …]` to restrict to specific repos (e.g. `eslint` only on `frontend`). Default = applies everywhere.
 
@@ -413,7 +411,7 @@ blocked -> todo -> in-progress -> implemented -> review -> done
 | `in-progress` | `/implement` | Currently being implemented |
 | `implemented` | `/implement` | Code written, awaiting validation |
 | `review` | `/validate` | Findings exist, awaiting human review |
-| `done` | `/validate` or `/review-findings` | Complete |
+| `done` | `/validate` or `/review-and-ship` | Complete (shipped inline — PR ready) |
 
 ### Serialization
 
@@ -427,7 +425,7 @@ When a task reaches `done`, `task-manager.sh unblock` checks all `blocked` tasks
 
 **Stuck at `in-progress`** (crash, cancelled): Manually edit the task file's YAML frontmatter to reset `status: todo`, then clean up the partial branch.
 
-**Stuck at `review`** (want to skip remaining findings): Run `/review-findings` and reject all pending findings.
+**Stuck at `review`** (want to skip remaining findings): Run `/review-and-ship` and reject all pending findings (it then ships the task inline).
 
 ### Task file schema
 
@@ -478,9 +476,9 @@ Required fields: `id`, `name`, `status`, `ground_rules`, `test_cases`, `blocked_
 ### Source types
 
 - `source: tool` — deterministic, high-confidence. Hard gate.
-- `source: llm` — advisory. Human decides via `/review-findings`.
+- `source: llm` — advisory. Human decides via `/review-and-ship`.
 
-Both types go through `/review-findings` where you are the final authority.
+Both types go through `/review-and-ship` where you are the final authority.
 
 ### Language file `validation_tools`
 
@@ -565,7 +563,7 @@ $WF_GENERAL_KB/
 │   ├── nextjs/{_index.md, …}
 │   ├── scala/{_index.md, idioms.md, error-handling.md, …}
 │   └── shell/{_index.md, tooling.md, module-api.md}
-└── conventions/                 # grows via /review-findings feedback
+└── conventions/                 # grows via /review-and-ship feedback
 ```
 
 ### ground_rules — bare paths
@@ -582,7 +580,7 @@ Task `ground_rules` are bare `$WF_GENERAL_KB`-relative paths:
 2. **`/explore`** — reads `$WF_GENERAL_KB/_index.md` to identify relevant rules conversationally
 3. **`/propose`** — selects rules and writes bare paths into each task's `ground_rules` field
 4. **`/implement` + `/validate`** — `ground_rules` is the single source of truth for which rules apply
-5. **`/review-findings`, `/learn-from-reports`, `/capture-rule`** — rejected findings / mined patterns become new rules in the **general** KB (feedback loop)
+5. **`/review-and-ship`, `/learn-from-reports`, `/capture-rule`** — rejected findings / mined patterns become new rules in the **general** KB (feedback loop)
 
 The general knowledge base grows organically and is shared across all projects.
 
@@ -596,8 +594,10 @@ Language files include `validation_tools` in YAML frontmatter. These define the 
 
 ```
 /explore -> /propose my-feature -> review spec -> /implement my-feature ->
-/validate my-feature -> /review-findings my-feature -> /ship my-feature ->
-merge PR -> /pr-review (if comments) -> repeat for remaining tasks -> final PR
+/validate my-feature (ships inline if zero findings) ->
+/review-and-ship my-feature (if findings — addresses + ships inline) ->
+/learn-from-reports my-feature -> merge PR ->
+/pr-review (if comments) -> repeat for remaining tasks -> final PR
 ```
 
 ### Spec changes after review
@@ -606,16 +606,16 @@ Edit spec/design/task files conversationally during stage 3. No need to re-run `
 
 ### Validation finds real issues
 
-Accept findings in `/review-findings`. Fixes are applied and the task moves to `done`. No revalidation — PR review + (medium/large) `/validate-impl` are the safety nets.
+Accept findings in `/review-and-ship`. Fixes are applied, the task moves to `done`, and it ships inline (PR ready). No revalidation — PR review + (medium/large) `/validate-impl` are the safety nets.
 
 ### Validation false positives
 
-Reject findings in `/review-findings` with reasoning. Optionally create a knowledge-base rule to prevent the same false positive in future tasks.
+Reject findings in `/review-and-ship` with reasoning. Optionally create a knowledge-base rule to prevent the same false positive in future tasks.
 
 ### Stuck task recovery
 
 - **`in-progress`**: Edit task file frontmatter manually, set `status: todo`, delete partial branch.
-- **`review`**: Run `/review-findings`, reject all pending findings. Task moves to `done`.
+- **`review`**: Run `/review-and-ship`, reject all pending findings. Task moves to `done` and ships inline.
 
 ### PR review changes
 
@@ -637,8 +637,7 @@ gh pr create --base main --head feat/<feature>
 | `/propose <name>` | After requirements clear | General KB |
 | `/implement <name>` | After spec review | General KB, no unvalidated tasks, previous PR merged |
 | `/validate <name>` | After each implementation | General KB, task at `implemented` |
-| `/review-findings <name>` | After validation with findings | General KB, task at `review` |
-| `/ship <name>` | After task reaches `done` | `done` task without PR |
+| `/review-and-ship <name>` | After validation with findings | General KB, task at `review` (ships inline at tail) |
 | `/pr-review` | After PR gets comments | Active PR on current branch |
 | `/spec-status <name>` | Anytime | `specs/<name>/tasks/` |
 | `/workflow-summary` | Anytime | None |

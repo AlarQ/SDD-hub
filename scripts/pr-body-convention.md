@@ -1,8 +1,8 @@
 # PR-Body Convention
 
 Canonical rule for the content of every PR body written by a workflow command
-(`/implement` draft PR, `/ship` ready/final + single-branch spec PR,
-`/quick-ship` generic PR). One skeleton, shared so the draft body read during the
+(`/implement` draft PR, the shared ship procedure `~/.claude/scripts/ship-procedure.md`
+ready/final + single-branch spec PR, `/quick-ship` generic PR). One skeleton, shared so the draft body read during the
 `/pr-review` loop matches the final one.
 
 ## Why this exists
@@ -49,8 +49,8 @@ docs-only diffs — most PRs have no diagram.
   `stateDiagram-v2` for an entity lifecycle (≥3 states), `graph TB` for
   module / dependency shape. Do not duplicate that heuristic here — follow the
   link.
-- Single-branch spec-level PRs (`/ship`) are prime diagram candidates: they
-  bundle a whole flow change.
+- Single-branch spec-level PRs (the ship procedure, last task) are prime diagram
+  candidates: they bundle a whole flow change.
 
 ## Footers are command-owned
 
@@ -59,7 +59,7 @@ footer after the body and owns it:
 
 - `/implement` draft → the `Pre-validation draft for human review… run
   /pr-review… run /validate` instruction.
-- `/ship` → `validation: pass`.
+- ship procedure (`~/.claude/scripts/ship-procedure.md`, run by `/validate` / `/review-and-ship`) → `validation: pass`.
 - `/quick-ship` → **no footer** (no gates run in quick-ship).
 
 Do not move footers into this doc; do not drop a command's footer.

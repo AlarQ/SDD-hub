@@ -30,8 +30,8 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, task branch has no commits ahead of `feat/$ARGUMENTS` | Implementation (start) | Checkout task branch, continue implementing. When implementation completes, stop and instruct: "Run `/validate $ARGUMENTS` next." |
 | `in-progress`, code changes exist on task branch | Implementation (mid) | Checkout task branch, continue coding/testing. When implementation completes, stop and instruct: "Run `/validate $ARGUMENTS` next." |
 | `implemented`, no reports in `specs/$ARGUMENTS/reports/` for this task | Validation needed | Stop and instruct: "Run `/validate $ARGUMENTS` next." |
-| `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review findings | Stop and instruct: "Run `/review-findings $ARGUMENTS` next." |
-| `done`, no `pr_url` in task frontmatter | Mining + ship pending | Stop and instruct: "Run `/learn-from-reports $ARGUMENTS <task-id>` next; it chains to `/ship`." (Reports are now retained, so their presence no longer signals whether mining ran — re-running mining is idempotent: `rule_added:true` findings are skipped.) |
+| `implemented` or `review`, reports exist with actionable (non-info severity) `review_status: pending` findings | Review + ship findings | Stop and instruct: "Run `/review-and-ship $ARGUMENTS` next." (it addresses findings and ships the task inline) |
+| `done`, no `pr_url` in task frontmatter | Ship did not finish | `done` now implies ship ran, so a missing `pr_url` means the inline ship step didn't complete. Stop and instruct: "Re-run `/validate $ARGUMENTS` (clean task) or `/review-and-ship $ARGUMENTS` (had findings) to complete shipping — the ship procedure is idempotent (skips commit if clean, marks the existing draft PR ready)." |
 | `done`, `pr_url` exists, PR state is `OPEN` | Merge needed | Remind: "Merge the PR, then run `/implement $ARGUMENTS` for the next task" |
 
 **`single-branch`** — there is no task sub-branch and no per-task PR; use `task_base_sha` (frontmatter) for start/mid detection:
@@ -41,8 +41,8 @@ Examine the active task's status and existing artifacts to determine where work 
 | `in-progress`, `${task_base_sha}..HEAD` on `feat/$ARGUMENTS` is empty | Implementation (start) | Stay on `feat/$ARGUMENTS`, continue implementing. When done, stop: "Run `/validate $ARGUMENTS` next." |
 | `in-progress`, `${task_base_sha}..HEAD` has commits | Implementation (mid) | Stay on `feat/$ARGUMENTS`, continue coding/testing. When done, stop: "Run `/validate $ARGUMENTS` next." |
 | `implemented`, no reports for this task | Validation needed | Stop: "Run `/validate $ARGUMENTS` next." |
-| `implemented` or `review`, reports with actionable pending findings | Review findings | Stop: "Run `/review-findings $ARGUMENTS` next." |
-| `done`, no `pr_url` | Mining + ship pending | Stop: "Run `/learn-from-reports $ARGUMENTS <task-id>` next; it chains to `/ship`." (Reports are retained, so presence no longer signals whether mining ran — re-running mining is idempotent. `/ship` handles last-vs-non-last: non-last pushes only, last opens the spec PR.) |
+| `implemented` or `review`, reports with actionable pending findings | Review + ship findings | Stop: "Run `/review-and-ship $ARGUMENTS` next." (it addresses findings and ships the task inline) |
+| `done`, no `pr_url` (and this is the final task) | Ship did not finish | `done` implies the inline ship step ran. For the **final** task a missing `pr_url` means the spec PR didn't open. Stop: "Re-run `/validate $ARGUMENTS` or `/review-and-ship $ARGUMENTS` to complete shipping — the ship procedure handles last-vs-non-last (non-last pushes only, last opens the spec PR) and is idempotent." (Non-final `single-branch` tasks legitimately have no `pr_url` — only push state matters there.) |
 | `done`, final task, `pr_url` exists, spec PR `OPEN` | Merge spec PR | Remind: "Merge the spec PR into `main`, then the spec is shipped." |
 
 ## Steps

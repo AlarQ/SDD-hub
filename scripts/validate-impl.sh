@@ -207,7 +207,7 @@ wf_vi_emit_reopen()   { log_event "$1" spec_reopened "" '{}'; }
 # spec-scoped helpers above. Reuse the same Odium agent (agents/odium.md
 # untouched); only the wrapper prompt and report writer differ. The report is
 # the YAML findings form (NOT wf_vi_write_report's markdown FR-matrix form) so
-# /review-findings consumes it unchanged.
+# /review-and-ship consumes it unchanged.
 # ===========================================================================
 
 # wf_vi_task_diff_range <feature> <task_file> -> stdout: <base>..HEAD

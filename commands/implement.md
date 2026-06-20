@@ -11,8 +11,8 @@ Feature name: $ARGUMENTS
    - **`per-task`** (default — unchanged): check if any `done` tasks have an unmerged PR:
      - For each task with `status: done` and a `pr_url` in frontmatter, check: `gh pr view <pr_url> --json state --jq .state`
      - If any PR state is `OPEN`, refuse and say: "Task [ID] PR is not yet merged into `feat/$ARGUMENTS`. Merge it before starting the next task."
-     - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR. Run `/ship $ARGUMENTS` first."
-   - **`single-branch`**: there is no per-task PR — the gate is task status, not PR merge. Refuse to start the next task unless the immediately-preceding task (highest-numbered non-`todo`/`blocked` task) has `status: done`. Message: "Task [ID] is [status], not done. Single-branch strategy is serial — finish and `/ship $ARGUMENTS` the previous task first." Do **not** check `pr_url` (none exists until the final `/ship`).
+     - If any `done` task has no `pr_url`, refuse and say: "Task [ID] is done but has no PR — its inline ship step did not finish. Re-run `/validate $ARGUMENTS` or `/review-and-ship $ARGUMENTS` to complete shipping first."
+   - **`single-branch`**: there is no per-task PR — the gate is task status, not PR merge. Refuse to start the next task unless the immediately-preceding task (highest-numbered non-`todo`/`blocked` task) has `status: done`. Message: "Task [ID] is [status], not done. Single-branch strategy is serial — finish and ship the previous task first (via `/validate` or `/review-and-ship`)." Do **not** check `pr_url` (none exists until the final task's inline ship opens the spec PR).
    - **Important**: In bash scripts, never use `status` as a variable name — it is read-only in zsh. Use `task_status` instead.
 
 ## Step 0 — Load Spec Config
@@ -68,7 +68,7 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
    ```bash
    bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && wf_write_snapshot .monitor-context-snapshot'
    ```
-   This snapshot is compared by `/ship` to detect mid-task `config.yml` drift. Normalized JSON (sorted keys, sorted gate list) ensures whitespace-only edits do not trigger false drift.
+   This snapshot is compared by the shared ship procedure (`~/.claude/scripts/ship-procedure.md`, run inline by `/validate` / `/review-and-ship`) to detect mid-task `config.yml` drift. Normalized JSON (sorted keys, sorted gate list) ensures whitespace-only edits do not trigger false drift.
 7. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
 8. Read context for the task. **This full-body read happens only on the inline (`generalist`/absent) path** — see "Implementer routing" after step 9. On the delegated path, do **not** read spec.md/design.md/`docs/adr/` bodies into the main session; pass their **paths** to the specialist and let it read them (this is what keeps main context flat). **Feature track** (`WF_SPEC_TRACK=feature`, default): read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md`. **Technical track** (`WF_SPEC_TRACK=technical`): spec.md/design.md do not exist — read `docs/adr/` + repo-root `CONTEXT.md` (the recorded rationale) and the task file's `technical_acceptance` instead. (`WF_SPEC_TRACK` is exported by the Step 0/6 `wf_load_config --spec` call.)
 **Implementation is test-driven.** Follow the `tdd` skill at `~/.claude/skills/tdd/SKILL.md` — it is the governing method for steps 9–11 (and is the method handed to the specialist on the delegated path). Code is written to make a failing test pass, not before it. The horizontal-slice anti-pattern (all tests, then all code) is prohibited; slices are vertical (one test → one impl → repeat).
@@ -165,7 +165,7 @@ This is a lightweight pre-flight check — `/validate` remains the authoritative
 git -C "$WF_TASK_REPO_PATH" push -u origin feat/$ARGUMENTS
 ```
 
-Then jump to the `single-branch` final instruction below. Review is deferred to the spec-level PR opened at the final `/ship`.
+Then jump to the `single-branch` final instruction below. Review is deferred to the spec-level PR opened at the final task's inline ship (the shared ship procedure run by `/validate` / `/review-and-ship`).
 
 ---
 
@@ -181,7 +181,7 @@ Then jump to the `single-branch` final instruction below. Review is deferred to 
 
    Pre-validation draft for human review. Comment on the PR, then run \`/pr-review $ARGUMENTS\` to address comments. Run \`/validate $ARGUMENTS\` when ready.")
    ```
-4. Save the returned PR URL to the task file frontmatter via `~/.claude/scripts/task-manager.sh set-pr-url <task-file> <url>`. Then persist the task-file change (single-repo: commit in repo root and push; vault mode: commit in vault repo if it's a git repo, else warn — same persistence pattern as `/ship` step 10).
+4. Save the returned PR URL to the task file frontmatter via `~/.claude/scripts/task-manager.sh set-pr-url <task-file> <url>`. Then persist the task-file change (single-repo: commit in repo root and push; vault mode: commit in vault repo if it's a git repo, else warn — same persistence pattern as the ship procedure step 10).
 5. Emit monitor event: `~/.claude/scripts/monitor.sh log_event $ARGUMENTS pr_opened_draft <task-id> '{"pr_url":"<url>"}'`.
 
 If PR creation fails (e.g. `gh auth` missing, no remote), report the failure and instruct the user to create the PR manually — `/pr-review` resolves the PR from the current branch once one exists.

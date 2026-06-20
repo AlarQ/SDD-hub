@@ -10,9 +10,9 @@ This project uses a custom spec-driven development workflow with validation gate
 3. Human reviews artifacts, requests changes conversationally (edits to existing files)
 4. `/implement <name>` — implement tasks one at a time (one branch per task)
 5. `/validate <name>` — run validation gates (security, code-quality, architecture, compliance, testing)
-6. `/review-findings <name>` — human accepts/rejects each finding
-7. Create PR (task PR -> feature branch), use `/pr-review` for agent-powered review and comment-driven fixes
-8. When all tasks done, final PR from feature branch -> main
+6. `/review-and-ship <name>` — human accepts/rejects each finding, then the task ships inline (commit, push, PR ready). A clean `/validate` ships the task itself with no findings step.
+7. `/learn-from-reports <name>` — mine reports for general-KB rules (task already shipped); use `/pr-review` for agent-powered review and comment-driven fixes on the open PR
+8. Merge the task PR, then `/implement` the next task. When all tasks done, final PR from feature branch -> main
 
 <!-- State machine canonical source: scripts/task-manager.sh + plan.md. Keep in sync when editing. -->
 ### Task States
@@ -29,7 +29,7 @@ One knowledge base (ADR-0002 in the dev-workflow repo collapsed the old dual lay
 
 - **General KB** (`$WF_GENERAL_KB/`) — all KB rules. Path is configured per-repo via `general_kb_path` in `.workflow.yml` (required key, no default) and exported by `scripts/config-loader.sh`. Typically points at a master-brain / shared vault. Contains security, architecture, testing, style, plus learned language/convention rules. There is no per-repo `knowledge-base/` directory.
 
-Read by all commands. The feedback loop (`/review-findings`, `/learn-from-reports`, `/capture-rule`) writes learned rules here.
+Read by all commands. The feedback loop (`/review-and-ship`, `/learn-from-reports`, `/capture-rule`) writes learned rules here.
 
 #### ground_rules Paths
 The `ground_rules` field on each task is **bare `$WF_GENERAL_KB`-relative paths** (e.g. `security/general.md`, `languages/rust.md`). Legacy `general:`/`project:`/`repo:<name>:` prefixes are stripped by a migration shim (one-time per-process deprecation warning) and resolved under `$WF_GENERAL_KB`.
@@ -42,7 +42,7 @@ The `ground_rules` field on each task is **bare `$WF_GENERAL_KB`-relative paths*
 - Gates in `.workflow.yml gate_pool:` with `blocking: true` are mandatory for matching `ground_rules` — every gate must run
 - Deterministic tool findings (`source: tool`) are high-confidence
 - Agent-based analysis findings (`source: llm`) are advisory — human decides
-- All findings go through `/review-findings` where human is final authority
+- All findings go through `/review-and-ship` where human is final authority
 
 ### Agent-Powered Validation Gates
 `/validate` spawns specialized agents in parallel for advisory analysis:

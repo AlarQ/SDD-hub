@@ -5,7 +5,7 @@ Task id: $2 (optional)
 
 ## Purpose
 
-Cross-finding pattern mining that complements `/review-findings` step 4 (inline rule creation on reject). This command runs after `/review-findings` completes — or after `/validate` produces zero findings. Reports are **retained** (local audit trail); this command mines them in place. It surfaces rule candidates the user did not flag in-flow: repeated categories, clustered LLM findings, rejection reasoning worth codifying, and accepted fixes describing a generalizable convention. Accepted candidates become new general knowledge-base rules so the same class of finding does not recur in future tasks.
+Cross-finding pattern mining that complements `/review-and-ship` step 4 (inline rule creation on reject). This command runs **after the task is already shipped** — after `/review-and-ship` addresses findings and ships, or after `/validate` passes clean and ships. It is the final manual step of the per-task flow: it writes KB rules to `$WF_GENERAL_KB` only and **never touches the task PR diff** (the PR is already ready by the time this runs). Reports are **retained** (local audit trail); this command mines them in place. It surfaces rule candidates the user did not flag in-flow: repeated categories, clustered LLM findings, rejection reasoning worth codifying, and accepted fixes describing a generalizable convention. Accepted candidates become new general knowledge-base rules so the same class of finding does not recur in future tasks.
 
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules.
@@ -16,7 +16,7 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
 
 1. **Load reports.** Load only the current task's per-task reports — `specs/$1/reports/<task-id>-*.yaml`. Resolve `<task-id>` from arg `$2`; if absent, fall back to the `task_id` of the most-recently-modified per-task report in `specs/$1/reports/` (exclude spec-level reports `spec-audit-*`/`spec-consistency.yaml`, which carry no task-id prefix). If no per-task reports exist, skip to step 6.
 
-2. **Collect findings.** Flatten all findings across all report files. Annotate each with its source report path and gate. Skip findings where `rule_added: true` (already handled inline by `/review-findings`). Also skip findings where `auto_accepted: true` — these are mechanical auto-bucket fixes (style/formatting/unused-import/dry-violation/coverage), low-signal for KB-rule mining.
+2. **Collect findings.** Flatten all findings across all report files. Annotate each with its source report path and gate. Skip findings where `rule_added: true` (already handled inline by `/review-and-ship`). Also skip findings where `auto_accepted: true` — these are mechanical auto-bucket fixes (style/formatting/unused-import/dry-violation/coverage), low-signal for KB-rule mining.
 
 3. **Mine rule candidates.** Generate candidates from the following signals:
    - **Rejected + reasoned:** `review_status: rejected` with a non-empty `review_notes`. The reasoning often describes a convention that should be explicit. One candidate per distinct reasoning.
@@ -50,4 +50,4 @@ Cross-finding pattern mining that complements `/review-findings` step 4 (inline 
 
 ## Next Step
 
-After step 6 completes, stop and instruct the user: "Mining done. Run `/ship $1` next."
+After step 6 completes, stop and instruct the user: "Mining done. This task is already shipped (PR ready). Merge the PR, then run `/implement $1` for the next task."

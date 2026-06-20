@@ -1,6 +1,12 @@
-Walk through validation findings interactively.
+Walk through validation findings interactively, then ship the task.
 
 Feature name: $ARGUMENTS
+
+When the current task is at status `review`, this command **ships it inline** at
+the tail (single commit covering the applied fixes → push → PR ready) via the
+shared `~/.claude/scripts/ship-procedure.md`. Reused at the spec level by
+`/propose` (spec-consistency findings) and `/validate-impl` (spec-audit reopen
+findings), where no task is in `review` — there the ship tail is a no-op.
 
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules
@@ -8,13 +14,17 @@ Feature name: $ARGUMENTS
 
 ## Step 0 — Load Spec Config
 
-Load the spec config before processing any report (substitute actual feature name for `$ARGUMENTS`):
+Load the spec config before processing any report (substitute actual feature name for `$ARGUMENTS`). Load the vars the inline ship tail needs (`WF_SPEC_GATES`, `WF_BRANCH_STRATEGY`, storage mode) so the ship-procedure precondition contract is satisfied without re-loading:
 
 ```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS'
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_CONFIG_FILE=%s\nWF_SPEC_GATES=%s\nWF_BRANCH_STRATEGY=%s\nWF_SPEC_STORAGE_MODE=%s\n" "${WF_SPEC_CONFIG_FILE:-}" "$WF_SPEC_GATES" "${WF_BRANCH_STRATEGY:-per-task}" "${WF_SPEC_STORAGE_MODE:-repo}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. Runs solely to validate config existence — `/review-findings` does not consume the `agents` map.
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. The finding-triage flow does not consume the `agents` map; the listed vars feed the conditional ship tail (see **Status Update**).
+
+### Multi-repo resolution (only needed for the ship tail)
+
+If the current task will reach the ship tail (it is at status `review`), resolve its bound repo per `~/.claude/scripts/multi-repo-resolution.md` → sets `WF_TASK_REPO_PATH`. The shared ship procedure requires it. Spec-level reuse by `/propose` / `/validate-impl` (no task in `review`) skips this — the ship tail is a no-op there.
 
 ## Steps
 1. Read all pending reports from `specs/$ARGUMENTS/reports/`. Report and finding schema: `~/.claude/scripts/report-schema.md` (canonical) — `review_status` enum, severity enum, source enum, and the spec-audit markdown contract live there. **Spec-audit reports** (filename pattern `spec-audit-*.md`, produced by `/validate-impl`) are recognized here:
@@ -53,7 +63,7 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
    - …
    ```
 
-   **No Keep/Revert, no commits.** Edits stay uncommitted in the working tree exactly like today's accept-path fixes; `/ship` commits them later. The draft PR diff + `/pr-review` are the backstop.
+   **No Keep/Revert, no commits.** Edits stay uncommitted in the working tree exactly like today's accept-path fixes; the inline ship tail (**Status Update** below) commits them in one commit. The draft PR diff + `/pr-review` are the backstop.
 
 3. Group **MANUAL-bucket** actionable findings before presenting them (AUTO findings are already fixed and excluded; demoted findings are included):
    a. Sort all actionable findings by file path, then by start line.
@@ -137,4 +147,9 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARG
 
 Reports are NOT deleted here — reports are retained (local audit trail); nothing deletes them anywhere. `/learn-from-reports` mines them in place.
 
-- Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`. Stop and instruct the user: "Run `/learn-from-reports $ARGUMENTS <task-file id>` next." (pass the task-id so mining is scoped to this task)
+1. Wait for all fix sub-agents to finish (step 6 above) — the working tree now holds every applied fix, uncommitted.
+2. **The ship-tail gate is the `review` determination already made in Step 0** (was-the-task-at-`review` vs spec-level reuse), captured *before* step 3 mutates the status. Do NOT re-read status after step 3 — by then it is `done` for every path and the gate would always fail. (Step 0 is the only safe read point.)
+3. Run `~/.claude/scripts/task-manager.sh set-status <task-file> done`, then run `~/.claude/scripts/task-manager.sh unblock specs/$ARGUMENTS/tasks/`.
+4. **Conditional ship tail**, branching on the Step-0 `review` determination from step 2:
+   - **If the task was at status `review`** (the normal per-task finding flow): run the shared `~/.claude/scripts/ship-procedure.md` inline against `<task-file>` / `<task-id>` / `<task-title>` (config + multi-repo already resolved in Step 0). It makes **one** commit covering all applied fixes, pushes, and marks the PR ready. Then stop and instruct the user: "Findings addressed and task shipped (PR ready). Run `/learn-from-reports $ARGUMENTS <task-id>` next."
+   - **If the task was NOT at status `review`** (spec-level reuse by `/propose` spec-consistency or `/validate-impl` spec-audit reopen): the ship tail is a **no-op** — skip the ship procedure entirely. Spec-audit Accepts already created follow-up tasks; return control to the calling command's flow.
