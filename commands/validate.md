@@ -35,9 +35,9 @@ $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
 ```
 Default (no `applies_to_repos` field) = applies to all repos. This filter applies after the ceiling intersection.
 
-## Step 0.5 — Validation Set Approval (mandatory, fail-closed)
+## Step 0.5 — Validation Set Preview (non-blocking info)
 
-Before any gate runs and before any agent is spawned, preview the resolved set and require explicit user approval.
+Before any gate runs and before any agent is spawned, resolve the effective set from config and render it as an audit-trail banner, then fall through to Phase 1 with **no prompt**. The set is fully determined by config the user already approved (`config.yml` `gates:`/`agents:`/`coverage_audit:`/`tier`/`track`/`validate_scope` + each task's `ground_rules`); there are no runtime escape hatches. Want agents off? Edit `config.yml` and re-run. Ctrl-C covers true emergencies.
 
 1. Compute the per-task effective set once for preview:
    ```bash
@@ -46,11 +46,11 @@ Before any gate runs and before any agent is spawned, preview the resolved set a
    ```
    Capture also: ceiling-skipped gates (in `WF_GATE_POOL`, language-applicable, but not in `WF_SPEC_GATES`), `applies_to`-skipped gates, `applies_to_repos`-skipped gates.
 
-2. Compute the post-tier-skip advisory agent list. Start from `WF_SPEC_AGENTS_VALIDATE`, drop any agent listed in `WF_TIER_AGENT_SKIP`, capture skipped agents with reason `tier_skip=<WF_SPEC_TIER>`. **What the user approves here is what runs** — the tier filter that previously sat in Phase 2 (line 80 below) moves to this step.
+2. Compute the post-tier-skip advisory agent list. Start from `WF_SPEC_AGENTS_VALIDATE`, drop any agent listed in `WF_TIER_AGENT_SKIP`, capture skipped agents with reason `tier_skip=<WF_SPEC_TIER>`. **This is what runs** — the tier filter that previously sat in Phase 2 lives here (so Phase 2's filter is a no-op).
 
-2a. Compute the **Phase 3 coverage-audit** status for the preview (full gating lives in Phase 3 below). It is skipped — with the first matching reason — when any of: `WF_SPEC_TIER == small` (`tier_small`), `WF_COVERAGE_AUDIT == false` (`config_off`), `WF_VALIDATE_SCOPE == per-spec` (`scope=per-spec`). Otherwise it is `enabled`. The `Skip advisory agents` option below additionally skips it with reason `user_skipped`.
+2a. Compute the **Phase 3 coverage-audit** status for the preview (full gating lives in Phase 3 below). It is skipped — with the first matching reason — when any of: `WF_SPEC_TIER == small` (`tier_small`), `WF_COVERAGE_AUDIT == false` (`config_off`), `WF_VALIDATE_SCOPE == per-spec` (`scope=per-spec`). Otherwise it is `enabled`.
 
-3. Render the preview as plain status output:
+3. Render the preview as plain status output, then proceed straight to Phase 1:
    ```
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
      Validate — <feature> / <task-id>
@@ -71,23 +71,7 @@ Before any gate runs and before any agent is spawned, preview the resolved set a
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ```
 
-4. **MUST** invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`):
-   - **question:** "Proceed with this validation set?"
-   - **options:**
-     - `Run all` — proceed with shown deterministic gates and advisory agents.
-     - `Skip advisory agents` — Phase 1 only; treat `WF_SPEC_AGENTS_VALIDATE` as empty for this run **and skip the Phase 3 coverage audit**; emit `gate_skip` with `reason=user_skipped` per omitted agent and once for the coverage audit (`gate: coverage`). Carry this `user_skipped` signal into Phase 3 gating.
-     - `Edit ceiling` — abort. Print: "Run `/config <feature>` to edit ceiling, then re-run `/validate <feature>`."
-     - `Cancel` — abort cleanly; do not change task status.
-
-5. **Fail-closed:** if `AskUserQuestion` cannot be invoked or returns no selection, abort. Do NOT default to `Run all`. Print: `Approval required — validation aborted. Re-run /validate <feature>.`
-
-6. On approval, emit a monitor event:
-   ```bash
-   $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" "validate_set_approved" "<task-id>" \
-     "$(printf '{"gates":%s,"agents":%s,"decision":"%s"}' "<gates-json>" "<agents-json>" "<run_all|skip_agents>")"
-   ```
-
-7. On `Run all` or `Skip advisory agents`, proceed to Phase 1 with the approved sets. Phase 2 already-applied tier filter is now a no-op (filtering already done here).
+4. Proceed to Phase 1 with the resolved sets. No `AskUserQuestion`, no abort affordance — config is the single source of truth.
 
 ## Phase 1: Gate Ceiling Intersection (hard gates)
 
@@ -150,7 +134,7 @@ After computing the effective set above and before step 4 below, branch on `WF_V
 
 Spawn agents **in parallel** to analyze code against knowledge-base rules. Agent list comes from `WF_SPEC_AGENTS_VALIDATE` (space-separated IDs loaded in Step 0). If `WF_SPEC_AGENTS_VALIDATE` is empty, skip Phase 2 entirely (no advisory agents for this spec).
 
-**Tier-based skip:** Already applied in Step 0.5 — the agent list at this point is the post-tier-skip approved set. Tier-skip `gate_skip` events were emitted there. If the approved list is empty (user picked `Skip advisory agents`, or all agents were tier-filtered, or `WF_SPEC_AGENTS_VALIDATE` was empty), skip Phase 2 entirely.
+**Tier-based skip:** Already applied in Step 0.5 — the agent list at this point is the post-tier-skip resolved set. Tier-skip `gate_skip` events were emitted there. If the resolved list is empty (all agents were tier-filtered, or `WF_SPEC_AGENTS_VALIDATE` was empty), skip Phase 2 entirely.
 
 Each spawned agent receives:
 - The task file path and changed files (from `estimated_files` or git diff)
@@ -197,12 +181,11 @@ spec_dir="$WF_SPEC_STORAGE/$ARGUMENTS"
 1. **Skip** (emit `gate_skip` and proceed straight to Gate Aggregation) on the **first** matching reason:
    - `WF_SPEC_TIER == small` → reason `tier_small`
    - `WF_COVERAGE_AUDIT == false` → reason `config_off`
-   - user picked `Skip advisory agents` in Step 0.5 → reason `user_skipped`
    - `WF_VALIDATE_SCOPE == per-spec` → reason `scope=per-spec` (this path normally never reaches Phase 3 — the Phase-1 per-spec short-circuit already wrote the single pass report and skipped Phase 2; the guard is defensive)
 
    ```bash
    $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
-     "$(printf '{"gate":"coverage","reason":"%s"}' "<tier_small|config_off|user_skipped|scope=per-spec>")"
+     "$(printf '{"gate":"coverage","reason":"%s"}' "<tier_small|config_off|scope=per-spec>")"
    ```
 
 2. Compute the task-scoped diff range and build the wrapper prompt:

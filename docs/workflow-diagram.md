@@ -156,15 +156,14 @@ stateDiagram-v2
 
 **Phase 2** reads the agent list from `WF_SPEC_AGENTS_VALIDATE` (set by config.yml) — not a hardcoded list. Each entry spawns one agent.
 
-**Phase 3** (per-task coverage audit) reuses **Odium** to check the task diff against the task's own acceptance criteria. Advisory — gaps land in `reports/<task-id>-coverage.yaml` (just another gate report into AGG). Skipped (first match) on `tier_small` / `config_off` (`coverage_audit: false`) / `user_skipped` / `scope=per-spec`, each emitting a `gate_skip` event (`gate: coverage`); otherwise emits `coverage_audit_start` + `coverage_audit_done`.
+**Phase 3** (per-task coverage audit) reuses **Odium** to check the task diff against the task's own acceptance criteria. Advisory — gaps land in `reports/<task-id>-coverage.yaml` (just another gate report into AGG). Skipped (first match) on `tier_small` / `config_off` (`coverage_audit: false`) / `scope=per-spec`, each emitting a `gate_skip` event (`gate: coverage`); otherwise emits `coverage_audit_start` + `coverage_audit_done`.
 
 ```mermaid
 graph TD
     V["/validate"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_V[stop]
-    CFG0 -->|loaded| APPR{Step 0.5: user approves gate set}
-    APPR -->|cancel| STOP_V
-    APPR -->|approve| SCOPE{validate_scope}
+    CFG0 -->|loaded| APPR[Step 0.5: render validation-set preview]
+    APPR --> SCOPE{validate_scope}
     SCOPE -->|per-spec| PASS[write zero-gates pass report]
     SCOPE -->|per-task / both| CEIL["Phase 1: WF_SPEC_GATES ∩ .workflow.yml gate_pool applicable ∩ applies_to_repos"]
     CEIL -->|skipped gates| SKIP[gate_skip event]
@@ -176,7 +175,7 @@ graph TD
     GATES --> AGENTS["matched agents per gate<br/>(e.g. Security Engineer, CQP,<br/>Software Architect, CMC)"]
     AGENTS --> REPORTS
 
-    AGENTS --> COVGATE{"Phase 3 coverage audit?<br/>(tier≠small, coverage_audit≠false,<br/>not user-skipped, scope≠per-spec)"}
+    AGENTS --> COVGATE{"Phase 3 coverage audit?<br/>(tier≠small, coverage_audit≠false, scope≠per-spec)"}
     COVGATE -->|skip| COVSKIP[gate_skip event: gate=coverage]
     COVGATE -->|run| COV["Odium per-task coverage audit<br/>(advisory)"]
     COV --> COVREP["reports/&lt;task-id&gt;-coverage.yaml"]
@@ -391,9 +390,8 @@ After step 9 settles the backlog, `/implement` branches on the Task's `implement
 graph LR
     VA["/validate"] --> CFG0{Step 0: load config.yml}
     CFG0 -->|missing → exit 4| STOP_VA[stop]
-    CFG0 -->|loaded| APPR{Step 0.5: user approves gate set}
-    APPR -->|cancel| STOP_VA
-    APPR -->|approve| CEIL["WF_SPEC_GATES ∩ .workflow.yml gate_pool ceiling"]
+    CFG0 -->|loaded| APPR[Step 0.5: render validation-set preview]
+    APPR --> CEIL["WF_SPEC_GATES ∩ .workflow.yml gate_pool ceiling"]
     CEIL -->|effective gates → job spec| GR["gate-runner subagent<br/>(Phase 1: run + write reports)"]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| SE[engineering-security-engineer]
     CEIL -->|WF_SPEC_AGENTS_VALIDATE| CQP[code-quality-pragmatist]

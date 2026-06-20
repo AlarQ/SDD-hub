@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # Known event categories (non-exhaustive):
 #   task_transition, spec_last_task_done, gate_skip, tier_breach, tier_inferred,
-#   tier_approved, tier_promoted, validate_impl_skipped, validate_set_approved,
+#   tier_approved, tier_promoted, validate_impl_skipped,
 #   config_inferred, config_approved, repo_bound, repo_missing, gate_repo_switch,
 #   fix_started, fix_root_cause, fix_shipped,
 #   coverage_audit_start, coverage_audit_done,
