@@ -72,7 +72,7 @@ the **hard rules force ≥medium** policy becomes enforced, not LM-remembered.
 
 ---
 
-## [determinism] Skip / decision predicates
+## [determinism] Skip / decision predicates — RESOLVED (2026-06-21)
 
 **Severity**: High
 
