@@ -178,17 +178,23 @@ Before writing design.md, spawn agents in parallel using the Agent tool. All age
 
 ##### Conditionally spawn (in parallel with Software Architect, default only):
 
-Check the spec.md content and prd.md for keyword matches:
+Resolve which conditional agents to spawn by running the canonical keyword-selection script — the single source of truth for the keyword tables. Do **not** re-grep the spec freehand:
 
-**Backend Architect** (`engineering-backend-architect`) — spawn if backend-related keywords appear (`database`, `DB`, `schema`, `migration`, `API`, `endpoint`, `REST`, `GraphQL`, `infrastructure`, `server`, `backend`, `queue`, `cache`). Instruct: "Design the backend architecture for this feature: database schema, API contracts, service boundaries, data-flow diagrams. Flag scaling risks and integration concerns. Reference applicable architecture and language rules."
+```bash
+bash ~/.claude/scripts/select-agents.sh "$WF_SPEC_STORAGE/$ARGUMENTS/spec.md" "$WF_SPEC_STORAGE/$ARGUMENTS/prd.md"
+```
 
-**UX Architect** (`design-ux-architect`) — spawn if UI-related keywords appear (`UI`, `frontend`, `component`, `layout`, `CSS`, `design system`, `responsive`, `mobile`, `page`, `screen`, `form`, `modal`, `dashboard`). Instruct: "Design the component architecture, layout framework, and CSS system for this feature. Define the component hierarchy, responsive breakpoints, and design-system integration. Provide developer-ready specifications."
+It prints `WF_SPAWN_BACKEND`, `WF_SPAWN_UX`, `WF_SPAWN_UI`, `WF_SPAWN_AI` (each `0|1`; a missing `prd.md` is tolerated). Spawn each agent whose flag is `1`:
 
-**UI Designer** (`design-ui-designer`) — spawn alongside UX Architect when UI keywords are detected. Instruct: "Define design system specifications for this feature: component states and variations, responsive behavior, visual hierarchy, and accessibility requirements. Pair with UX Architect output for a complete UI foundation."
+**Backend Architect** (`engineering-backend-architect`) — when `WF_SPAWN_BACKEND=1`. Instruct: "Design the backend architecture for this feature: database schema, API contracts, service boundaries, data-flow diagrams. Flag scaling risks and integration concerns. Reference applicable architecture and language rules."
 
-**AI Engineer** (`engineering-ai-engineer`) — spawn if ML/AI keywords appear (`model`, `ML`, `machine learning`, `AI`, `training`, `inference`, `embeddings`, `neural`, `LLM`, `fine-tune`, `dataset`). Instruct: "Design the ML/AI architecture for this feature: model selection, data pipeline design, training/inference infrastructure, and integration patterns. Flag data requirements and scaling considerations."
+**UX Architect** (`design-ux-architect`) — when `WF_SPAWN_UX=1`. Instruct: "Design the component architecture, layout framework, and CSS system for this feature. Define the component hierarchy, responsive breakpoints, and design-system integration. Provide developer-ready specifications."
 
-If multiple conditions are met, spawn all matching agents concurrently (they are independent). If an agent errors or times out, proceed without its input and note the failure.
+**UI Designer** (`design-ui-designer`) — when `WF_SPAWN_UI=1` (mirrors `WF_SPAWN_UX`; pairs with UX Architect). Instruct: "Define design system specifications for this feature: component states and variations, responsive behavior, visual hierarchy, and accessibility requirements. Pair with UX Architect output for a complete UI foundation."
+
+**AI Engineer** (`engineering-ai-engineer`) — when `WF_SPAWN_AI=1`. Instruct: "Design the ML/AI architecture for this feature: model selection, data pipeline design, training/inference infrastructure, and integration patterns. Flag data requirements and scaling considerations."
+
+If multiple flags are `1`, spawn all matching agents concurrently (they are independent). If an agent errors or times out, proceed without its input and note the failure.
 
 ##### Agent Output Contracts
 

@@ -160,7 +160,13 @@ The agent's YAML must include `tier: small|medium|large`. If the YAML lacks `tie
 - `medium` → `/propose` writes `spec.md` + `tasks/` (no `design.md`/`test-strategy.md`).
 - `large` → unchanged full flow.
 
-If the agent picked `small` and the spec keywords include `auth`, `security`, `migration`, `api`, `schema`, or `crypto`, override to `medium` and note the override in reasoning. The user can override via `Edit` path.
+If the agent picked `small`, run the canonical keyword-selection script over the feature text (the hard-rule keyword table lives there, not in this prose) and override `small`→`medium` when it forces a floor:
+
+```bash
+bash ~/.claude/scripts/select-agents.sh <(printf '%s' "$FEATURE_TEXT")   # $FEATURE_TEXT = feature description + answers so far
+```
+
+If the output line is `WF_TIER_FORCED=medium`, override to `medium` and note the override in reasoning. The user can override via `Edit` path.
 
 ### 0g. Track — optional field (default feature)
 
@@ -199,10 +205,15 @@ only; medium/large require docs/adr/ populated by Step −1 grill pass."*
       **Agent — Security Engineer**: After the user answers the security question, spawn the `Security Engineer` agent (`engineering-security-engineer`) using the Agent tool. Pass the feature description, all conversation context so far, and applicable knowledge-base rules. Instruct: "Produce a lightweight threat surface checklist: top 3-5 STRIDE categories most relevant to this feature, one sentence each. Early flagging for the PRD, not a full threat model." Present as a labeled advisory block. If the agent errors, note: *"Security Engineer analysis unavailable — will be addressed in /propose."*
    4. Integration points (APIs, databases, external services)
 
-      **Conditional agents — Backend Architect / UX Architect**: After the user answers the integration-points question, check the conversation context:
-      - If backend-related keywords appear (`database`, `DB`, `schema`, `migration`, `API`, `endpoint`, `REST`, `GraphQL`, `infrastructure`, `server`, `backend`, `queue`, `cache`), spawn the `Backend Architect` agent (`engineering-backend-architect`). Pass the feature description, integration-points answer, and domain/module context. Instruct: "Flag data-flow risks, schema concerns, or API design considerations for the PRD. Output 3-5 bullet points."
-      - If UI-related keywords appear (`UI`, `frontend`, `component`, `layout`, `CSS`, `design system`, `responsive`, `mobile`, `page`, `screen`, `form`, `modal`, `dashboard`), spawn the `UX Architect` agent (`design-ux-architect`). Pass the feature description, scope, and domain answers. Instruct: "Flag component-architecture, responsive design, or design-system concerns for the PRD. Output 3-5 bullet points."
-      - If both conditions are met, spawn both agents concurrently (parallel) since they are independent.
+      **Conditional agents — Backend Architect / UX Architect**: After the user answers the integration-points question, resolve which to spawn with the canonical keyword-selection script (single source of truth for the keyword tables — do not re-grep freehand):
+
+        ```bash
+        bash ~/.claude/scripts/select-agents.sh <(printf '%s' "$CONVERSATION_TEXT")
+        ```
+
+      - If `WF_SPAWN_BACKEND=1`, spawn the `Backend Architect` agent (`engineering-backend-architect`). Pass the feature description, integration-points answer, and domain/module context. Instruct: "Flag data-flow risks, schema concerns, or API design considerations for the PRD. Output 3-5 bullet points."
+      - If `WF_SPAWN_UX=1`, spawn the `UX Architect` agent (`design-ux-architect`). Pass the feature description, scope, and domain answers. Instruct: "Flag component-architecture, responsive design, or design-system concerns for the PRD. Output 3-5 bullet points."
+      - If both flags are `1`, spawn both agents concurrently (parallel) since they are independent.
       - Present each agent's output as a labeled advisory block. If an agent errors, note the failure and proceed.
    5. Testing expectations (unit, integration, e2e)
    6. Performance or scalability constraints
