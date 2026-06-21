@@ -70,7 +70,16 @@ After Step 0 + tier-check, resolve the task's bound repo per `~/.claude/scripts/
    ```
    This snapshot is compared by the shared ship procedure (`~/.claude/scripts/ship-procedure.md`, run inline by `/validate` / `/review-and-ship`) to detect mid-task `config.yml` drift. Normalized JSON (sorted keys, sorted gate list) ensures whitespace-only edits do not trigger false drift.
 7. Read the task's `ground_rules` files (per `knowledge-base-rules.md`)
-8. Read context for the task. **This full-body read happens only on the inline (`generalist`/absent) path** — see "Implementer routing" after step 9. On the delegated path, do **not** read spec.md/design.md/`docs/adr/` bodies into the main session; pass their **paths** to the specialist and let it read them (this is what keeps main context flat). **Feature track** (`WF_SPEC_TRACK=feature`, default): read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md`. **Technical track** (`WF_SPEC_TRACK=technical`): spec.md/design.md do not exist — read `docs/adr/` + repo-root `CONTEXT.md` (the recorded rationale) and the task file's `technical_acceptance` instead. (`WF_SPEC_TRACK` is exported by the Step 0/6 `wf_load_config --spec` call.)
+8. Read context for the task. **This full-body read happens only on the inline (`generalist`/absent) path** — see "Implementer routing" after step 9. On the delegated path, do **not** read spec.md/design.md/`docs/adr/` bodies into the main session; pass their **paths** to the specialist and let it read them (this is what keeps main context flat). Which artifacts to read is the **track branch** — resolved once by the decision predicate (do not re-derive `WF_SPEC_TRACK == technical` here):
+
+   ```bash
+   eval "$(bash ~/.claude/scripts/decide.sh impl-context)"   # sets VERDICT, REASON
+   ```
+
+   - `VERDICT=feature` (`REASON=spec.md+design.md`, default track): read `specs/$ARGUMENTS/spec.md` and `specs/$ARGUMENTS/design.md`.
+   - `VERDICT=technical` (`REASON=docs/adr/+CONTEXT.md`): spec.md/design.md do not exist — read `docs/adr/` + repo-root `CONTEXT.md` (the recorded rationale) and the task file's `technical_acceptance` instead.
+
+   (`WF_SPEC_TRACK` is exported by the Step 0/6 `wf_load_config --spec` call and consumed by the predicate.)
 **Implementation is test-driven.** Follow the `tdd` skill at `~/.claude/skills/tdd/SKILL.md` — it is the governing method for steps 9–11 (and is the method handed to the specialist on the delegated path). Code is written to make a failing test pass, not before it. The horizontal-slice anti-pattern (all tests, then all code) is prohibited; slices are vertical (one test → one impl → repeat).
 
 9. **Pre-loop setup — settle the behavior backlog (no code yet):**
