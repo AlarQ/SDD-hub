@@ -48,7 +48,7 @@ Before any gate runs and before any agent is spawned, resolve the effective set 
 
 2. Compute the post-tier-skip advisory agent list. Start from `WF_SPEC_AGENTS_VALIDATE`, drop any agent listed in `WF_TIER_AGENT_SKIP`, capture skipped agents with reason `tier_skip=<WF_SPEC_TIER>`. **This is what runs** — the tier filter that previously sat in Phase 2 lives here (so Phase 2's filter is a no-op).
 
-2a. Compute the **Phase 3 coverage-audit** status for the preview (full gating lives in Phase 3 below). It is skipped — with the first matching reason — when any of: `WF_SPEC_TIER == small` (`tier_small`), `WF_COVERAGE_AUDIT == false` (`config_off`), `WF_VALIDATE_SCOPE == per-spec` (`scope=per-spec`). Otherwise it is `enabled`.
+2a. Compute the **Phase 3 coverage-audit** status for the preview (full gating lives in Phase 3 below) via the same decision predicate Phase 3 uses — `eval "$(bash ~/.claude/scripts/decide.sh coverage-skip)"`: `VERDICT=skip` → preview shows `skipped reason: <REASON>` (`tier_small` | `config_off` | `scope=per-spec`); `VERDICT=run` → `enabled`. The priority chain is not re-derived here.
 
 3. Render the preview as plain status output, then proceed straight to Phase 1:
    ```
@@ -178,15 +178,18 @@ source ~/.claude/scripts/validate-impl.sh
 spec_dir="$WF_SPEC_STORAGE/$ARGUMENTS"
 ```
 
-1. **Skip** (emit `gate_skip` and proceed straight to Gate Aggregation) on the **first** matching reason:
-   - `WF_SPEC_TIER == small` → reason `tier_small`
-   - `WF_COVERAGE_AUDIT == false` → reason `config_off`
-   - `WF_VALIDATE_SCOPE == per-spec` → reason `scope=per-spec` (this path normally never reaches Phase 3 — the Phase-1 per-spec short-circuit already wrote the single pass report and skipped Phase 2; the guard is defensive)
+1. **Skip** (emit `gate_skip` and proceed straight to Gate Aggregation) when the decision predicate says so. The first-matching-reason priority chain (`tier_small` → `config_off` → `scope=per-spec`) lives once in `~/.claude/scripts/decide.sh` — do not re-derive it here:
 
    ```bash
-   $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
-     "$(printf '{"gate":"coverage","reason":"%s"}' "<tier_small|config_off|scope=per-spec>")"
+   eval "$(bash ~/.claude/scripts/decide.sh coverage-skip)"   # sets VERDICT, REASON
+   if [[ "$VERDICT" == "skip" ]]; then
+     $HOME/.claude/scripts/monitor.sh log_event "$ARGUMENTS" gate_skip "<task-id>" \
+       "$(printf '{"gate":"coverage","reason":"%s"}' "$REASON")"
+     # proceed straight to Gate Aggregation
+   fi
    ```
+
+   (The `scope=per-spec` skip normally never reaches Phase 3 — the Phase-1 per-spec short-circuit already wrote the single pass report and skipped Phase 2; the predicate's guard is defensive.)
 
 2. Compute the task-scoped diff range and build the wrapper prompt:
    ```bash

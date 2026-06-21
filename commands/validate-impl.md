@@ -29,14 +29,18 @@ bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec '"$A
 
 ### Tier early-exit
 
-If `WF_SPEC_TIER == small`, skip the entire Odium audit:
+Consult the decision predicate (the tier early-exit rule lives once in `~/.claude/scripts/decide.sh`, shared with `/validate`'s coverage gating — do not re-derive `tier == small` here):
 
 ```bash
-bash ~/.claude/scripts/monitor.sh log_event "$ARGUMENTS" validate_impl_skipped "" \
-  '{"reason":"tier_small"}'
+eval "$(bash ~/.claude/scripts/decide.sh validate-impl-skip)"   # sets VERDICT, REASON
+if [[ "$VERDICT" == "skip" ]]; then
+  bash ~/.claude/scripts/monitor.sh log_event "$ARGUMENTS" validate_impl_skipped "" \
+    "$(printf '{"reason":"%s"}' "$REASON")"
+  # then print the skip notice below and exit 0
+fi
 ```
 
-Print: "Spec tier is `small` — `/validate-impl` skipped. Each task already shipped at its own `/validate` / `/review-and-ship`; mark the spec `done` and merge the open task PR(s)." Exit 0.
+On skip, print: "Spec tier is `small` — `/validate-impl` skipped. Each task already shipped at its own `/validate` / `/review-and-ship`; mark the spec `done` and merge the open task PR(s)." Exit 0.
 
 ## Step 1 — Emit `spec_audit_start`
 
