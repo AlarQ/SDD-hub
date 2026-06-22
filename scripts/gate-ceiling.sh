@@ -16,6 +16,7 @@
 #   wf_gc_gate_field <pool> <id> <field>      -> field value from gate_pool[]
 #   wf_compute_effective_set <task_file>      -> per-task intersection (one id per line)
 #   wf_compute_union_set <spec_dir>           -> spec-wide union (one id per line)
+#   wf_build_gate_job_spec <effective> <pool> -> JSON [{gate_id,command,cwd?,category}]
 #
 # Exit codes (effective_set / union_set):
 #   0  ok, set printed (may be empty if task allows)
@@ -117,4 +118,33 @@ wf_compute_union_set() {
     return 3
   fi
   printf '%s' "$union"
+}
+
+# wf_build_gate_job_spec <effective> <pool>
+# Assemble the self-contained gate-runner job spec from an effective set.
+# <effective> is a newline-separated list of gate ids (as printed by
+# wf_compute_effective_set); <pool> is the active .workflow.yml carrying
+# gate_pool[]. Emits a compact JSON array of {gate_id, command, cwd?, category}
+# objects in input order — `cwd` is omitted when the gate declares none.
+# JSON is built with `yq -n` + env() so command strings (quotes, &&, pipes)
+# escape as data, never re-evaluated. rc 90 if yq is missing.
+wf_build_gate_job_spec() {
+  local effective="$1" pool="$2"
+  command -v yq >/dev/null 2>&1 || { wf_gc__err "yq required"; return 90; }
+  local id cmd cwd cat obj out=""
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    cmd="$(wf_gc_gate_field "$pool" "$id" command)"
+    cwd="$(wf_gc_gate_field "$pool" "$id" cwd)"
+    cat="$(wf_gc_gate_field "$pool" "$id" category)"
+    if [[ -n "$cwd" && "$cwd" != "null" ]]; then
+      obj="$(g="$id" c="$cmd" w="$cwd" k="$cat" yq -n -o=json -I=0 \
+        '{"gate_id": env(g), "command": env(c), "cwd": env(w), "category": env(k)}')"
+    else
+      obj="$(g="$id" c="$cmd" k="$cat" yq -n -o=json -I=0 \
+        '{"gate_id": env(g), "command": env(c), "category": env(k)}')"
+    fi
+    out="${out:+$out,}$obj"
+  done <<< "$effective"
+  printf '[%s]' "$out"
 }
