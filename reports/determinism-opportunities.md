@@ -97,7 +97,7 @@ first; it unblocks the keyword→agent work.
 
 ---
 
-## [determinism] Gate job-spec assembly
+## [determinism] Gate job-spec assembly — RESOLVED (2026-06-22)
 
 **Severity**: Medium
 
