@@ -39,6 +39,7 @@ _colorize_tag() {
     GATE)        color="$C_BOLD$C_YELLOW" ;;
     STAGE2)      color="$C_BOLD$C_BLUE" ;;
     MANIFEST)    color="$C_BOLD$C_MAGENTA" ;;
+    USAGE)       color="$C_BOLD$C_CYAN" ;;
     SKIP)        color="$C_YELLOW" ;;
     INTERRUPTED) color="$C_BOLD$C_RED" ;;
     FAILED|ERROR|ABORT) color="$C_BOLD$C_RED" ;;
@@ -207,6 +208,26 @@ reports_exist_nonempty() {
   return 1
 }
 
+# Pull the last stream-json result line from a claude session log and emit
+# "in out cache_read cache_creation cost". Always rc 0 with 5 numeric fields,
+# even when jq is missing, the log is absent, or no result line was written — so
+# callers' read/arithmetic never trip set -e.
+extract_usage() {
+  local log="$1" line out='0 0 0 0 0'
+  if [[ -s "$log" ]] && command -v jq >/dev/null 2>&1; then
+    line="$(grep -E '"type":"result"' "$log" 2>/dev/null | tail -1 || true)"
+    if [[ -n "$line" ]]; then
+      out="$(printf '%s\n' "$line" | jq -r '
+        [ (.usage.input_tokens // 0), (.usage.output_tokens // 0),
+          (.usage.cache_read_input_tokens // 0),
+          (.usage.cache_creation_input_tokens // 0),
+          (.total_cost_usd // 0) ] | join(" ")' 2>/dev/null || true)"
+      [[ -n "$out" ]] || out='0 0 0 0 0'
+    fi
+  fi
+  printf '%s\n' "$out"
+}
+
 STAGE1_PROMPT='Run the /improve-codebase-architecture analysis on THIS repository in SCAN-ONLY, headless mode.
 
 CRITICAL behavior overrides (this is an automated batch run, no human present):
@@ -280,6 +301,11 @@ run_scan() {
     log "REPORT created $f findings=$n"
   done < <(report_files)
   reports_exist_nonempty || log "SCAN produced no report files (no findings)"
+
+  # Stage-1 scan usage: the last result line in the append-only $LOG is this run's.
+  local su_in su_out su_cr su_cc su_cost
+  read -r su_in su_out su_cr su_cc su_cost < <(extract_usage "$LOG") || true
+  log "USAGE scan in=$su_in out=$su_out cache_read=$su_cr cache_creation=$su_cc cost=\$$su_cost"
 }
 
 # Gate: tally open findings; stop unless --yes.
@@ -324,6 +350,10 @@ run_address() {
 
   log "STAGE2 handoff scheduler=$SCHEDULER reports=${#GATE_REPORTS[@]} flags=[${sched_flags[*]:-}]"
 
+  # Lower-bound stamp (UTC, same format as the scheduler's session-log stamps) so
+  # report_usage counts only THIS run's worker logs, not leftovers from --resume.
+  RUN_START_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+
   # Snapshot pre-run open counts for the manifest. Indexed array aligned to
   # GATE_REPORTS by position (bash 3.2 — macOS default — has no associative
   # arrays or namerefs). Global so `manifest` can read it without a nameref.
@@ -337,6 +367,7 @@ run_address() {
   ( cd "$REPO_ROOT" && "$SCHEDULER" "${sched_flags[@]+"${sched_flags[@]}"}" "${GATE_REPORTS[@]}" ) || rc=$?
 
   manifest "$rc"
+  report_usage
   return "$rc"
 }
 
@@ -375,6 +406,45 @@ manifest() {
   fi
 }
 
+# Per-session + grand-total token usage for the cloud runs in THIS pipeline
+# invocation: the stage-1 scan (from $LOG) + each stage-2 worker (from the
+# scheduler's reports/.sessions/*.log — read-only; the scheduler is never
+# edited). The scheduler's triage-judge session captures its usage into a shell
+# variable, never to a log file, so it cannot be reported here.
+report_usage() {
+  local sessions_dir="$REPORTS_DIR/.sessions"
+  local f namep stamp label u
+  local -a rows=()
+
+  # Stage-1 scan row (already logged in run_scan; re-read here for the total).
+  rows+=("scan $(extract_usage "$LOG")")
+
+  # Stage-2 worker rows for this run. The stamp filter drops leftover .sessions
+  # logs from earlier --resume runs (stamp < this run's start).
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    namep="$(basename "$f" .log)"
+    stamp="${namep##*-}"
+    [[ -n "${RUN_START_STAMP:-}" && "$stamp" < "$RUN_START_STAMP" ]] && continue
+    label="$(printf '%s' "$namep" | sed -E 's/-[0-9]{8}T[0-9]{6}Z$//')"
+    u="$(extract_usage "$f")"
+    local w_in w_out w_cr w_cc w_cost
+    read -r w_in w_out w_cr w_cc w_cost <<<"$u" || true
+    log "USAGE worker $label in=$w_in out=$w_out cache_read=$w_cr cache_creation=$w_cc cost=\$$w_cost"
+    rows+=("$label $u")
+  done < <(find "$sessions_dir" -maxdepth 1 -type f -name '*.log' 2>/dev/null | sort)
+
+  # One awk pass sums integer tokens + the float cost (bash 3.2 can't do floats).
+  # Row layout: "<label> <in> <out> <cache_read> <cache_creation> <cost>".
+  local total
+  total="$(printf '%s\n' "${rows[@]}" | awk '
+    { n++; i+=$2; o+=$3; cr+=$4; cc+=$5; cost+=$6 }
+    END { printf "%d %d %d %d %d %.4f", n, i, o, cr, cc, cost }')"
+  local t_n t_in t_out t_cr t_cc t_cost
+  read -r t_n t_in t_out t_cr t_cc t_cost <<<"$total" || true
+  log "USAGE TOTAL sessions=$t_n in=$t_in out=$t_out cache_read=$t_cr cache_creation=$t_cc cost=\$$t_cost"
+}
+
 on_interrupt() {
   local yesflag=""
   [[ "$YES" == "1" ]] && yesflag=" --yes"
@@ -384,6 +454,7 @@ on_interrupt() {
 }
 
 main() {
+  RUN_START_STAMP=''   # set in run_address; safe default for stage-2-skipping paths
   parse_args "$@"
   validate_env
   trap on_interrupt INT TERM
