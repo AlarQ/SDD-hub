@@ -157,7 +157,7 @@ When the unit is won't-fix:
 
 ### 6. Mark RESOLVED + commit report
 
-**Auto mode (`ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg)**: SKIP THIS STEP ENTIRELY — including the last-finding check and any deletion. Do not open, mark, `git rm`, or `git add` the report; do not "preview the diff that would result". Proceed directly to step 7. The scheduler (`scripts/address-reports.sh`) owns all report bookkeeping — marking RESOLVED *and* removing a fully-resolved report — because it serializes those writes across parallel workers; a worker doing it races and corrupts the shared report. See Auto-mode hard rules above.
+**Auto mode (`ADDRESS_FINDINGS_AUTO=1` OR `--auto` arg)**: SKIP THIS STEP ENTIRELY — including the last-finding check and any archival. Do not open, mark, `git mv`, or `git add` the report; do not "preview the diff that would result". Proceed directly to step 7. The scheduler (`scripts/address-reports.sh`) owns all report bookkeeping — it serializes the `— RESOLVED` marker writes across parallel workers; a worker doing it races and corrupts the shared report. The scheduler marks RESOLVED in place and never deletes; sweeping fully-resolved reports into `reports/done/` is the pipeline wrapper's job (`improve-architecture-pipeline.sh`, after stage 2). See Auto-mode hard rules above.
 
 **Interactive mode**: mark **every member of this unit** RESOLVED, then decide whether they were the **last open ones** in the report(s). After all of the unit's targets are resolved, scan every other H2 heading (in each touched report): if none remain open (all carry a done marker — `— RESOLVED`, `**Status**: done`, or legacy ` - DONE`), this was the last finding in that report. Otherwise, open findings remain.
 
@@ -168,20 +168,21 @@ When the unit is won't-fix:
   git commit -m "docs(findings): mark <N> finding(s) RESOLVED"
   ```
 
-- **This was the last open finding** → delete the whole report instead of marking it. A report with every finding resolved is spent — leaving an all-RESOLVED file behind is just stale clutter that the next scheduler/invocation has to scan and skip. Don't bother writing the RESOLVED marker first; the deletion supersedes it.
+- **This was the last open finding** → archive the whole report into `reports/done/` instead of leaving it in the live `reports/` dir. A report with every finding resolved is spent — keeping it in `reports/` is just stale clutter the next scheduler/invocation has to scan and skip — but the work product is worth preserving, so move it rather than delete it. Don't bother writing the RESOLVED marker first; the archive supersedes it. If `reports/done/<basename>` already exists (the same code unit resurfaced in a later cycle), splice a UTC stamp before `.md` (`<basename-without-ext>.YYYYMMDDTHHMMSSZ.md`) so the earlier archive is not clobbered.
 
   ```
-  git rm <report path>
-  git commit -m "docs(findings): resolve final finding '<heading>', remove <report basename>"
+  mkdir -p reports/done
+  git mv <report path> reports/done/<basename>   # stamp the basename if the target exists
+  git commit -m "docs(findings): archive <basename> (all findings resolved)"
   ```
 
-  If the report lives outside version control (untracked), fall back to a plain filesystem delete and note it to the user.
+  If the report lives outside version control (untracked), fall back to a plain filesystem `mv` into `reports/done/` and note it to the user.
 
-Commit the report change (mark or delete) **on its own**, before shipping the fix. Rationale: report bookkeeping is independent of the code fix. A separate commit ensures the bookkeeping lands even if the ship step is interrupted, and keeps the fix commit focused on code.
+Commit the report change (mark or archive) **on its own**, before shipping the fix. Rationale: report bookkeeping is independent of the code fix. A separate commit ensures the bookkeeping lands even if the ship step is interrupted, and keeps the fix commit focused on code.
 
 ### 7. Ship fix
 
-Invoke `/quick-ship` skill via the Skill tool to commit + push + open **one** PR for the whole unit's change set. The commit/PR body should **enumerate every finding addressed** (one line per member heading); for a duplicate/coupled unit, note that they were resolved together because they share code. The report bookkeeping commit from step 6 (RESOLVED markers, or the report deletion when these were the last findings) is included automatically since it's already on the branch.
+Invoke `/quick-ship` skill via the Skill tool to commit + push + open **one** PR for the whole unit's change set. The commit/PR body should **enumerate every finding addressed** (one line per member heading); for a duplicate/coupled unit, note that they were resolved together because they share code. The report bookkeeping commit from step 6 (RESOLVED markers, or the report archive into `reports/done/` when these were the last findings) is included automatically since it's already on the branch.
 
 ### 8. Stop
 
@@ -192,8 +193,8 @@ Do not look for the next finding. Do not call `/address-findings` again. Do not 
 | Case | Action |
 |------|--------|
 | Report path missing/unreadable | Error out, ask user for correct path |
-| No open findings (at step 1) | Report "all RESOLVED", stop. (A spent report should already be deleted by step 6 of the prior run; if one lingers, point it out.) |
-| Target was the last open finding | Interactive: `git rm` the report instead of marking it (step 6). Auto: scheduler handles deletion — worker does nothing. |
+| No open findings (at step 1) | Report "all RESOLVED", stop. (A spent report should already be archived into `reports/done/` by step 6 of the prior run; if one lingers in `reports/`, point it out.) |
+| Target was the last open finding | Interactive: `git mv` the report into `reports/done/` instead of marking it (step 6). Auto: scheduler owns bookkeeping — worker does nothing. |
 | Verification fails after implementation | Stop, surface error, do not review/ship |
 | Plan/review concludes no code change warranted (unanimous) | Step 5b won't-fix. Auto: write `WONTFIX` sentinel (rationale line 1), stop — scheduler marks RESOLVED (wontfix). Interactive: ask user via `AskUserQuestion`. |
 | User rejects plan in step 2 | Exit cleanly, no file changes |
@@ -205,5 +206,5 @@ Do not look for the next finding. Do not call `/address-findings` again. Do not 
 
 - One **work unit** per invocation is intentional — keeps review units small and ships incrementally. A unit is usually a single finding; the scheduler bundles **duplicate/coupled** findings into one unit because they share code and are best reviewed together (reviewing them apart would mean reviewing the same diff twice, or worse, two conflicting half-fixes).
 - The `— RESOLVED (YYYY-MM-DD)` suffix convention is load-bearing: future invocations and the `scripts/address-reports.sh` scheduler rely on it to skip completed work. Do not use a different marker. (Legacy ` - DONE` from older reports is recognised as done for back-compat, but new work always writes RESOLVED.)
-- A report is deleted once its **last** open finding is resolved (interactive mode, step 6). The whole point of these reports is to track outstanding work — an all-RESOLVED file is finished business, and keeping it around just makes every later scan re-read a file with nothing left to do. Deletion is the natural terminal state, not a marker. Only the final finding triggers it; earlier ones get the RESOLVED marker so siblings stay visible.
+- A report is archived into `reports/done/` once its **last** open finding is resolved (interactive mode, step 6). The whole point of the live `reports/` dir is to track outstanding work — an all-RESOLVED file is finished business, and keeping it there just makes every later scan re-read a file with nothing left to do. Archival (not deletion) is the natural terminal state: the spent report leaves the scan path but its audit trail survives. Only the final finding triggers it; earlier ones get the RESOLVED marker so siblings stay visible.
 - Reviewer parallelism matters for latency. Always single-message three-tool-call.

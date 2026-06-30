@@ -39,6 +39,7 @@ _colorize_tag() {
     GATE)        color="$C_BOLD$C_YELLOW" ;;
     STAGE2)      color="$C_BOLD$C_BLUE" ;;
     MANIFEST)    color="$C_BOLD$C_MAGENTA" ;;
+    ARCHIVE)     color="$C_BOLD$C_GREEN" ;;
     USAGE)       color="$C_BOLD$C_CYAN" ;;
     SKIP)        color="$C_YELLOW" ;;
     INTERRUPTED) color="$C_BOLD$C_RED" ;;
@@ -208,6 +209,36 @@ reports_exist_nonempty() {
   return 1
 }
 
+# Archive fully-resolved reports (count_open == 0) out of the live reports/ dir
+# into reports/done/. Preserves the audit trail while scans stop re-reading spent
+# files — report_files() is find -maxdepth 1, so reports/done/ is invisible to
+# every scan/tally. Plain mv: reports/ is gitignored scratch (see
+# ensure_reports_gitignored), so the archive is gitignored too, no commit. On a
+# basename collision in done/ (same code unit resurfaced a later cycle) splice a
+# UTC stamp before .md rather than clobber the earlier archive. Idempotent.
+# Sets ARCHIVED_COUNT to the number moved this call.
+ARCHIVED_COUNT=0
+archive_resolved_reports() {
+  ARCHIVED_COUNT=0
+  local done_dir="$REPORTS_DIR/done"
+  local f base target stamp
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    [[ "$(count_open "$f")" == "0" ]] || continue
+    mkdir -p "$done_dir"
+    base="$(basename "$f")"
+    target="$done_dir/$base"
+    if [[ -e "$target" ]]; then
+      stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+      target="$done_dir/${base%.md}.$stamp.md"
+    fi
+    if mv "$f" "$target"; then
+      log "ARCHIVE moved $base -> done/$(basename "$target")"
+      ARCHIVED_COUNT=$((ARCHIVED_COUNT + 1))
+    fi
+  done < <(report_files)
+}
+
 # Pull the last stream-json result line from a claude session log and emit
 # "in out cache_read cache_creation cost". Always rc 0 with 5 numeric fields,
 # even when jq is missing, the log is absent, or no result line was written — so
@@ -228,6 +259,7 @@ extract_usage() {
   printf '%s\n' "$out"
 }
 
+# shellcheck disable=SC2016  # intentional literal prompt — $-tokens must not expand
 STAGE1_PROMPT='Run the /improve-codebase-architecture analysis on THIS repository in SCAN-ONLY, headless mode.
 
 CRITICAL behavior overrides (this is an automated batch run, no human present):
@@ -308,8 +340,12 @@ run_scan() {
   log "USAGE scan in=$su_in out=$su_out cache_read=$su_cr cache_creation=$su_cc cost=\$$su_cost"
 }
 
-# Gate: tally open findings; stop unless --yes.
+# Gate: tally open findings; stop unless --yes. Sweeps any already-fully-resolved
+# reports into reports/done/ first (e.g. all findings shipped on a prior run), so
+# they neither pad the tally nor linger as scratch.
 gate() {
+  archive_resolved_reports
+
   local total=0 f n
   GATE_REPORTS=()
   while IFS= read -r f; do
@@ -323,7 +359,11 @@ gate() {
   log "GATE ${total} open findings across ${#GATE_REPORTS[@]} report(s)"
 
   if (( total == 0 )); then
-    log "DONE no open findings — nothing to address."
+    if (( ARCHIVED_COUNT > 0 )); then
+      log "DONE no open findings — archived $ARCHIVED_COUNT resolved report(s) -> reports/done/"
+    else
+      log "DONE no open findings — nothing to address."
+    fi
     exit "$EXIT_SUCCESS"
   fi
 
@@ -360,13 +400,15 @@ run_address() {
   PRE_OPEN_BY_IDX=()
   local i
   for i in "${!GATE_REPORTS[@]}"; do
-    PRE_OPEN_BY_IDX[$i]="$(count_open "${GATE_REPORTS[$i]}")"
+    PRE_OPEN_BY_IDX[i]="$(count_open "${GATE_REPORTS[$i]}")"
   done
 
   local rc=0
   ( cd "$REPO_ROOT" && "$SCHEDULER" "${sched_flags[@]+"${sched_flags[@]}"}" "${GATE_REPORTS[@]}" ) || rc=$?
 
   manifest "$rc"
+  archive_resolved_reports
+  (( ARCHIVED_COUNT > 0 )) && log "ARCHIVE swept $ARCHIVED_COUNT resolved report(s) -> reports/done/"
   report_usage
   return "$rc"
 }
