@@ -368,21 +368,24 @@ graph LR
     S9 -.->|interaction: hitl only| HITL[AskUserQuestion:<br/>interface + priority]
     S9 --> IMPL{implementer?}
     IMPL -->|generalist / absent| LOOP["step 10: per behavior (inline)"]
-    IMPL -->|agent-pool id| SPEC["spawn specialist<br/>(frontend-developer /<br/>backend-architect / …)"]
+    IMPL -->|agent-pool id| CHUNK{"tier≠small &<br/>backlog > K?<br/>(K=WF_IMPL_CHUNK_SIZE)"}
+    CHUNK -->|no → 1 chunk| SPEC
+    CHUNK -->|yes → ≤K-behavior chunks| SPEC["spawn SAME specialist per chunk<br/>(fresh context + ledger)"]
     LOOP --> RED["RED: 1 failing test<br/>→ tdd_red event"]
     RED --> GREEN["GREEN: minimal code<br/>→ tdd_green event"]
     GREEN -.->|on error / test fail| UD[ultrathink-debugger]
     GREEN -->|next behavior| LOOP
     LOOP -->|backlog empty| RF["step 11: refactor<br/>(never while RED)"]
-    SPEC -->|"owns red→green→refactor in WF_TASK_REPO_PATH<br/>debugs inline · no tdd_red/green events"| SR{status?}
+    SPEC -->|"chunk: red→green→local refactor in WF_TASK_REPO_PATH<br/>full-suite-green · debugs inline · no tdd events"| SR{status?}
     SR -->|blocked| PAUSE[surface diagnosis · pause<br/>stays in-progress]
-    SR -->|complete| ST12[step 12: write specialist impl_notes]
+    SR -->|"complete & more chunks"| SPEC
+    SR -->|"complete & last chunk<br/>(final chunk = whole-diff refactor)"| ST12[step 12: write merged ledger<br/>+ chunks_spawned: N]
     RF --> ST12
     ST12 --> CQP2[code-quality-pragmatist]
     CQP2 -.->|post-impl, if in WF_SPEC_AGENTS_IMPLEMENT| DONE[implemented → draft PR]
 ```
 
-After step 9 settles the backlog, `/implement` branches on the Task's `implementer:` field (ADR-0004). `generalist` or absent → the inline vertical red-green loop runs in the main session exactly as before (one test then minimal code per behavior; horizontal slicing prohibited per the `tdd` skill; Ultrathink Debugger + `tdd_red`/`tdd_green` events live here). A resolvable agent-pool id → a specialist subagent owns the whole loop in its own context (no `tdd_red`/`tdd_green` events), returning `complete` (→ step 12 writes its `impl_notes`) or `blocked` (→ main surfaces the diagnosis and pauses). Both paths converge at step 12; the post-impl quality check, draft PR, and state machine are unchanged. Applies to all tiers — no small-tier exemption.
+After step 9 settles the backlog, `/implement` branches on the Task's `implementer:` field (ADR-0004). `generalist` or absent → the inline vertical red-green loop runs in the main session exactly as before (one test then minimal code per behavior; horizontal slicing prohibited per the `tdd` skill; Ultrathink Debugger + `tdd_red`/`tdd_green` events live here). A resolvable agent-pool id → the delegated path (no `tdd_red`/`tdd_green` events). Here `/implement` decides whether to **chunk** (ADR-0018): when `WF_SPEC_TIER != small` **and** `K = WF_IMPL_CHUNK_SIZE > 0` **and** backlog length > K, main cuts the settled ordered backlog into ≤K-behavior chunks and re-spawns the **same** `implementer:` specialist per chunk with fresh context, threading a cumulative `impl_notes` ledger forward; otherwise there is one chunk = the pre-ADR-0018 single delegated spawn. Each chunk runs the full suite (all prior behaviors stay green) and refactors locally; only the **final** chunk performs the closing whole-diff refactor (`git diff task_base_sha..HEAD` + ledger). A chunk returning `complete` with more chunks left re-spawns the specialist; the last chunk's `complete` falls to step 12, which writes the **merged ledger** prefixed with `chunks_spawned: N` (a persisted note-field, not a monitor event). Any chunk returning `blocked` stops the loop and pauses (task stays `in-progress`; prior chunks' green tests remain on disk for `/continue-task`). Both paths converge at step 12; the post-impl quality check, draft PR, and state machine are unchanged. Applies to all tiers — no small-tier exemption (though `small` never chunks: single delegated spawn).
 
 ### 5d. `/validate` — validation gates (parallel)
 

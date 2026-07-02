@@ -23,7 +23,7 @@ wf__unset_partials() {
         WF_CONFIG_FILE WF_SPEC_CONFIG_FILE WF_VALIDATE_SCOPE \
         WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-        WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT \
+        WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT WF_IMPL_CHUNK_SIZE \
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT \
         WF_SPEC_PROJECT
   local v
@@ -491,6 +491,28 @@ wf_load_config() {
     WF_TIER_FILE_CEILING="$fc"
     WF_TIER_AGENT_SKIP="$as"
 
+    # impl_chunk_size resolution (chunked delegated implementation, ADR-0018):
+    # the fixed behavior-count budget K for cutting a delegated task's settled
+    # backlog into bounded-context chunks. Resolution = per-spec
+    # `impl_chunk_size` override → `.tiers.<tier>.impl_chunk_size` default →
+    # hardcoded 3. The `small` tier NEVER chunks (decision 3) → forced to 0
+    # (chunking off) regardless of any override or tier default. Raw reader so
+    # an explicit `0` (off) survives (wf__json_get's falsy-default trap). Value
+    # is a non-negative integer; 0 = chunking disabled (one delegated spawn).
+    local ics
+    if [[ "$tier" == "small" ]]; then
+      ics=0
+    else
+      ics="$(wf__json_get_raw "$spec_json" ".impl_chunk_size")"
+      [[ "$ics" == null || -z "$ics" ]] && ics="$(wf__json_get_raw "$cfg_json" ".tiers.${tier}.impl_chunk_size")"
+      [[ "$ics" == null || -z "$ics" ]] && ics=3
+    fi
+    [[ "$ics" =~ ^[0-9]+$ ]] || {
+      wf__err "$spec_cfg: impl_chunk_size invalid: '$ics' (expected non-negative integer)"
+      wf__unset_partials; return 4
+    }
+    WF_IMPL_CHUNK_SIZE="$ics"
+
     # repos[] — multi-repo binding (optional under spec_storage_mode=repo,
     # required under vault). Validate each path is a git work tree.
     local repos_count name path abs_path names_acc="" paths_acc=""
@@ -648,7 +670,7 @@ wf_load_config() {
     WF_SPEC_HAS_CONFIG=1
     export WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG \
            WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP \
-           WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT \
+           WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT WF_IMPL_CHUNK_SIZE \
            WF_REPO_NAMES WF_REPO_PATHS
   fi
 
@@ -752,7 +774,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         WF_GENERAL_KB
         WF_CONFIG_FILE WF_VALIDATE_SCOPE WF_SPEC_CONFIG_FILE WF_SPEC_GATES WF_SPEC_HAS_CONFIG
         WF_SPEC_TIER WF_TIER_TASK_CEILING WF_TIER_FILE_CEILING WF_TIER_AGENT_SKIP
-        WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT
+        WF_SPEC_TRACK WF_BRANCH_STRATEGY WF_COVERAGE_AUDIT WF_IMPL_CHUNK_SIZE
         WF_SPEC_STORAGE_MODE WF_REPO_NAMES WF_REPO_PATHS WF_VAULT_ROOT
         WF_SPEC_PROJECT
       )

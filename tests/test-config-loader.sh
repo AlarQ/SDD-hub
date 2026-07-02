@@ -769,6 +769,84 @@ test_loader_repos_missing_name_fails_closed() {
   grep -q "repos\[0\].name missing" "$TEST_TMPDIR/err"
 }
 
+# --- impl_chunk_size (chunked delegated implementation, ADR-0018) ---
+
+test_loader_impl_chunk_size_defaults_3() {
+  require_yq || return 0
+  # mk_repo's .workflow.yml has no tiers: block → no per-spec override and no
+  # tier default → resolves to the hardcoded fallback 3.
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_IMPL_CHUNK_SIZE" == "3" ]] )
+}
+
+test_loader_impl_chunk_size_tier_default_used() {
+  require_yq || return 0
+  # A .tiers.<tier>.impl_chunk_size default (5) wins over the hardcoded 3 when
+  # the spec sets no per-spec override.
+  local repo; repo="$(mk_repo)"
+  printf 'tiers:\n  medium:\n    impl_chunk_size: 5\n' >> "$repo/.workflow.yml"
+  printf 'tier: medium\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_IMPL_CHUNK_SIZE" == "5" ]] )
+}
+
+test_loader_impl_chunk_size_spec_override_wins() {
+  require_yq || return 0
+  # Per-spec impl_chunk_size (7) overrides both the tier default (5) and 3.
+  local repo; repo="$(mk_repo)"
+  printf 'tiers:\n  medium:\n    impl_chunk_size: 5\n' >> "$repo/.workflow.yml"
+  printf 'tier: medium\nimpl_chunk_size: 7\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_IMPL_CHUNK_SIZE" == "7" ]] )
+}
+
+test_loader_impl_chunk_size_small_forced_zero() {
+  require_yq || return 0
+  # small tier NEVER chunks: loader forces 0 even when the spec sets an override
+  # AND the tier default is non-zero.
+  local repo; repo="$(mk_repo)"
+  printf 'tiers:\n  small:\n    impl_chunk_size: 9\n' >> "$repo/.workflow.yml"
+  printf 'tier: small\nimpl_chunk_size: 9\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_IMPL_CHUNK_SIZE" == "0" ]] )
+}
+
+test_loader_impl_chunk_size_explicit_zero_preserved() {
+  require_yq || return 0
+  # An explicit per-spec impl_chunk_size: 0 (chunking off) must survive the
+  # raw-reader path, not collapse to the hardcoded-3 fallback.
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\nimpl_chunk_size: 0\n' > "$repo/specs/demo/config.yml"
+  ( cd "$repo" && source "$LOADER" && wf_load_config --spec demo \
+      && [[ "$WF_IMPL_CHUNK_SIZE" == "0" ]] )
+}
+
+test_loader_impl_chunk_size_invalid_exit_4_no_partial() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\nimpl_chunk_size: bogus\n' > "$repo/specs/demo/config.yml"
+  local rc=0
+  ( cd "$repo" && source "$LOADER"
+    WF_IMPL_CHUNK_SIZE="stale-value"
+    wf_load_config --spec demo; rc=$?
+    echo "VAR=${WF_IMPL_CHUNK_SIZE:-UNSET}"
+    exit $rc ) >"$TEST_TMPDIR/out" 2>"$TEST_TMPDIR/err" || rc=$?
+  [[ "$rc" == "4" ]] || return 1
+  grep -q "impl_chunk_size invalid" "$TEST_TMPDIR/err" || return 1
+  grep -q "^VAR=UNSET$" "$TEST_TMPDIR/out"
+}
+
+test_loader_impl_chunk_size_export_emits_line() {
+  require_yq || return 0
+  local repo; repo="$(mk_repo)"
+  printf 'tier: medium\nimpl_chunk_size: 4\n' > "$repo/specs/demo/config.yml"
+  local out
+  out="$(cd "$repo" && "$LOADER" export --spec demo 2>/dev/null)"
+  echo "$out" | grep -qE "^WF_IMPL_CHUNK_SIZE='?4'?$"
+}
+
 echo "=== test-config-loader.sh ==="
 run_test "tier_ceiling.tasks: 0 preserved (not collapsed to default)" test_loader_tier_ceiling_zero_preserved
 run_test "wf__has_dotdot is segment-accurate (foo..bar allowed)" test_loader_has_dotdot_segment_accurate
@@ -822,6 +900,13 @@ run_test "coverage_audit absent defaults to true"        test_loader_coverage_au
 run_test "coverage_audit: false exported"                test_loader_coverage_audit_false_exported
 run_test "coverage_audit invalid exits 4, no partial"    test_loader_coverage_audit_invalid_exit_4_no_partial
 run_test "coverage_audit export emits WF_ line"          test_loader_coverage_audit_export_emits_line
+run_test "impl_chunk_size absent defaults to 3"          test_loader_impl_chunk_size_defaults_3
+run_test "impl_chunk_size tier default used over 3"      test_loader_impl_chunk_size_tier_default_used
+run_test "impl_chunk_size spec override wins"            test_loader_impl_chunk_size_spec_override_wins
+run_test "impl_chunk_size small forced to 0 (never chunks)" test_loader_impl_chunk_size_small_forced_zero
+run_test "impl_chunk_size explicit 0 preserved"          test_loader_impl_chunk_size_explicit_zero_preserved
+run_test "impl_chunk_size invalid exits 4, no partial"   test_loader_impl_chunk_size_invalid_exit_4_no_partial
+run_test "impl_chunk_size export emits WF_ line"         test_loader_impl_chunk_size_export_emits_line
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

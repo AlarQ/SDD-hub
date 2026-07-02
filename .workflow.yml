@@ -37,11 +37,14 @@ tiers:
     tasks: 5
     files: 10
     agent_skip: [security, code-quality, architecture, compliance]
+    impl_chunk_size: 0   # small never chunks (ADR-0018); loader forces 0
   medium:
     tasks: 10
     files: 30
     agent_skip: []
+    impl_chunk_size: 3
   large:
     tasks: null
     files: null
     agent_skip: []
+    impl_chunk_size: 3
