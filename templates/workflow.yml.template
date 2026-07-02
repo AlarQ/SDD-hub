@@ -39,9 +39,14 @@
 #   /validate-impl skip, file/task ceilings checked at /implement step 0).
 #   Defaults shown.
 # tiers:
-#   small:  { tasks: 5,  files: 10, agent_skip: [security, code-quality, architecture, compliance] }
-#   medium: { tasks: 10, files: 30, agent_skip: [] }
-#   large:  { tasks: null, files: null, agent_skip: [] }
+#   small:  { tasks: 5,  files: 10, agent_skip: [security, code-quality, architecture, compliance], impl_chunk_size: 0 }
+#   medium: { tasks: 10, files: 30, agent_skip: [], impl_chunk_size: 3 }
+#   large:  { tasks: null, files: null, agent_skip: [], impl_chunk_size: 3 }
+#   impl_chunk_size — behavior-count budget K for chunked delegated /implement
+#   (ADR-0018). Cuts a delegated task's settled backlog into ≤K-behavior
+#   bounded-context chunks re-spawned on the same implementer. Per-spec
+#   config.yml impl_chunk_size overrides the tier default. small NEVER chunks
+#   (loader forces 0 = off regardless). 0 = chunking disabled.
 
 # spec_storage_mode: repo
 #   One of: repo, vault.
@@ -68,9 +73,9 @@
 # general_kb_path: <YOUR_GENERAL_KB_PATH>   # e.g. ~/Desktop/projects/master-brain/general-knowledge-base
 # validate_scope: per-task
 # tiers:
-#   small:  { tasks: 5,  files: 10, agent_skip: [security, code-quality, architecture, compliance] }
-#   medium: { tasks: 10, files: 30, agent_skip: [] }
-#   large:  { tasks: null, files: null, agent_skip: [] }   # null = unbounded
+#   small:  { tasks: 5,  files: 10, agent_skip: [security, code-quality, architecture, compliance], impl_chunk_size: 0 }
+#   medium: { tasks: 10, files: 30, agent_skip: [], impl_chunk_size: 3 }
+#   large:  { tasks: null, files: null, agent_skip: [], impl_chunk_size: 3 }   # null = unbounded
 # default_repos:
 #   - { name: app, path: ~/Desktop/projects/app, role: primary }
 #

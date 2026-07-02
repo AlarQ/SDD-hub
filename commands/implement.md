@@ -20,10 +20,10 @@ Feature name: $ARGUMENTS
 Before running any step, load the spec config (substituting the actual feature name for `$ARGUMENTS`):
 
 ```bash
-bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_IMPLEMENT=%s\nWF_SPEC_CONFIG_FILE=%s\nWF_BRANCH_STRATEGY=%s\n" "${WF_SPEC_AGENTS_IMPLEMENT:-}" "${WF_SPEC_CONFIG_FILE:-}" "${WF_BRANCH_STRATEGY:-per-task}"'
+bash -c 'source ~/.claude/scripts/config-loader.sh && wf_load_config --spec $ARGUMENTS && printf "WF_SPEC_AGENTS_IMPLEMENT=%s\nWF_SPEC_CONFIG_FILE=%s\nWF_BRANCH_STRATEGY=%s\nWF_SPEC_TIER=%s\nWF_IMPL_CHUNK_SIZE=%s\n" "${WF_SPEC_AGENTS_IMPLEMENT:-}" "${WF_SPEC_CONFIG_FILE:-}" "${WF_BRANCH_STRATEGY:-per-task}" "${WF_SPEC_TIER:-}" "${WF_IMPL_CHUNK_SIZE:-0}"'
 ```
 
-> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents), `WF_SPEC_CONFIG_FILE` (snapshot source), `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`; absent → `per-task`).
+> See `~/.claude/scripts/step0-load-config.md` for canonical invocation and remediation. This step uses: `WF_SPEC_AGENTS_IMPLEMENT` (post-impl quality-check agents), `WF_SPEC_CONFIG_FILE` (snapshot source), `WF_SPEC_TIER`, `WF_TIER_TASK_CEILING`, `WF_TIER_FILE_CEILING`, `WF_BRANCH_STRATEGY` (`per-task` default | `single-branch`; absent → `per-task`), `WF_IMPL_CHUNK_SIZE` (chunked delegated-implementation budget K; `0` = chunking off / small tier — see "Delegated implementation").
 
 ### Tier-Ceiling Check (hard stop on breach)
 
@@ -109,22 +109,33 @@ Read the task file's `implementer:` frontmatter field. It decides who runs the T
 
 ### Delegated implementation (delegated path only)
 
-Spawn the `implementer:` agent **once** using the Agent tool. The spawn prompt is built here by `/implement` — the agent file stays generic; `/implement` injects the method. Pass exactly:
+The delegated path runs the **same** `implementer:` specialist across a **sequence of bounded contexts** (ADR-0018). Rather than one spawn owning the task's whole TDD loop in one accreting context, main cuts the settled ordered behavior backlog into fixed-size chunks and re-spawns that one specialist per chunk with fresh context, threading a cumulative `impl_notes` ledger forward. Chunking is orthogonal to agent selection — it never changes *which* implementer runs (ADR-0004's "one Task = one implementer" holds).
 
-- **Method**: "Read and strictly follow `~/.claude/skills/tdd/SKILL.md`. Implement red-green-refactor in vertical slices: one failing test → minimal code to pass → repeat, then refactor once the whole backlog is green. Tests assert the public interface only, never implementation internals. Do **NOT** emit any monitor events."
-- **Backlog**: the settled ordered behavior backlog from step 9 (inline it — it is compact).
-- **Scope**: the task's `objective`, `acceptance_criteria`, `test_cases`, and `ground_rules` (pass the ground_rules **paths** — the specialist reads them itself).
-- **Architecture source (paths, not bodies)**: feature track → `specs/$ARGUMENTS/design.md` (+ `specs/$ARGUMENTS/spec.md`); technical track → `docs/adr/` + repo-root `CONTEXT.md` + the task's `technical_acceptance` list. Instruct the specialist to read these itself.
-- **Workdir**: `WF_TASK_REPO_PATH`. All edits + test runs happen in that working tree (no worktree isolation — execution is serial, one task in flight). The specialist edits the same tree the main session will `git diff`.
+**Chunk-decision gate.** Let `K = WF_IMPL_CHUNK_SIZE` (from Step 0; `0` = chunking off, forced for `small` tier). Cut the settled backlog into ordered runs of **≤ K whole behaviors** — **only if** `WF_SPEC_TIER != small` **and** `K > 0` **and** backlog length > `K`. Otherwise there is exactly **one** chunk containing the whole backlog (this is today's pre-ADR-0018 delegated behavior, unchanged). Chunks cut *between* whole behaviors — a test is never split from its code.
+
+**Serial chunk loop.** Maintain a `ledger` (concatenated `impl_notes` from all prior chunks — empty for chunk 1) and a `chunks_spawned` counter. For each chunk in order, spawn the `implementer:` agent **once per chunk** using the Agent tool. The spawn prompt is built here by `/implement` — the agent file stays generic; `/implement` injects the method. Pass exactly:
+
+- **Method**: "Read and strictly follow `~/.claude/skills/tdd/SKILL.md`. Implement red-green-refactor in vertical slices: one failing test → minimal code to pass → repeat. Tests assert the public interface only, never implementation internals. Do **NOT** emit any monitor events."
+- **Backlog**: **this chunk's** behavior slice only (not the whole backlog) — inline it (it is compact).
+- **Ledger** (prior chunks' work): the accumulated `impl_notes` from all previously-completed chunks (interface choices, backlog deviations, refactors already applied). Empty for chunk 1. "Prior behaviors are already implemented and green on disk in your working tree — build on them, do not re-implement them."
+- **Full-suite-green rule**: "Run the **entire** test suite on each slice. Every previously-passing behavior (from earlier slices in this chunk **and** from all prior chunks) must stay green — if a slice regresses an earlier behavior, fix it before moving on."
+- **Refactor scope**:
+  - **Final chunk only** (the chunk whose completion makes the whole backlog green): "After your slice loop is green, perform the closing whole-diff refactor — read the whole-task diff (`WF_BRANCH_STRATEGY=per-task` → `git -C <WF_TASK_REPO_PATH> diff feat/$ARGUMENTS...HEAD`; `single-branch` → `git -C <WF_TASK_REPO_PATH> diff <task_base_sha>..HEAD`) plus the ledger, then extract duplication / deepen modules across the entire task diff, keeping the full suite green." (`/implement` substitutes the resolved range for the specialist — same range the post-impl quality check uses; `task_base_sha` exists only on `single-branch`.)
+  - **Earlier (non-final) chunks**: "Refactor **locally only** — clean up the code you wrote in this chunk; do **not** attempt a whole-task refactor (later chunks are not yet written)."
+- **Scope**: the task's `objective`, `acceptance_criteria`, `test_cases`, and `ground_rules` (pass the ground_rules **paths** — the specialist reads them itself). **Re-passed every chunk** (full re-read — accepted cost for flat peak context, ADR-0018 decision 9).
+- **Architecture source (paths, not bodies)**: feature track → `specs/$ARGUMENTS/design.md` (+ `specs/$ARGUMENTS/spec.md`); technical track → `docs/adr/` + repo-root `CONTEXT.md` + the task's `technical_acceptance` list. Instruct the specialist to read these itself. **Re-passed every chunk.**
+- **Workdir**: `WF_TASK_REPO_PATH`. All edits + test runs happen in that working tree (no worktree isolation — execution is serial, one task in flight). Every chunk's specialist edits the same tree the main session will `git diff`.
 - **Error rule**: "Debug failing tests yourself, inline, within your own loop. If you cannot reach green after reasonable attempts, stop and return `status: blocked` with your diagnosis. Do **not** spawn further subagents."
-- **Required return** (structured): `status: complete|blocked`, `impl_notes` (interface choices, backlog deviations, refactors applied — for the task file), `changed_files` (list), `blockers?` (diagnosis when `blocked`).
+- **Required return** (structured): `status: complete|blocked`, `impl_notes` (interface choices, backlog deviations, refactors applied — for the ledger + task file), `changed_files` (list), `blockers?` (diagnosis when `blocked`).
 
-Handle the return:
-- **`status: complete`** → carry the specialist's `impl_notes` forward to step 12 (the main session does **not** re-derive them). Continue to step 12.
-- **`status: blocked`** → **do not** mark the task `implemented`. Surface the specialist's `blockers` diagnosis to the user and pause for guidance (same posture as an Ultrathink-Debugger reject on the inline path). The task stays `in-progress`.
-- If the Agent call itself errors or times out → report the failure and pause; do not silently fall back to inline (the context-hygiene contract assumes the specialist owns the loop).
+Handle each chunk's return:
+- **`status: complete`** → append the specialist's `impl_notes` to the `ledger`, increment `chunks_spawned`, and continue to the next chunk. After the **last** chunk completes, continue to step 12 with the **merged** ledger as the task's implementation notes.
+- **`status: blocked`** on any chunk → **stop the loop**; do **not** mark the task `implemented`. Surface the specialist's `blockers` diagnosis to the user and pause for guidance (same posture as an Ultrathink-Debugger reject on the inline path). The task stays `in-progress` — prior chunks' green tests remain on disk as recoverable progress (`/continue-task` re-runs the suite and re-chunks the remainder).
+- If an Agent call itself errors or times out → report the failure and pause; do not silently fall back to inline (the context-hygiene contract assumes the specialist owns the loop).
 
-**Steps 10–11 below run on the inline path only.** On the delegated path, jump to step 12 with the specialist's result.
+When all chunks complete, carry the merged `ledger` forward to step 12 (the main session does **not** re-derive it). Main also records `chunks_spawned: N` into the merged implementation notes (a persisted note-field written by main, **not** a monitor event — keeps ADR-0018's "no new telemetry" decision while leaving an audit trail of how many bounded contexts the task used). For a single-chunk task, `chunks_spawned: 1` and the behavior is identical to the pre-ADR-0018 delegated path.
+
+**Steps 10–11 below run on the inline path only.** On the delegated path, jump to step 12 with the merged ledger.
 
 10. **Red-green-refactor loop — iterate the backlog one behavior at a time** (vertical slices):
 
@@ -141,7 +152,7 @@ Handle the return:
    - Extract duplication, deepen modules (small interface / deep implementation), apply SOLID where natural, consider what new code revealed about existing code.
    - Run the full test suite after each refactor step; revert any step that breaks a test.
    - Tests are behavior-level and must survive this refactor unchanged — if a test breaks on a pure internal rename, it was testing implementation; fix the test to assert behavior.
-12. Add implementation notes to the task file explaining decisions made (interface choices, backlog deviations, refactors applied). **Inline path**: write the notes the main session produced. **Delegated path**: write the specialist's returned `impl_notes` verbatim (lightly formatted) — do not re-analyze the diff to regenerate them.
+12. Add implementation notes to the task file explaining decisions made (interface choices, backlog deviations, refactors applied). **Inline path**: write the notes the main session produced. **Delegated path**: write the specialist's returned `impl_notes` verbatim (lightly formatted) — do not re-analyze the diff to regenerate them. On the delegated path this is the **merged ledger** (all chunks' `impl_notes` concatenated in order); prefix it with a `chunks_spawned: N` line recording how many bounded-context chunks the task consumed (`N == 1` for a single-chunk/unchunked task).
 
 ## Post-Implementation Quality Check
 After all code and tests are written (before setting status to `implemented`), spawn the implement-phase agents from `WF_SPEC_AGENTS_IMPLEMENT` for a pre-validation sanity check. If `WF_SPEC_AGENTS_IMPLEMENT` is empty, skip this step. If it contains `code-quality-pragmatist` or any advisory agent, spawn it using the Agent tool. The spawned agent(s) receive:

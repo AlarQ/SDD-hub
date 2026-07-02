@@ -65,6 +65,15 @@
 #   tasks: <int|null>
 #   files: <int|null>
 
+# impl_chunk_size: <int>
+#   Optional per-spec override of the tier's impl_chunk_size default (ADR-0018).
+#   Behavior-count budget K for chunked delegated /implement: main cuts a
+#   delegated task's settled behavior backlog into ordered ≤K chunks and
+#   re-spawns the SAME `implementer:` specialist per chunk with fresh context,
+#   threading a cumulative impl_notes ledger forward. 0 = chunking off (one
+#   delegated spawn = pre-ADR-0018 behavior). Ignored on the small tier (never
+#   chunks — loader forces 0) and on the inline/generalist path.
+
 # repos: []
 #   Multi-repo binding. Required when .workflow.yml spec_storage_mode=vault.
 #   Each entry binds a logical name to a checked-out git repo. Tasks pick
