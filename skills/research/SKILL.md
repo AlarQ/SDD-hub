@@ -1,4 +1,7 @@
-Activate anti-hallucination research mode. Stay in this mode until the user says "exit research mode" or switches to another task.
+---
+description: Activate anti-hallucination research mode. Stay in this mode until the user says "exit research mode" or switches to another task.
+disable-model-invocation: true
+---
 
 ---
 
