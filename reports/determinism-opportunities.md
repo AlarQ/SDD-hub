@@ -228,7 +228,7 @@ Small `wf_parse_*` helpers, one per grammar.
 **Severity**: Low
 
 **Files**:
-- `commands/fix.md` (render `fix.md.template` + static frontmatter)
+- `skills/fix/SKILL.md` (render `fix.md.template` + static frontmatter)
 - `commands/bootstrap.md` (`.workflow.yml` from template)
 
 **Problem**:
