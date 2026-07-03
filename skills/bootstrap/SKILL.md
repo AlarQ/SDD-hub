@@ -1,3 +1,8 @@
+---
+name: bootstrap
+description: Bootstrap workflow config. A vault is set up **once**; each target code repo
+disable-model-invocation: true
+---
 Bootstrap workflow config. A vault is set up **once**; each target code repo
 is set up **once**. There is no project knowledge-base — project knowledge
 lives in `CLAUDE.md` / `CONTEXT.md` / `docs/adr/`. Gates fold inline into
