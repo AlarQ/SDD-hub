@@ -31,5 +31,5 @@ Do **not** route through AskUserQuestion when:
 
 Commands enforcing this protocol:
 - `skills/explore/SKILL.md` — config-inference approval, clarifying questions, scope forks
-- `commands/review-and-ship.md` — accept/reject per finding group, reject reason + KB-rule prompts
+- `skills/review-and-ship/SKILL.md` — accept/reject per finding group, reject reason + KB-rule prompts
 - `skills/pr-review/SKILL.md` — agent-finding accept/reject, PR-comment proposal accept/reject
