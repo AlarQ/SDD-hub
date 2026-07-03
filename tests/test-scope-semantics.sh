@@ -199,7 +199,7 @@ test_validate_md_documents_scope_per_spec_short_circuit() {
 }
 
 test_validate_impl_md_wires_union_runner() {
-  local md="$REPO_ROOT/commands/validate-impl.md"
+  local md="$REPO_ROOT/skills/validate-impl/SKILL.md"
   grep -q 'wf_vi_run_union_gates' "$md" || return 1
 }
 

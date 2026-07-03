@@ -1,4 +1,11 @@
-Run the spec-completion audit (FR-15, ADR-008). Reuses the existing **Odium** agent (`agents/odium.md`) unchanged — all spec-specific context flows through the wrapper prompt built here.
+---
+description: Run the spec-completion audit (FR-15, ADR-008). Reuses the existing **Odium** agent (`agents/odium.md`) unchanged — all spec-specific context flows through the wrapper prompt built here.
+disable-model-invocation: true
+args:
+  - name: feature
+    description: feature name
+    required: true
+---
 
 Feature name: $ARGUMENTS
 
