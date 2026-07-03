@@ -1,3 +1,13 @@
+---
+name: continue-task
+description: Resume work on the current in-progress task for a feature.
+disable-model-invocation: true
+args:
+  - name: ARGUMENTS
+    description: Feature name to resume work on
+    required: true
+---
+
 Resume work on the current in-progress task for a feature.
 
 Feature name: $ARGUMENTS
