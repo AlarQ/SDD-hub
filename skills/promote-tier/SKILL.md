@@ -1,3 +1,12 @@
+---
+name: promote-tier
+description: /promote-tier — Re-run /propose at a higher tier
+disable-model-invocation: true
+args:
+  - name: feature
+    description: Feature name (used as $ARGUMENTS in body)
+    required: true
+---
 # /promote-tier — Re-run /propose at a higher tier
 
 Triggered when `/implement` step 0 detects a tier-ceiling breach and the user picks **abort**. Promotes the spec to the next tier (`small → medium`, `medium → large`) and re-runs the propose pipeline for **remaining (non-`done`) scope only** — implemented tasks stay implemented.

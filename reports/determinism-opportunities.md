@@ -244,7 +244,7 @@ LM renders static templates with variable substitution by hand.
 **Severity**: Low
 
 **Files**:
-- `commands/promote-tier.md`
+- `skills/promote-tier/SKILL.md`
 
 **Problem**:
 Tier-bump lookup (`small→medium→large→refuse`) + done-task bucketing into
