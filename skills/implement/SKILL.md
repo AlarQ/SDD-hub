@@ -1,3 +1,13 @@
+---
+name: implement
+description: Implement the next task for a feature.
+disable-model-invocation: true
+args:
+  - name: ARGUMENTS
+    description: Feature name
+    required: true
+---
+
 Implement the next task for a feature.
 
 Feature name: $ARGUMENTS

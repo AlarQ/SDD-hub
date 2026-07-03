@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-IMPLEMENT_MD="$REPO_ROOT/commands/implement.md"
+IMPLEMENT_MD="$REPO_ROOT/skills/implement/SKILL.md"
 
 PASS=0
 FAIL=0
