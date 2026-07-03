@@ -1,3 +1,13 @@
+---
+name: fix
+description: /fix — Standalone Bug-Fix Flow
+disable-model-invocation: true
+args:
+  - name: ARGUMENTS
+    description: "<slug> — kebab-case bug id, e.g. login-redirect-loop"
+    required: true
+---
+
 # /fix — Standalone Bug-Fix Flow
 
 Skip `/explore` and `/propose`. Minimal artifact at `specs/fixes/<slug>/fix.md`. Use for production bugs, regressions, hotfixes — anything where spec/design overhead is wasted ceremony.
