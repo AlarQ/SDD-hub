@@ -1,4 +1,8 @@
-Print a short summary of the spec-driven development workflow rules.
+---
+name: workflow-summary
+description: Print a short summary of the spec-driven development workflow rules.
+disable-model-invocation: true
+---
 
 This command takes no arguments. It does NOT read any project files — it prints a static reference card from memory.
 
