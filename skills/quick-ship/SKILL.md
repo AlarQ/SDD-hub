@@ -1,4 +1,12 @@
-Ship current changes: commit, push, and create a PR. Works in any git repo without the spec-driven workflow.
+---
+name: quick-ship
+description: Ship current changes: commit, push, and create a PR. Works in any git repo without the spec-driven workflow.
+disable-model-invocation: true
+args:
+  - name: branch-or-title
+    description: Optional branch name or PR title (used as $ARGUMENTS in body)
+    required: false
+---
 
 Optional: branch name or PR title via $ARGUMENTS
 
