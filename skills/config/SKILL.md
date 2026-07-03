@@ -1,3 +1,14 @@
+---
+description: Edit or regenerate the spec config for a feature.
+disable-model-invocation: true
+args:
+  - name: feature
+    description: feature name
+    required: true
+  - name: regenerate
+    description: optional --regenerate flag to force config regeneration
+    required: false
+---
 Edit or regenerate the spec config for a feature.
 
 Feature name: $ARGUMENTS (strip any `--regenerate` flag before treating as the feature name)
