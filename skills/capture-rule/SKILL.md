@@ -1,4 +1,12 @@
-Capture an ad-hoc rule from the current conversation into the general knowledge base.
+---
+name: capture-rule
+description: Capture an ad-hoc rule from the current conversation into the general knowledge base.
+disable-model-invocation: true
+args:
+  - name: ARGUMENTS
+    description: Optional free-text seed or context refs (rule sketch, topic hint, PR URL, file path, commit ref). When absent, mine the current conversation for the insight to capture.
+    required: false
+---
 
 ## Purpose
 
