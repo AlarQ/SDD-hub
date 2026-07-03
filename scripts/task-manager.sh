@@ -334,7 +334,7 @@ validate_required_fields() {
 
 # Resolve an `implementer:` value. `generalist` is the inline sentinel and
 # always passes. Otherwise the value must be an agent-pool id resolvable via the
-# canonical grammar (see commands/validate.md / config-inferencer ID Validation
+# canonical grammar (see skills/validate/SKILL.md / config-inferencer ID Validation
 # Rules): `<category>/<name>` → `<pool>/<category>/<category>-<name>.md`, bare
 # `<name>` → `<pool>/<name>.md`. Pool = $WF_AGENT_POOL (exported by
 # config-loader) or the install default $HOME/.claude/agents. Unresolvable → die.

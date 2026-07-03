@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-phase-command-ceiling.sh — T004: ceiling semantics, snapshot drift, config gate.
-# Tests the bash logic documented in commands/validate.md, commands/implement.md,
+# Tests the bash logic documented in skills/validate/SKILL.md, commands/implement.md,
 # and scripts/ship-procedure.md. No external framework. Given/When/Then per testing/principles.md.
 # shellcheck disable=SC1090,SC1091
 

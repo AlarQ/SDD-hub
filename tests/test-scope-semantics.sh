@@ -193,7 +193,7 @@ test_monitor_accepts_scope_per_spec_reason() {
 # === Doc assertions: validate.md scope short-circuit + validate-impl.md wiring ===
 
 test_validate_md_documents_scope_per_spec_short_circuit() {
-  local md="$REPO_ROOT/commands/validate.md"
+  local md="$REPO_ROOT/skills/validate/SKILL.md"
   grep -q 'scope=per-spec' "$md" || return 1
   grep -q 'WF_VALIDATE_SCOPE' "$md" || return 1
 }
@@ -206,7 +206,7 @@ test_validate_impl_md_wires_union_runner() {
 # Phase 3 coverage audit is skipped under validate_scope: per-spec — assert
 # validate.md documents that skip reason alongside the phase.
 test_validate_md_documents_phase3_per_spec_skip() {
-  local md="$REPO_ROOT/commands/validate.md"
+  local md="$REPO_ROOT/skills/validate/SKILL.md"
   grep -q 'Phase 3' "$md" || return 1
   grep -qi 'coverage' "$md" || return 1
   grep -q 'scope=per-spec' "$md" || return 1
