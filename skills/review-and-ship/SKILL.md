@@ -1,3 +1,12 @@
+---
+description: Walk through validation findings interactively, then ship the task.
+disable-model-invocation: true
+args:
+  - name: feature
+    description: feature name
+    required: true
+---
+
 Walk through validation findings interactively, then ship the task.
 
 Feature name: $ARGUMENTS
