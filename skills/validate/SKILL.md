@@ -1,3 +1,11 @@
+---
+description: Run validation gates on implemented code for a feature.
+disable-model-invocation: true
+args:
+  - name: feature
+    description: feature name
+    required: true
+---
 Run validation gates on implemented code for a feature.
 
 Feature name: $ARGUMENTS
