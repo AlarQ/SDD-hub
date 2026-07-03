@@ -1,4 +1,12 @@
-Explore and clarify requirements for a new feature or change.
+---
+name: explore
+description: Explore and clarify requirements for a new feature or change.
+disable-model-invocation: true
+args:
+  - name: ARGUMENTS
+    description: "<feature> [--project <proj>] [--technical] — feature name (required to trigger Step 0 config inference; optional project segment for vault mode; optional flag forcing track: technical)"
+    required: false
+---
 
 ## Prerequisites
 1. Read and follow `$WF_GENERAL_KB/_rules.md` for knowledge base prerequisites and resolution rules

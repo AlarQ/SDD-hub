@@ -248,7 +248,7 @@ sharpens terminology into a repo-root `CONTEXT.md` glossary (or per-context
 files via `CONTEXT-MAP.md`) and records durable decisions as
 `docs/adr/NNNN-*.md`. It writes no spec artifacts. There is no separate
 `/grill` command — substance lives in the skill, workflow coupling lives
-in `commands/explore.md` Step −1. Emits monitor event `grill_completed`.
+in `skills/explore/SKILL.md` Step −1. Emits monitor event `grill_completed`.
 
 **ADR-home split:** `docs/adr/` = durable, cross-spec, repo-level
 domain/architecture decisions. `specs/<feature>/design.md

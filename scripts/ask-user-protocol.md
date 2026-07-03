@@ -30,6 +30,6 @@ Do **not** route through AskUserQuestion when:
 ## Reference
 
 Commands enforcing this protocol:
-- `commands/explore.md` — config-inference approval, clarifying questions, scope forks
+- `skills/explore/SKILL.md` — config-inference approval, clarifying questions, scope forks
 - `commands/review-and-ship.md` — accept/reject per finding group, reject reason + KB-rule prompts
 - `commands/pr-review.md` — agent-finding accept/reject, PR-comment proposal accept/reject
