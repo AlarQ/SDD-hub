@@ -1,4 +1,12 @@
-Read the current PR's review comments and address them.
+---
+name: pr-review
+description: Read the current PR's review comments and address them.
+disable-model-invocation: true
+args:
+  - name: pr-number
+    description: PR number, optional — resolved from current git branch if omitted (used as $ARGUMENTS in body)
+    required: false
+---
 
 Optional argument: a PR number to target. If omitted, the PR is resolved from the current git branch.
 
