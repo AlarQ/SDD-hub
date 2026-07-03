@@ -1,3 +1,11 @@
+---
+description: Show a comprehensive status dashboard for a feature's tasks.
+disable-model-invocation: true
+args:
+  - name: feature
+    description: feature name
+    required: true
+---
 Show a comprehensive status dashboard for a feature's tasks.
 
 Feature name: $ARGUMENTS
