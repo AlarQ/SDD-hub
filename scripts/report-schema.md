@@ -2,7 +2,7 @@
 
 Single source of truth for validation report YAML shape. All commands that read or write reports under `specs/<feature>/reports/` MUST conform to this schema. Do not restate the shape inline — link here.
 
-Consumers: `commands/validate.md`, `skills/validate-impl/SKILL.md`, `commands/review-and-ship.md`, `skills/learn-from-reports/SKILL.md`.
+Consumers: `skills/validate/SKILL.md`, `skills/validate-impl/SKILL.md`, `skills/review-and-ship/SKILL.md`, `skills/learn-from-reports/SKILL.md`.
 
 ## File location
 
