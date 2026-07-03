@@ -260,7 +260,7 @@ Script the lookup + bucketing.
 **Severity**: Low
 
 **Files**:
-- `commands/pr-review.md`
+- `skills/pr-review/SKILL.md`
 
 **Problem**:
 LM skips `user.login == $ME` or body starting `[claude]` by hand. (Comment
