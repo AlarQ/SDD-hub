@@ -1,4 +1,15 @@
-Mine validation reports for patterns worth promoting into the general knowledge base.
+---
+name: learn-from-reports
+description: Mine validation reports for patterns worth promoting into the general knowledge base.
+disable-model-invocation: true
+args:
+  - name: feature
+    description: Feature name (used as $1 in body)
+    required: true
+  - name: task-id
+    description: Task id, optional (used as $2 in body)
+    required: false
+---
 
 Feature name: $1
 Task id: $2 (optional)
