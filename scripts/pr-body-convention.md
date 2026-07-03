@@ -44,7 +44,7 @@ docs-only diffs — most PRs have no diagram.
 
 - **One diagram of the resulting flow.** Add a *before + after* pair only when
   the change **replaces** existing behavior (so the reviewer sees what moved).
-- **Diagram-type selection reuses `commands/propose.md`** (its design.md
+- **Diagram-type selection reuses `skills/propose/SKILL.md`** (its design.md
   heuristics): `sequenceDiagram` for multi-step / multi-actor interactions,
   `stateDiagram-v2` for an entity lifecycle (≥3 states), `graph TB` for
   module / dependency shape. Do not duplicate that heuristic here — follow the

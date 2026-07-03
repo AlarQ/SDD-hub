@@ -1,3 +1,13 @@
+---
+name: propose
+description: Generate specification, design, and tasks for a feature.
+disable-model-invocation: true
+args:
+  - name: feature
+    description: Feature name (used as $ARGUMENTS in body)
+    required: true
+---
+
 Generate specification, design, and tasks for a feature.
 
 Feature name: $ARGUMENTS
