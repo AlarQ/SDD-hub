@@ -101,78 +101,11 @@ The agent must return:
 If the agent errors or times out, proceed with spec.md generation without security input and note: *"Security Engineer analysis unavailable — security scenarios may be incomplete."*
 
 ##### Embedding Security Output in spec.md
-- Generate spec.md content per the **Canonical spec.md shape** below.
+- Generate spec.md content per `references/spec-template.md`.
 - Incorporate security agent findings as BDD scenarios for auth, input validation, and data handling.
 - Add a `## Security Scenarios` section with Given/When/Then for each threat mitigation.
 
-##### Canonical spec.md shape (MANDATORY)
-
-spec.md uses structured sections so wire detail stays scannable/diffable. FR prose is **intent only** — no URLs, no status codes, no schema columns.
-
-**FR block** — 1–3 sentences of intent + ref block. Refs are required when the FR maps to a contract / table / scenario:
-
-```
-### FR-2: Idempotent Category create
-A user creating a Category with the same `(parent_id, name)` they already own
-gets the existing row, not a duplicate. Concurrent creates resolve to one row.
-
-**Contracts:** EP-CAT-CREATE
-**Data:** category
-**Scenarios:** idempotent-create-new, idempotent-create-existing, concurrent-create
-```
-
-**`## API Contracts` section** — one block per endpoint. **Skip the whole section if the spec has no endpoints.** Endpoint id grammar: `EP-<DOMAIN>-<VERB>` (uppercase, kebab).
-
-```
-### EP-CAT-CREATE — POST /v1/qanda/categories
-**Auth:** session
-**FRs:** FR-2, FR-6
-
-**Request body**
-```json
-{ "name": "string", "parent_id": "UUID?" }
-```
-
-| Status | When | Body |
-|--------|------|------|
-| 201 | new row inserted | `Category { id, name, parent_id }` |
-| 200 | existing row matched | `Category { id, name, parent_id }` |
-| 404 | parent_id not owned by caller | `{ code: "category_not_found" }` |
-| 400 | name invalid | `{ code: "validation_error" }` |
-```
-
-**`## Data Model` section** — one block per table/collection. **Skip the whole section if the spec changes no schema.** Migration sub-block only when destructive/multi-step.
-
-```
-### `category`
-**FRs:** FR-1, FR-7
-
-| Column | Type | Null | Default | Notes |
-|--------|------|------|---------|-------|
-| id | UUID | no | gen_random_uuid() | PK |
-| user_id | UUID | no | — | FK users(id) ON DELETE CASCADE |
-| parent_id | UUID | yes | — | FK category(id) ON DELETE RESTRICT |
-| name | text | no | — | CHECK length 1..200, lowercase |
-
-**Constraints**
-- UNIQUE (user_id, parent_id, lower(name))
-- INDEX (user_id, parent_id)
-
-**Migration** (FR-7)
-- File 1 (gated by `ALLOW_DESTRUCTIVE_MIGRATION`): …
-- File 2: …
-```
-
-**Required spec.md section order:** `## Overview` → `## Functional Requirements` (FR blocks) → `## API Contracts` (conditional) → `## Data Model` (conditional) → `## Scenarios` (BDD with scenario ids referenced by FR blocks) → `## Security Scenarios` → `## User Flow` (medium/large). Tier-agnostic — conditional sections are driven by **endpoint/schema presence**, not tier.
-
-**Hard rules** for spec.md authoring:
-- FR prose ≤3 sentences. No URLs, status codes, JSON shapes, SQL, or column lists inside an FR.
-- Every endpoint in scope appears as exactly one `### EP-…` block under `## API Contracts`.
-- Every table/collection touched appears as exactly one `### \`tablename\`` block under `## Data Model`.
-- Each BDD scenario gets a kebab-case `scenario-id` referenced from FR blocks via `**Scenarios:**`.
-
-##### User Flow Diagram (medium + large tiers)
-After `## Security Scenarios`, add a `## User Flow` section containing one Mermaid `sequenceDiagram` block synthesized from the primary happy-path BDD scenario. Actor = end user; participants = the user-visible system surfaces named in spec.md (UI, API, store, external services). Every participant label MUST be a term defined elsewhere in spec.md. Style conventions per `docs/workflow-diagram.md` (solid arrows for direct flow, dashed `-->>` for async/return). Skip on `small`.
+Generate spec.md per `references/spec-template.md` (the single source of truth for the spec.md shape — canonical section order, FR / API Contracts / Data Model block formats, and hard rules).
 
 ### specs/$ARGUMENTS/design.md
 
@@ -239,28 +172,7 @@ If multiple flags are `1`, spawn all matching agents concurrently (they are inde
 2. **Data pipeline** — data sources, preprocessing, storage, versioning
 3. **Integration design** — API surface, latency requirements, fallback behavior
 
-##### Embedding Agent Output in design.md
-Incorporate all agent outputs directly into design.md:
-
-- Architectural decisions with explicit references to knowledge-base rules
-- Explain WHY each decision was made against the ground rules
-- Include Software Architect ADRs in an `## Architecture Decision Records` section
-- Include trade-off analysis alongside each architectural decision
-- Include Backend Architect schema and API contracts in a `## Backend Design` section (if spawned)
-- Include UX Architect component hierarchy and layout in a `## Frontend Architecture` section (if spawned)
-- Include UI Designer component specs in a `## UI Specifications` section (if spawned)
-- Include AI Engineer model/pipeline design in a `## AI/ML Architecture` section (if spawned)
-- Module boundaries, dependency direction, data flow
-- Reference `$WF_GENERAL_KB/languages/` for language-specific patterns
-
-##### Embedding Mermaid Diagrams in design.md (large tier)
-Embed every Mermaid block emitted by an agent verbatim under the section that holds the corresponding text:
-- Software Architect's architecture `graph TB` → new `## Architecture Overview` section at the top of design.md (before ADRs).
-- Software Architect's `stateDiagram-v2` → adjacent to the ADR that motivates it.
-- Backend Architect's `erDiagram` and `sequenceDiagram` → inside the `## Backend Design` section, next to the schema and API contracts they describe.
-- UX Architect's component-tree `graph TD` and user-flow `sequenceDiagram` → inside the `## Frontend Architecture` section.
-
-Style: follow `docs/workflow-diagram.md` (solid arrows direct, dashed async/human, subgraph clusters). Every node/entity label MUST correspond to a term defined in spec.md or design.md prose — no orphan nodes.
+Embed agent outputs into design.md per `references/design-template.md` (the authoritative spec.md ↔ design.md boundary — anti-duplication rule, section-by-section embedding of agent outputs and Mermaid diagrams, and the ADR sub-template pointer).
 
 ### specs/$ARGUMENTS/tasks/NNN-{task-name}.md
 

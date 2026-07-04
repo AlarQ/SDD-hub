@@ -239,7 +239,7 @@ only; medium/large require docs/adr/ populated by Step −1 grill pass."*
    - Only proceed after the user has selected an option for every scope fork
 6. Identify which rule files from both knowledge bases are relevant to this feature
 7. Summarize understanding and list applicable ground rules (using prefix convention per `knowledge-base-rules.md`)
-8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name. Use canonical `CONTEXT.md` glossary terms in the PRD prose; reference any relevant `docs/adr/` decision by id rather than restating it. When saving, include an `## Agent Insights (Explore Phase)` section after the ground-rules listing containing all agent outputs collected during the conversation, labeled by agent name. Mark as advisory. Omit agents that were not spawned or that errored.
+8. Optionally save as `specs/$ARGUMENTS/prd.md` if the user provides a feature name. Produce `prd.md` per `references/prd-template.md`. Use canonical `CONTEXT.md` glossary terms in the PRD prose; reference any relevant `docs/adr/` decision by id rather than restating it.
 
 ## Agent Advisory Block Format
 
