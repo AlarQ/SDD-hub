@@ -59,7 +59,7 @@ When used as a validation gate (spawned by `/validate`), output findings as a YA
 
 Populate `rationale` and `impact` on every finding.
 
-**Scope boundary when validating design.md:** wire detail (endpoints, schemas, status codes, columns, migrations) belongs in `spec.md` (`## API Contracts`, `## Data Model`). Do NOT raise findings for design.md "missing" endpoint tables or schema — design.md references them by id and owns the why.
+**Scope boundary when validating design.md:** wire detail (endpoints, schemas, status codes, columns, migrations) belongs in `spec.md` (`## API Contracts`, `## Data Model`). Do NOT raise findings for design.md "missing" endpoint tables or schema — design.md references them by id and owns the why. The authoritative statement of this boundary is the `MUST NOT restate` rule in `skills/propose/references/design-template.md`.
 
 Only output findings in this format when instructed to act as a validation gate. For all other uses, follow the deliverable formats below.
 
@@ -67,7 +67,7 @@ Only output findings in this format when instructed to act as a validation gate.
 
 When spawned by `/propose` to assist with design.md generation, return your analysis in this structured format.
 
-**Scope boundary — read first.** Wire detail (HTTP endpoints, request/response shapes, status code tables, DB columns, indexes, migration steps) lives in **`spec.md`** under `## API Contracts` and `## Data Model`. `design.md` owns the **why** — rationale, trade-offs, ADRs, module boundaries, dependency direction. Do NOT restate endpoints or schema tables in `design.md`; reference them by id (e.g. `EP-CAT-CREATE`, `` `category` ``) and explain *why* they look that way.
+**Scope boundary — read first.** Wire detail (HTTP endpoints, request/response shapes, status code tables, DB columns, indexes, migration steps) lives in **`spec.md`** under `## API Contracts` and `## Data Model`. `design.md` owns the **why** — rationale, trade-offs, ADRs, module boundaries, dependency direction. Do NOT restate endpoints or schema tables in `design.md`; reference them by id (e.g. `EP-CAT-CREATE`, `` `category` ``) and explain *why* they look that way. This restates the single authoritative boundary — the `MUST NOT restate` rule in `skills/propose/references/design-template.md`.
 
 ### Trade-off Analysis
 For each major architectural decision:
