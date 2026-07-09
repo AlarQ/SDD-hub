@@ -79,3 +79,26 @@ Body MUST contain an FR matrix section: one row per FR, marked `implemented | pa
 1. `/validate` / `/validate-impl` write reports with `review_status: pending` on every finding.
 2. `/review-and-ship` mutates `review_status` to `accepted` / `rejected` / `noted` and may set `review_notes`, `rule_added`, `auto_accepted`.
 3. `/learn-from-reports` mines reports for KB rule patterns **in place** (scoped by task-id). Reports are **retained** as a local audit trail — never deleted, here or anywhere else.
+
+## Auto-accept allowlist (`auto-accept.yml`)
+
+Not a *finding* schema — a separate global data file that governs which findings `/review-and-ship` auto-fixes without a human gate. **No change to the Finding schema above.**
+
+- **Location:** `$WF_GENERAL_KB/auto-accept.yml` (global, accumulates across projects).
+- **Shape:** a single `allowlist:` sequence of free-form `category` strings, e.g.
+
+  ```yaml
+  allowlist:
+    - style
+    - formatting
+    - unused-import
+    - dry-violation
+    - coverage
+    - lint
+    - imports
+    - type-safety
+  ```
+
+- **Read** by `/review-and-ship` Step 2a via `yq`; a **missing** file degrades to that inline default list (cold start still works).
+- **Grown** by `/learn-from-reports`: a project-wide promotion step recomputes accept-rate **on demand** from existing `review_status` values (no persisted counters) and, when a non-allowlisted category clears `total_seen ≥ 8` AND `accept_rate ≥ 0.85` AND `distinct_specs ≥ 3`, prompts the human (`AskUserQuestion`) before appending.
+- **Human-gated and grow-only.** Promotion never appends without an approval prompt; removal/demotion is a manual edit of the file. The severity cap (≤ medium) + `fix_proposal`-present guarantees at fix time apply to every allowlisted category regardless.

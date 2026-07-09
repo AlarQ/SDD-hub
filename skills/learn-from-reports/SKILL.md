@@ -57,7 +57,19 @@ Cross-finding pattern mining that complements `/review-and-ship` step 4 (inline 
 
 > **Reports are retained.** Nothing is deleted here (or anywhere) — reports persist on disk as a local audit trail for the spec's lifetime. Mining is scoped to the resolved task-id via the step 1 load filter, not enforced by deletion.
 
-6. **Report summary.** "Mined N findings: C candidates proposed, A accepted, R rejected, E edited."
+5a. **Auto-accept allowlist promotion.** Independent of step 1's per-task load — this step recomputes over the **project-wide** report corpus on demand (no state file, no persisted counters).
+
+   1. **Load the whole corpus.** Collect findings from **all** per-task gate reports in the current project: `specs/*/reports/*.yaml`. **Exclude** spec-level reports — filename patterns `spec-audit-*.md` and `spec-consistency.yaml` (they carry synthetic FR review units, not category-scored findings).
+   2. **Load the current allowlist** from `$WF_GENERAL_KB/auto-accept.yml` via `yq` (`yq -r '.allowlist[]' "$WF_GENERAL_KB/auto-accept.yml"`); treat a missing file as the empty set. For every `category` **not already on the allowlist**, over its **human-reviewed** findings only (`review_status ∈ {accepted, rejected}` — `auto_accepted` findings belong to already-allowlisted categories and are absent here), compute:
+      - `total_seen` = count of accepted + rejected findings in the category,
+      - `accept_rate` = accepted / (accepted + rejected),
+      - `distinct_specs` = count of distinct `specs/<feature>/` dirs contributing at least one such finding.
+   3. **Candidate iff** `total_seen ≥ 8` **AND** `accept_rate ≥ 0.85` **AND** `distinct_specs ≥ 3`. Categories failing any of the three are silently dropped (no prompt).
+   4. **Per candidate**, invoke `AskUserQuestion` (per `~/.claude/scripts/ask-user-protocol.md`): "Promote `<category>` to the auto-accept allowlist? (seen N / accepted M = R%, across K specs)" with options `Promote` / `Skip`. This human gate is also the fix-safety judgment for judgment categories (they are never trusted by fiat). One tool call per candidate; **stop and wait** for the result before the next candidate.
+   5. **On `Promote`:** append the category to `allowlist:` in `$WF_GENERAL_KB/auto-accept.yml` via `yq` (e.g. `yq -i '.allowlist += ["<category>"]' "$WF_GENERAL_KB/auto-accept.yml"`), preserving formatting and never duplicating an existing entry. On `Skip`: do nothing (grow-only; no demotion, no suppression state).
+   6. Fold the count of promoted categories into the step-6 summary. If no candidates cleared the bar, emit one line: "No allowlist promotion candidates."
+
+6. **Report summary.** "Mined N findings: C candidates proposed, A accepted, R rejected, E edited. P categories promoted to the auto-accept allowlist."
 
 ## Next Step
 

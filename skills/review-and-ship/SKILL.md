@@ -51,7 +51,7 @@ If the current task will reach the ship tail (it is at status `review`), resolve
 
    Otherwise the finding is **MANUAL**.
 
-   - **Allowlist (hardcoded here, editable in this command):** `style`, `formatting`, `unused-import`, `dry-violation`, `coverage`. Matching is **your judgment** against each finding's free-form `category` string — there is no closed enum and no parser change. Treat near-synonyms sensibly (e.g. `unused_import`, `lint:unused-import` match `unused-import`; `code-style` matches `style`).
+   - **Allowlist (loaded from the general KB, self-growing):** read the `allowlist:` sequence from `$WF_GENERAL_KB/auto-accept.yml` via `yq` (e.g. `yq -r '.allowlist[]' "$WF_GENERAL_KB/auto-accept.yml"`). `/learn-from-reports` grows this file over time (human-gated promotion). **Fallback:** if `auto-accept.yml` is absent (fresh install / cold start), use the inline default `style`, `formatting`, `unused-import`, `dry-violation`, `coverage`, `lint`, `imports`, `type-safety`. If the file exists, it wins. Matching is **your judgment** against each finding's free-form `category` string — there is no closed enum and no parser change. Treat near-synonyms sensibly (e.g. `unused_import`, `lint:unused-import` match `unused-import`; `code-style` matches `style`).
    - **Severity cap:** `critical` / `high` mechanical findings always go MANUAL. Coverage ignores the cap.
    - **`interaction` (afk/hitl) is NOT consulted** — same partition for all tasks.
    - **spec-audit synthetic findings are out of scope** — the `missing`/`partial` FR review units synthesized in step 1 are NEVER auto-accepted (they create follow-up tasks, not code fixes). They always go MANUAL with their existing handling.

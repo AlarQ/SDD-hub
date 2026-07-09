@@ -278,6 +278,8 @@ graph TB
     RF -.->|inline new rules| GKB
     REPORTS --> LFR["/learn-from-reports"]
     LFR -.->|mined new rules| GKB
+    LFR -.->|human-gated category promotion| AAY[("auto-accept.yml<br/>(general KB)")]
+    AAY -.->|allowlist source| RF
 
     TBR --> SHP(["ship procedure (inline)"])
     SBC --> SHP
@@ -445,7 +447,7 @@ graph LR
     NOOP --> NEXT
 ```
 
-The AUTO bucket applies mechanical fixes (style/formatting/unused-import/dry-violation) and generates+green-checks coverage tests **before** any human prompt — no commits (working-tree edits, backstopped by the draft PR diff), failures fall back to MANUAL. `/learn-from-reports` skips `auto_accepted` findings when mining KB rules. The ship tail runs only when the current task is at status `review` (the normal per-task finding flow); `/propose` spec-consistency and `/validate-impl` reopen triage reuse this command at the spec level where no task is in `review`, so the tail is a no-op.
+The AUTO bucket applies mechanical fixes (allowlisted categories) and generates+green-checks coverage tests **before** any human prompt — no commits (working-tree edits, backstopped by the draft PR diff), failures fall back to MANUAL. The allowlist is loaded from `$WF_GENERAL_KB/auto-accept.yml` (inline default `style, formatting, unused-import, dry-violation, coverage, lint, imports, type-safety` when the file is absent). `/learn-from-reports` grows that file via a human-gated, project-wide promotion step (`total_seen ≥ 8` AND `accept_rate ≥ 0.85` AND `distinct_specs ≥ 3` → `AskUserQuestion`; grow-only, manual prune) and skips `auto_accepted` findings when mining KB rules. The ship tail runs only when the current task is at status `review` (the normal per-task finding flow); `/propose` spec-consistency and `/validate-impl` reopen triage reuse this command at the spec level where no task is in `review`, so the tail is a no-op.
 
 ### 5h. Ship procedure (inline) — commit, push, PR ready
 
