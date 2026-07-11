@@ -1,7 +1,7 @@
 ---
 name: learn-from-reports
 description: Mine validation reports for patterns worth promoting into the general knowledge base.
-disable-model-invocation: true
+disable-model-invocation: false
 args:
   - name: feature
     description: Feature name (used as $1 in body)
