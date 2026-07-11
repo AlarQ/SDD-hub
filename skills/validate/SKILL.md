@@ -1,6 +1,6 @@
 ---
 description: Run validation gates on implemented code for a feature.
-disable-model-invocation: true
+disable-model-invocation: false
 args:
   - name: feature
     description: feature name

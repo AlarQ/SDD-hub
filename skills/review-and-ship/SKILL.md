@@ -1,6 +1,6 @@
 ---
 description: Walk through validation findings interactively, then ship the task.
-disable-model-invocation: true
+disable-model-invocation: false
 args:
   - name: feature
     description: feature name
