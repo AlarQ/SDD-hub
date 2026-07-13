@@ -1,7 +1,7 @@
 ---
 name: implement
 description: Implement the next task for a feature.
-disable-model-invocation: true
+disable-model-invocation: false
 args:
   - name: ARGUMENTS
     description: Feature name

@@ -9,12 +9,12 @@ args:
   - name: task-id
     description: Task id, optional (used as $2 in body)
     required: false
----
+--- 
 
 Feature name: $1
 Task id: $2 (optional)
 
-## Purpose
+## Purpose 
 
 Cross-finding pattern mining that complements `/review-and-ship` step 4 (inline rule creation on reject). This command runs **after the task is already shipped** — after `/review-and-ship` addresses findings and ships, or after `/validate` passes clean and ships. It is the final manual step of the per-task flow: it writes KB rules to `$WF_GENERAL_KB` only and **never touches the task PR diff** (the PR is already ready by the time this runs). Reports are **retained** (local audit trail); this command mines them in place. It surfaces rule candidates the user did not flag in-flow: repeated categories, clustered LLM findings, rejection reasoning worth codifying, and accepted fixes describing a generalizable convention. Accepted candidates become new general knowledge-base rules so the same class of finding does not recur in future tasks.
 
