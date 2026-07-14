@@ -30,16 +30,17 @@ wf_vi_parse_frs() {
 # wrong diff range would silently corrupt the spec-completion report.
 wf_vi_diff_range() {
   local feature="$1"
-  local base="feat/$feature"
-  local mb
-  if mb="$(git merge-base main "$base" 2>/dev/null)" && [[ -n "$mb" ]]; then
-    printf '%s..HEAD' "$mb"
-    return 0
-  fi
-  if mb="$(git rev-parse "${base}^" 2>/dev/null)" && [[ -n "$mb" ]]; then
-    printf '%s..HEAD' "$mb"
-    return 0
-  fi
+  local base mb
+  for base in "feat/$feature" "feat/$feature-integration"; do
+    if mb="$(git merge-base main "$base" 2>/dev/null)" && [[ -n "$mb" ]]; then
+      printf '%s..HEAD' "$mb"
+      return 0
+    fi
+    if mb="$(git rev-parse "${base}^" 2>/dev/null)" && [[ -n "$mb" ]]; then
+      printf '%s..HEAD' "$mb"
+      return 0
+    fi
+  done
   echo "ERROR: Cannot determine diff range for $feature; refusing to audit" >&2
   return 5
 }
@@ -214,9 +215,10 @@ wf_vi_emit_reopen()   { log_event "$1" spec_reopened "" '{}'; }
 # All git runs in WF_TASK_REPO_PATH (vault/multi-repo safe; default cwd).
 # Resolution order:
 #   1. single-branch + resolvable task_base_sha → <sha>..HEAD
-#   2. merge-base feat/<feature> HEAD            → <mb>..HEAD   (same range
-#      Phase 2 hands advisory agents)
-#   3. wf_vi_diff_range fallback (merge-base main feat/<feature>)
+#   2. merge-base feat/<feature>|feat/<feature>-integration HEAD → <mb>..HEAD
+#      (same range Phase 2 hands advisory agents; -integration suffix
+#      tolerated for specs whose integration branch predates ADR-0003 naming)
+#   3. wf_vi_diff_range fallback (merge-base main feat/<feature>|-integration)
 # Nothing resolves → rc 5 (loud fail; never a silent HEAD~1).
 wf_vi_task_diff_range() {
   local feature="$1" task_file="$2"
@@ -230,10 +232,13 @@ wf_vi_task_diff_range() {
     printf '%s..HEAD' "$sha"
     return 0
   fi
-  if mb="$(git -C "$gitdir" merge-base "feat/$feature" HEAD 2>/dev/null)" && [[ -n "$mb" ]]; then
-    printf '%s..HEAD' "$mb"
-    return 0
-  fi
+  local ibase
+  for ibase in "feat/$feature" "feat/$feature-integration"; do
+    if mb="$(git -C "$gitdir" merge-base "$ibase" HEAD 2>/dev/null)" && [[ -n "$mb" ]]; then
+      printf '%s..HEAD' "$mb"
+      return 0
+    fi
+  done
   local fb
   if fb="$(cd "$gitdir" 2>/dev/null && wf_vi_diff_range "$feature" 2>/dev/null)" && [[ -n "$fb" ]]; then
     printf '%s' "$fb"
