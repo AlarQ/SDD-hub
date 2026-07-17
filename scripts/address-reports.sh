@@ -149,13 +149,17 @@ Options:
                   given report basenames, then exit. Does not dispatch workers.
 
 Environment:
-    MAX_PARALLEL  Worker pool size, shared across all reports (default: 2)
-    MAX_FINDINGS  Default for --limit (default: 0 = no limit)
-    CLAUDE_MODEL  Model id passed to claude --model (default: claude-sonnet-4-6)
-    DRY_RUN=1     Print planned actions, do not spawn workers. Note: DRY_RUN
-                  does NOT write reports/.triage.json — run once without DRY_RUN
-                  before --resume can load the manifest.
-    NO_COLOR=1    Disable ANSI (auto-off when not a TTY)
+    WF_RUNTIME      claude | pi (default: claude, inherited from the pipeline).
+                    Selects the LLM runtime for the judge + workers.
+    MAX_PARALLEL    Worker pool size, shared across all reports (default: 2)
+    MAX_FINDINGS    Default for --limit (default: 0 = no limit)
+    CLAUDE_MODEL    Claude: model id passed to claude --model (default: claude-sonnet-4-6)
+    PI_JUDGE_MODEL  Pi: model for the triage judge (default: pi configured default)
+    PI_WORKER_MODEL Pi: model for workers (default: pi configured default)
+    DRY_RUN=1       Print planned actions, do not spawn workers. Note: DRY_RUN
+                    does NOT write reports/.triage.json — run once without DRY_RUN
+                    before --resume can load the manifest.
+    NO_COLOR=1      Disable ANSI (auto-off when not a TTY)
 
 Output:
     reports/.scheduler.log                       High-level scheduler events
@@ -231,10 +235,15 @@ validate_env() {
   MAX_PARALLEL="${MAX_PARALLEL:-2}"
   [[ "$MAX_PARALLEL" =~ ^[1-9][0-9]*$ ]] || die "MAX_PARALLEL must be a positive integer: $MAX_PARALLEL"
   DRY_RUN="${DRY_RUN:-0}"
+  WF_RUNTIME="${WF_RUNTIME:-claude}"
 
   if [[ "$DRY_RUN" != "1" ]]; then
-    command -v claude >/dev/null 2>&1 || die "claude CLI not found (needed unless DRY_RUN=1)"
-    command -v gh     >/dev/null 2>&1 || die "gh CLI not found (needed unless DRY_RUN=1)"
+    case "$WF_RUNTIME" in
+      claude) command -v claude >/dev/null 2>&1 || die "claude CLI not found (needed unless DRY_RUN=1)" ;;
+      pi)     command -v pi     >/dev/null 2>&1 || die "pi CLI not found (needed unless DRY_RUN=1)" ;;
+      *)      die "WF_RUNTIME must be 'claude' or 'pi' (got: $WF_RUNTIME)" ;;
+    esac
+    command -v gh >/dev/null 2>&1 || die "gh CLI not found (needed unless DRY_RUN=1)"
   fi
 
   # GNU `timeout` is absent on stock macOS (it lives in coreutils as `gtimeout`).
@@ -477,17 +486,31 @@ run_triage_judge() {
     return 0
   fi
   set +e
-  verdict="$(printf '%s' "$payload" | "${TIMEOUT_PREFIX[@]+"${TIMEOUT_PREFIX[@]}"}" claude -p "$TRIAGE_PROMPT" \
-      --model "${CLAUDE_MODEL:-claude-sonnet-4-6}" \
-      --permission-mode bypassPermissions --output-format json 2>>"$LOG")"
+  if [[ "${WF_RUNTIME:-claude}" == "pi" ]]; then
+    # Pi text mode: stdout IS the answer (no .result envelope to unwrap). The
+    # judge is a pure-LLM classifier with no tools, no files, no skills, no
+    # context, so it stays fast, deterministic, and free of repo/skill bias. The
+    # shared TIMEOUT_PREFIX is applied for parity with the Claude fail-closed ceiling.
+    local -a jf=( -p --no-tools --no-skills --no-extensions --no-context-files --exclude-tools ask_question )
+    [[ -n "${PI_JUDGE_MODEL:-}" ]] && jf+=( --model "$PI_JUDGE_MODEL" )
+    verdict="$(printf '%s' "$payload" | "${TIMEOUT_PREFIX[@]+"${TIMEOUT_PREFIX[@]}"}" pi "${jf[@]}" "$TRIAGE_PROMPT" 2>>"$LOG")"
+  else
+    verdict="$(printf '%s' "$payload" | "${TIMEOUT_PREFIX[@]+"${TIMEOUT_PREFIX[@]}"}" claude -p "$TRIAGE_PROMPT" \
+        --model "${CLAUDE_MODEL:-claude-sonnet-4-6}" \
+        --permission-mode bypassPermissions --output-format json 2>>"$LOG")"
+  fi
   rc=$?
   set -e
   (( rc == 124 )) && die "ABORT triage judge timed out (>${TRIAGE_TIMEOUT:-7200}s) — fail-closed, no workers spawned"
   (( rc == 0 )) || die "ABORT triage judge call failed (rc=$rc) — fail-closed, no workers spawned"
-  # claude --output-format json wraps the answer in an envelope; the model's text
-  # lives in .result. Strip any stray code fences before handing it to the parser.
-  inner="$(jq -r '.result // empty' <<<"$verdict" 2>/dev/null || true)"
-  [[ -n "$inner" ]] || inner="$verdict"
+  if [[ "${WF_RUNTIME:-claude}" == "pi" ]]; then
+    inner="$verdict"                       # text mode = the answer itself
+  else
+    # claude --output-format json wraps the answer in an envelope; the model's
+    # text lives in .result. Strip any stray code fences before handing to parser.
+    inner="$(jq -r '.result // empty' <<<"$verdict" 2>/dev/null || true)"
+    [[ -n "$inner" ]] || inner="$verdict"
+  fi
   printf '%s' "$inner" | sed -E '/^[[:space:]]*```/d'
 }
 
@@ -805,6 +828,66 @@ extract_pr_num_from_gh() {
     --jq '.[0].number' 2>/dev/null || true
 }
 
+# Build the Pi worker prompt for one work unit. Restates the address-findings
+# flow for Pi no-subagent, no-Skill-tool model: inline exploration/implementation,
+# inline self-review (replaces the 3 parallel reviewer subagents Pi cannot
+# spawn), inline ship (replaces /quick-ship, which gates sensitive files via
+# AskUserQuestion and would block headless). Keeps the SAME observable contract
+# the scheduler depends on: one PR per unit (extract_pr_num scrapes the
+# github.com/.../pull/<N> URL from the session log), WONTFIX sentinel on
+# won't-fix, never touch the report file, stop after one unit. The
+# address-findings skill is loaded via --skill as vocabulary reference only;
+# this prompt is the source of truth.
+#
+# Args: <report_abs> <unit_type> <member_ref> [<member_ref>...]
+#   member_ref = "<report_abs>:<slug>" (same shape as the Claude --finding arg;
+#   the slug is the kebab-case form of an open H2 heading in the report).
+build_worker_prompt_pi() {
+  local report_abs="$1" unit_type="$2"; shift 2
+  local member_refs=( "$@" )
+  cat <<EOF
+You are addressing ONE work unit (a cluster of $unit_type findings) from an architecture audit report, in HEADLESS AUTO mode. Pi has no subagents and no Skill tool, so execute every step inline yourself.
+
+Report file (READ-ONLY — never edit, stage, or git-add it; the scheduler owns report writes):
+  $report_abs
+
+Work unit members (address ALL of them in this one branch — they share code, so one fix resolves the unit):
+$(printf '  - %s\n' "${member_refs[@]}")
+
+For each member: the text after the last ':' is the kebab-case slug of an open H2 heading ("## <heading>") in the report. Read the report, match each slug to its H2, and address the finding described in its **Problem** / **Fix** body.
+
+Steps (do not skip; do not auto-advance past the last one):
+
+1. LOCATE — read the report file; for each member slug, find its open H2 and read the **Severity** / **Files** / **Problem** / **Fix** body. Use read/grep/find/ls inline (no subagents).
+
+2. PLAN — print a short plan to stdout (what changes, where), then proceed. Do NOT call ExitPlanMode (Pi has none) and do NOT wait for input.
+
+3. IMPLEMENT — make the fix. Test-first when the change alters behavior (red/green/refactor, vertical slices); for structure-only refactors lean on the existing suite. Resolve verification in this order: a .workflow.yml gate if present, else the repo own test command (cargo/npm/etc.), else the finding **Fix** acceptance criteria. Run the tests; they must pass.
+
+4. REVIEW (inline self-review — replaces the 3 parallel reviewer subagents Pi cannot spawn) — run git diff via the bash tool and critique your own change against the unit findings in under ~200 words: correctness, security, scope creep, test toothiness. Apply clearly-correct correctness/security items you find. (A richer multi-pi-process review is a future enhancement, out of scope here.)
+
+5. WONTFIX lane — ONLY if you and the review conclude no code change is warranted (the finding is invalid, or the fix is out of scope or too risky): write a WONTFIX sentinel file in the worktree root (current directory) with a one-sentence rationale on line 1, using a LITERAL command (not prose):
+     printf '%s\n' '<rationale>' > WONTFIX
+   Then STOP. Do NOT ship a PR. Do NOT edit the report.
+
+6. SHIP (inline — do NOT invoke any skill; Pi has no Skill tool and quick-ship gates sensitive files via AskUserQuestion, which would block headless):
+   - git add -A
+   - commit with a conventional message (e.g. "refactor(<area>): <summary>"); NEVER add a Co-Authored-By trailer or any Claude attribution.
+   - git push -u origin HEAD   (you are already on the unit branch; push the current branch)
+   - open ONE PR:
+       gh pr create --base main --title "<conventional title>" --body "<body>"
+     The PR body must follow the PR-body convention: a ## Why section (1-2 sentences, the intent) and a ## What changed section (3-6 high-level behavior bullets, NO file enumeration — the diff is the detail), optional mermaid only if control flow changed, and NO footer. Enumerate every finding addressed (one line per member heading) within ## What changed or a short note.
+   - Print the resulting github.com/.../pull/<N> URL to stdout (the scheduler scrapes it from this session log).
+
+7. STOP — do not re-invoke yourself, do not touch the report file, do not mark anything RESOLVED (the scheduler writes the RESOLVED markers in the main repo, not here).
+
+Auto-mode hard rules (load-bearing for scheduler/worker concurrency safety):
+- NEVER edit, stage, or git-add the report file. The scheduler owns report writes.
+- Address exactly ONE unit (the members above) per invocation. Then stop.
+- The worktree is a throwaway working tree of the target repo; your code edits land on its branch and ship as one PR.
+EOF
+}
+
 # Worker runs in a backgrounded subshell. MUST NOT edit the report file
 # (would race with sibling workers). Writes a status sentinel for the
 # scheduler to consume post-wait.
@@ -827,13 +910,14 @@ run_worker() {
   # in this one worktree → one PR. Branch/worktree/sentinel stay keyed on the
   # canonical (idx,slug) — the unit identity — so the spine below is unchanged.
   local members="${UNIT_MEMBERS["${idx}:${slug}"]:-${idx}:${slug}:${lineno}}"
-  local -a fargs=() marr=()
+  local -a fargs=() member_refs=() marr=()
   local m midx mslug mlineno
   IFS=';' read -ra marr <<<"$members"
   for m in "${marr[@]}"; do
     [[ -n "$m" ]] || continue
     IFS=: read -r midx mslug mlineno <<<"$m"
     fargs+=(--finding "${REPORT_ABS_BY_IDX[$midx]}:${mslug}")
+    member_refs+=("${REPORT_ABS_BY_IDX[$midx]}:${mslug}")
   done
 
   rm -f "$SESSIONS_DIR/${idx}-${slug}.success"
@@ -865,10 +949,22 @@ run_worker() {
   fi
 
   set +e
-  ( cd "$wt" && ADDRESS_FINDINGS_AUTO=1 claude -p "/address-findings $report_abs ${fargs[*]} --auto" \
-      --model "${CLAUDE_MODEL:-claude-sonnet-4-6}" \
-      --permission-mode bypassPermissions \
-      --output-format stream-json --verbose ) >>"$session_log" 2>&1
+  if [[ "${WF_RUNTIME:-claude}" == "pi" ]]; then
+    local -a wf=( -p --mode json --approve --exclude-tools ask_question )
+    # Load address-findings as vocabulary reference only; build_worker_prompt_pi
+    # is the source of truth (Pi has no subagents and no Skill tool — the prompt
+    # re-specifies the flow for Pi inline model). (Pi tolerates a missing skill
+    # path — it loads nothing and proceeds on the prompt alone.)
+    wf+=( --skill "$HOME/.claude/skills/address-findings" )
+    [[ -n "${PI_WORKER_MODEL:-}" ]] && wf+=( --model "$PI_WORKER_MODEL" )
+    ( cd "$wt" && ADDRESS_FINDINGS_AUTO=1 pi "${wf[@]}" \
+        "$(build_worker_prompt_pi "$report_abs" "${UNIT_TYPE["${idx}:${slug}"]:-independent}" "${member_refs[@]}")" ) >>"$session_log" 2>&1
+  else
+    ( cd "$wt" && ADDRESS_FINDINGS_AUTO=1 claude -p "/address-findings $report_abs ${fargs[*]} --auto" \
+        --model "${CLAUDE_MODEL:-claude-sonnet-4-6}" \
+        --permission-mode bypassPermissions \
+        --output-format stream-json --verbose ) >>"$session_log" 2>&1
+  fi
   rc=$?
   set -e
 

@@ -457,6 +457,104 @@ JSON
   grep -q 'stale' <<<"$out" || { echo "$out" >&2; return 1; }
 }
 
+# --- Runtime selection: judge payload + worker wiring (Pi vs Claude) --------
+
+# Both tests below drive the REAL dispatch path (non-DRY, real origin so pin_base
+# succeeds) with a shim that branches on its own argv: judge call vs worker call.
+# They assert (a) the judge receives the {clusters:[…]} payload on stdin, (b) the
+# worker is invoked with the runtime-correct flags, and (c) extract_pr_num
+# scrapes the PR# from the worker session log → "WORKER done <tag> #<pr>".
+
+# Claude: judge uses --output-format json (no stream-json); worker uses
+# /address-findings <report> --finding … --auto with stream-json.
+test_claude_judge_payload_and_worker_wiring() {
+  printf '# a\n\n' >reports/a.md
+  write_finding reports/a.md "[DRY] foo a" High "src/foo.rs:10"
+  write_finding reports/a.md "[DRY] foo b" High "src/foo.rs:14"
+  install_path_shims
+  init_origin
+  local judge_stdin="$TEST_TMPDIR/judge-stdin.txt"
+  local worker_argv="$TEST_TMPDIR/worker-argv.txt"
+  cat >"$TEST_TMPDIR/shim/claude" <<EOF
+#!/usr/bin/env bash
+if [[ " \$* " == *" --output-format stream-json "* ]]; then
+  # WORKER: print a PR URL (bare) so extract_pr_num succeeds.
+  printf '%s\n' "\$*" >>"$worker_argv"
+  echo "https://github.com/example/repo/pull/7"
+  exit 0
+else
+  # JUDGE: record stdin, emit raw verdict JSON. The scheduler .result unwrap
+  # falls back to raw stdout when no .result field is present.
+  cat >"$judge_stdin"
+  echo '{"units":[{"type":"coupled","canonical_ref":"a:dry-foo-a","member_refs":["a:dry-foo-a","a:dry-foo-b"],"reason":"overlap"}]}'
+  exit 0
+fi
+EOF
+  chmod +x "$TEST_TMPDIR/shim/claude"
+  local out
+  set +e
+  out="$(NO_COLOR=1 DRY_RUN=0 WF_RUNTIME=claude MAX_PARALLEL=1 bash "$SCRIPT" reports/a.md 2>&1)"
+  set -e
+  [[ -s "$judge_stdin" ]] || { echo "  claude judge never received stdin payload" >&2; echo "$out" >&2; return 1; }
+  jq -e '.clusters | type == "array" and length == 1' "$judge_stdin" >/dev/null \
+    || { echo "  judge stdin not the {clusters:[…]} payload" >&2; cat "$judge_stdin" >&2; return 1; }
+  [[ -s "$worker_argv" ]] || { echo "  claude worker never invoked" >&2; echo "$out" >&2; return 1; }
+  grep -q -- '/address-findings' "$worker_argv" || { echo "  worker missing /address-findings" >&2; cat "$worker_argv" >&2; return 1; }
+  grep -q -- '--finding' "$worker_argv" || { echo "  worker missing --finding" >&2; return 1; }
+  grep -q -- '--auto' "$worker_argv" || { echo "  worker missing --auto" >&2; return 1; }
+  grep -q -- '--output-format stream-json' "$worker_argv" || { echo "  worker missing stream-json" >&2; return 1; }
+  ! grep -q -- '--exclude-tools' "$worker_argv" || { echo "  pi flag leaked into claude worker" >&2; return 1; }
+  grep -q 'WORKER done a:dry-foo-a #7' <<<"$out" || { echo "  PR# not scraped from claude session log" >&2; echo "$out" >&2; return 1; }
+}
+
+# Pi: judge is text mode (--no-tools, no --mode json); worker uses --mode json
+# --approve --exclude-tools ask_question --skill …/address-findings, with the
+# Pi-adapted prompt (carrying the member slugs) as the last positional arg.
+test_pi_judge_payload_and_worker_wiring() {
+  printf '# a\n\n' >reports/a.md
+  write_finding reports/a.md "[DRY] foo a" High "src/foo.rs:10"
+  write_finding reports/a.md "[DRY] foo b" High "src/foo.rs:14"
+  install_path_shims
+  init_origin
+  local judge_stdin="$TEST_TMPDIR/judge-stdin.txt"
+  local worker_argv="$TEST_TMPDIR/worker-argv.txt"
+  cat >"$TEST_TMPDIR/shim/pi" <<EOF
+#!/usr/bin/env bash
+if [[ " \$* " == *" --mode json "* ]]; then
+  # WORKER: emit a tool_execution_end event carrying the PR URL (real Pi log shape).
+  printf '%s\n' "\$*" >>"$worker_argv"
+  echo '{"type":"tool_execution_end","toolName":"bash","result":{"stdout":"https://github.com/example/repo/pull/99"},"isError":false}'
+  exit 0
+else
+  # JUDGE: Pi text mode — record stdin, emit raw verdict JSON (stdout IS the answer).
+  cat >"$judge_stdin"
+  echo '{"units":[{"type":"coupled","canonical_ref":"a:dry-foo-a","member_refs":["a:dry-foo-a","a:dry-foo-b"],"reason":"overlap"}]}'
+  exit 0
+fi
+EOF
+  chmod +x "$TEST_TMPDIR/shim/pi"
+  local out
+  set +e
+  out="$(NO_COLOR=1 DRY_RUN=0 WF_RUNTIME=pi MAX_PARALLEL=1 bash "$SCRIPT" reports/a.md 2>&1)"
+  set -e
+  [[ -s "$judge_stdin" ]] || { echo "  pi judge never received stdin payload" >&2; echo "$out" >&2; return 1; }
+  jq -e '.clusters | type == "array" and length == 1' "$judge_stdin" >/dev/null \
+    || { echo "  judge stdin not the {clusters:[…]} payload" >&2; cat "$judge_stdin" >&2; return 1; }
+  [[ -s "$worker_argv" ]] || { echo "  pi worker never invoked" >&2; echo "$out" >&2; return 1; }
+  grep -q -- '--mode json' "$worker_argv" || { echo "  worker missing --mode json" >&2; return 1; }
+  grep -q -- '--approve' "$worker_argv" || { echo "  worker missing --approve" >&2; return 1; }
+  grep -q -- '--exclude-tools ask_question' "$worker_argv" || { echo "  worker missing --exclude-tools ask_question" >&2; return 1; }
+  grep -q -- '--skill' "$worker_argv" || { echo "  worker missing --skill" >&2; return 1; }
+  grep -q -- 'address-findings' "$worker_argv" || { echo "  worker --skill not address-findings" >&2; return 1; }
+  # Worker prompt (last positional arg) carries both member slugs.
+  grep -q -- 'dry-foo-a' "$worker_argv" || { echo "  worker prompt missing slug dry-foo-a" >&2; return 1; }
+  grep -q -- 'dry-foo-b' "$worker_argv" || { echo "  worker prompt missing slug dry-foo-b" >&2; return 1; }
+  # No claude flags on the pi path.
+  ! grep -q -- 'bypassPermissions' "$worker_argv" || { echo "  claude flag leaked into pi worker" >&2; return 1; }
+  # extract_pr_num scraped #99 from the Pi tool_execution_end event.
+  grep -q 'WORKER done a:dry-foo-a #99' <<<"$out" || { echo "  PR# not scraped from pi session log" >&2; echo "$out" >&2; return 1; }
+}
+
 # === Runner ===
 
 run_test "cross-report duplicate → 1 unit, canonical = higher severity"   test_cross_report_duplicate
@@ -473,6 +571,8 @@ run_test "non-dry fresh run writes the manifest (shape asserted)"          test_
 run_test "--resume loads manifest, never re-judges (call-count 0)"         test_resume_loads_manifest_no_judge
 run_test "--resume after partial success → not stale (own marker ignored)" test_resume_after_partial_success_not_stale
 run_test "--resume with stale manifest → fail-closed"                      test_resume_stale_manifest_fails_closed
+run_test "claude: judge payload on stdin + worker /address-findings --auto"  test_claude_judge_payload_and_worker_wiring
+run_test "pi: judge payload on stdin + worker --skill + PR scrape"           test_pi_judge_payload_and_worker_wiring
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"

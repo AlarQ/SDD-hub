@@ -91,11 +91,24 @@ Options:
     --rescan      Force a fresh stage 1 (clears prior reports/*.md first).
     --cleanup     Delegate to the scheduler's --cleanup (sweep stale worktrees
                   for the existing reports), then exit.
+    --runtime <claude|pi>
+                  LLM runtime for the scan + workers (default: claude). Env:
+                  WF_RUNTIME. 'claude' keeps today's behaviour exactly; 'pi'
+                  runs the pipeline headless on the pi CLI (no subagents, inline
+                  dispatch). The pipeline exports WF_RUNTIME so the stage-2
+                  scheduler subprocess inherits it.
     -h, --help    Show this help.
 
 Environment:
-    ARCH_FIND_MODEL  Model for stage 1 analysis (default: claude-opus-4-8).
-    CLAUDE_MODEL     Model for stage 2 workers (default: claude-sonnet-4-6).
+    WF_RUNTIME       claude | pi (default: claude). Selects the LLM runtime for
+                     stage 1 (scan) and stage 2 (judge + workers).
+    ARCH_FIND_MODEL  Claude: model for stage 1 analysis (default: claude-opus-4-8).
+    CLAUDE_MODEL     Claude: model for stage 2 judge + workers (default:
+                     claude-sonnet-4-6).
+    PI_SCAN_MODEL    Pi: model for stage 1 analysis (default: pi's configured
+                     default model — omit --model).
+    PI_JUDGE_MODEL   Pi: model for the stage 2 triage judge (default: pi default).
+    PI_WORKER_MODEL  Pi: model for stage 2 workers (default: pi default).
     MAX_PARALLEL     Stage 2 worker pool size (default: 2).
     MAX_FINDINGS     Default for --limit (default: 0 = no limit).
     NO_COLOR=1       Disable ANSI.
@@ -121,22 +134,29 @@ parse_args() {
   RESCAN=0
   CLEANUP=0
   LIMIT="${MAX_FINDINGS:-0}"
+  WF_RUNTIME="${WF_RUNTIME:-claude}"
   local got_target=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)  usage; exit "$EXIT_SUCCESS" ;;
-      --yes)      YES=1; shift ;;
-      --resume)   RESUME=1; shift ;;
-      --rescan)   RESCAN=1; shift ;;
-      --cleanup)  CLEANUP=1; shift ;;
-      --limit)    shift; [[ $# -gt 0 ]] || { echo "$SCRIPT_NAME: --limit requires an argument" >&2; exit "$EXIT_INVALID_ARGS"; }; LIMIT="$1"; shift ;;
-      --limit=*)  LIMIT="${1#*=}"; shift ;;
-      --)         shift; [[ $# -gt 0 ]] && { TARGET_ARG="$1"; got_target=1; shift; } ;;
-      -*)         usage >&2; exit "$EXIT_INVALID_ARGS" ;;
-      *)          if [[ $got_target -eq 1 ]]; then echo "$SCRIPT_NAME: only one <repo-path> allowed" >&2; exit "$EXIT_INVALID_ARGS"; fi; TARGET_ARG="$1"; got_target=1; shift ;;
+      -h|--help)    usage; exit "$EXIT_SUCCESS" ;;
+      --yes)        YES=1; shift ;;
+      --runtime)    shift; [[ $# -gt 0 ]] || { echo "$SCRIPT_NAME: --runtime requires an argument" >&2; exit "$EXIT_INVALID_ARGS"; }; WF_RUNTIME="$1"; shift ;;
+      --runtime=*)  WF_RUNTIME="${1#*=}"; shift ;;
+      --resume)     RESUME=1; shift ;;
+      --rescan)     RESCAN=1; shift ;;
+      --cleanup)    CLEANUP=1; shift ;;
+      --limit)      shift; [[ $# -gt 0 ]] || { echo "$SCRIPT_NAME: --limit requires an argument" >&2; exit "$EXIT_INVALID_ARGS"; }; LIMIT="$1"; shift ;;
+      --limit=*)    LIMIT="${1#*=}"; shift ;;
+      --)           shift; [[ $# -gt 0 ]] && { TARGET_ARG="$1"; got_target=1; shift; } ;;
+      -*)           usage >&2; exit "$EXIT_INVALID_ARGS" ;;
+      *)            if [[ $got_target -eq 1 ]]; then echo "$SCRIPT_NAME: only one <repo-path> allowed" >&2; exit "$EXIT_INVALID_ARGS"; fi; TARGET_ARG="$1"; got_target=1; shift ;;
     esac
   done
   [[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "$SCRIPT_NAME: --limit must be a non-negative integer: $LIMIT" >&2; exit "$EXIT_INVALID_ARGS"; }
+  case "$WF_RUNTIME" in
+    claude|pi) ;;
+    *) echo "$SCRIPT_NAME: --runtime must be 'claude' or 'pi' (got: $WF_RUNTIME)" >&2; exit "$EXIT_INVALID_ARGS" ;;
+  esac
   if [[ "$RESCAN" == "1" && "$RESUME" == "1" ]]; then
     echo "$SCRIPT_NAME: --rescan and --resume are mutually exclusive" >&2
     exit "$EXIT_INVALID_ARGS"
@@ -156,8 +176,12 @@ validate_env() {
   git -C "$REPO_ROOT" remote get-url origin >/dev/null 2>&1 \
     || die "target repo has no 'origin' remote (needed to open PRs)"
 
-  command -v claude >/dev/null 2>&1 || die "claude CLI not found in PATH"
-  command -v gh     >/dev/null 2>&1 || die "gh CLI not found in PATH"
+  case "$WF_RUNTIME" in
+    claude) command -v claude >/dev/null 2>&1 || die "claude CLI not found in PATH" ;;
+    pi)     command -v pi     >/dev/null 2>&1 || die "pi CLI not found in PATH" ;;
+  esac
+  export WF_RUNTIME
+  command -v gh >/dev/null 2>&1 || die "gh CLI not found in PATH"
 
   SCHEDULER="$SCRIPT_DIR/address-reports.sh"
   if [[ ! -x "$SCHEDULER" ]]; then
@@ -239,11 +263,24 @@ archive_resolved_reports() {
   done < <(report_files)
 }
 
-# Pull the last stream-json result line from a claude session log and emit
-# "in out cache_read cache_creation cost". Always rc 0 with 5 numeric fields,
-# even when jq is missing, the log is absent, or no result line was written — so
-# callers' read/arithmetic never trip set -e.
+# Pull token usage from a session log and emit
+# "in out cache_read cache_creation cost". Runtime-neutral: auto-detects the log
+# format (Pi `--mode json` turn_end events vs Claude stream-json `result` line).
+# Always rc 0 with 5 numeric fields, even when jq is missing, the log is absent,
+# or no usage was written — so callers' read/arithmetic never trip set -e.
 extract_usage() {
+  local logf="$1"
+  if [[ -s "$logf" ]] && grep -q '"type":"turn_end"' "$logf" 2>/dev/null; then
+    extract_usage_pi "$logf"
+  else
+    extract_usage_claude "$logf"
+  fi
+}
+
+# Claude stream-json: the last {"type":"result",…} line is the cumulative
+# session total (input_tokens/output_tokens/cache_read_input_tokens/
+# cache_creation_input_tokens/total_cost_usd).
+extract_usage_claude() {
   local log="$1" line out='0 0 0 0 0'
   if [[ -s "$log" ]] && command -v jq >/dev/null 2>&1; then
     line="$(grep -E '"type":"result"' "$log" 2>/dev/null | tail -1 || true)"
@@ -259,6 +296,25 @@ extract_usage() {
   printf '%s\n' "$out"
 }
 
+# Pi --mode json: every `turn_end` event carries that turn's usage at
+# .message.usage (input/output/cacheRead/cacheWrite) with cost nested at
+# .usage.cost.total. Pi emits one turn_end per assistant turn (NOT cumulative
+# across the session), so sum them all. Field order matches the 5-field contract
+# above (in out cache_read cache_creation cost).
+extract_usage_pi() {
+  local logf="$1" out='0 0 0 0 0'
+  if [[ -s "$logf" ]] && command -v jq >/dev/null 2>&1; then
+    out="$(grep '"type":"turn_end"' "$logf" 2>/dev/null | jq -r '
+      .message.usage // empty
+      | [ (.input // 0), (.output // 0), (.cacheRead // 0), (.cacheWrite // 0),
+          (.cost.total // 0) ] | @tsv' 2>/dev/null \
+      | awk -F'\t' '{i+=$1;o+=$2;cr+=$3;cc+=$4;c+=$5} END{printf "%d %d %d %d %.4f",i,o,cr,cc,c}' \
+      || true)"
+    [[ -n "$out" ]] || out='0 0 0 0 0'
+  fi
+  printf '%s\n' "$out"
+}
+
 # shellcheck disable=SC2016  # intentional literal prompt — $-tokens must not expand
 STAGE1_PROMPT='Run the /improve-codebase-architecture analysis on THIS repository in SCAN-ONLY, headless mode.
 
@@ -266,6 +322,52 @@ CRITICAL behavior overrides (this is an automated batch run, no human present):
 - Do steps 1-2 of the skill (Explore + identify deepening opportunities) ONLY.
 - SKIP step 2 candidate-presentation-to-user and SKIP step 3 grilling loop entirely. Do NOT ask the user anything. Do NOT call AskUserQuestion or ExitPlanMode. Never wait for input.
 - For EACH deepening opportunity you would have presented, instead WRITE it to disk as a finding report in the audit-finding format.
+
+Output contract — write findings as report files:
+- One H2 finding per opportunity. Group findings by their owning code unit (crate/package/module): all findings whose primary file lives in unit <U> go into reports/architecture-<U>.md (kebab-case unit slug).
+- Create reports/ if missing. Create each report file with this header if it does not exist:
+
+  # Findings: `<unit>`
+
+  **Date**: <today YYYY-MM-DD>
+  **Scope**: `<unit>`
+
+  ---
+
+- Then append each finding as exactly one H2 block:
+
+  ## [architecture] <short specific title>
+
+  **Severity**: <High|Medium|Low>
+
+  **Files**:
+  - `<path>:<line>` (concrete file:line, not vague)
+  - `<additional file>`
+
+  **Problem**:
+  <Why the current architecture causes friction — shallow module, leaky seam, missing locality, etc. Use the deletion test.>
+
+  **Fix**:
+  <Concrete deepening: what interface/seam changes, what moves where. Point at files.>
+
+  ---
+
+Hard rules:
+- Every finding MUST cite at least one concrete file:line. No vague "consider restructuring X" findings.
+- Heading text must be unique after slugify within a file. If a finding with the same slug already exists, skip it.
+- No YAML frontmatter in report files. Only reserved meta-H2s allowed: ## Summary, ## Already Resolved.
+- Do NOT fix anything. Do NOT edit source code. Your only writes are the report files under reports/.
+- When done, print a one-line summary: how many findings written across how many report files.'
+
+# shellcheck disable=SC2016  # intentional literal prompt — $-tokens must not expand
+STAGE1_PROMPT_PI='Follow the `improve-codebase-architecture` skill vocabulary and method (Module/Interface/Depth/Seam/Adapter, the deletion test — see its LANGUAGE.md) on THIS repository in SCAN-ONLY, headless mode. Pi has no subagents, so explore the codebase inline yourself.
+
+CRITICAL behavior overrides (this is an automated batch run, no human present):
+- Do steps 1-2 of the skill (Explore + identify deepening opportunities) ONLY.
+- SKIP step 2 candidate-presentation-to-user and SKIP step 3 grilling loop entirely. Do NOT ask the user anything. Do NOT call AskUserQuestion or ExitPlanMode. Never wait for input.
+- For EACH deepening opportunity you would have presented, instead WRITE it to disk as a finding report in the audit-finding format.
+
+Explore inline (no subagents): use read, grep, find, and ls to walk the codebase yourself. Note where you experience friction (shallow modules, leaky seams, missing locality, duplicated logic). Apply the deletion test to each candidate opportunity.
 
 Output contract — write findings as report files:
 - One H2 finding per opportunity. Group findings by their owning code unit (crate/package/module): all findings whose primary file lives in unit <U> go into reports/architecture-<U>.md (kebab-case unit slug).
@@ -316,14 +418,26 @@ run_scan() {
     return 0
   fi
 
-  log "SCAN start model=$ARCH_FIND_MODEL repo=$REPO_ROOT"
   local rc=0
-  ( cd "$REPO_ROOT" && claude -p "$STAGE1_PROMPT" \
-      --model "$ARCH_FIND_MODEL" \
-      --permission-mode bypassPermissions \
-      --output-format stream-json --verbose ) >>"$LOG" 2>&1 || rc=$?
-  if [[ $rc -ne 0 ]]; then
-    die "stage 1 scan failed (claude rc=$rc; see $LOG)"
+  if [[ "${WF_RUNTIME:-claude}" == "pi" ]]; then
+    local -a pi_flags=( -p --mode json --approve --exclude-tools ask_question )
+    # Load the arch skill so its vocabulary (Module/Interface/Depth/Seam/Adapter,
+    # deletion test — see its LANGUAGE.md) is in context; the prompt overrides
+    # the skill subagent step for Pi no-subagent model. (Pi tolerates a missing
+    # skill path — it loads nothing and proceeds on the prompt alone, so this
+    # is safe on hosts without the skill installed.)
+    pi_flags+=( --skill "$HOME/.agents/skills/improve-codebase-architecture" )
+    [[ -n "${PI_SCAN_MODEL:-}" ]] && pi_flags+=( --model "$PI_SCAN_MODEL" )
+    log "SCAN start runtime=pi repo=$REPO_ROOT model=${PI_SCAN_MODEL:-<pi default>}"
+    ( cd "$REPO_ROOT" && pi "${pi_flags[@]}" "$STAGE1_PROMPT_PI" ) >>"$LOG" 2>&1 || rc=$?
+    [[ $rc -eq 0 ]] || die "stage 1 scan failed (pi rc=$rc; see $LOG)"
+  else
+    log "SCAN start model=$ARCH_FIND_MODEL repo=$REPO_ROOT"
+    ( cd "$REPO_ROOT" && claude -p "$STAGE1_PROMPT" \
+        --model "$ARCH_FIND_MODEL" \
+        --permission-mode bypassPermissions \
+        --output-format stream-json --verbose ) >>"$LOG" 2>&1 || rc=$?
+    [[ $rc -eq 0 ]] || die "stage 1 scan failed (claude rc=$rc; see $LOG)"
   fi
 
   local f n
@@ -334,7 +448,8 @@ run_scan() {
   done < <(report_files)
   reports_exist_nonempty || log "SCAN produced no report files (no findings)"
 
-  # Stage-1 scan usage: the last result line in the append-only $LOG is this run's.
+  # Stage-1 scan usage: Claude last `result` line (cumulative) or Pi summed
+  # `turn_end` events in the append-only $LOG — extract_usage auto-detects.
   local su_in su_out su_cr su_cc su_cost
   read -r su_in su_out su_cr su_cc su_cost < <(extract_usage "$LOG") || true
   log "USAGE scan in=$su_in out=$su_out cache_read=$su_cr cache_creation=$su_cc cost=\$$su_cost"

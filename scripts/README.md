@@ -56,24 +56,30 @@ Usage: improve-architecture-pipeline.sh [options] [<repo-path>]
 | `--resume` | Self-healing re-run: skip a fresh scan if reports exist, and pass `--resume` to the scheduler (reconcile shipped findings, re-dispatch dead workers — no duplicate PRs). |
 | `--rescan` | Force a fresh stage 1 (clears prior `reports/*.md` first). Mutually exclusive with `--resume`. |
 | `--cleanup` | Delegate to the scheduler's `--cleanup` (sweep stale worktrees keyed off the existing reports), then exit. |
+| `--runtime <claude\|pi>` | LLM runtime for the scan + workers (default: `claude`). Env: `WF_RUNTIME`. `claude` is today's behaviour; `pi` runs the pipeline headless on the `pi` CLI (no subagents, inline dispatch). Exported so the stage-2 scheduler inherits it. |
 | `-h`, `--help` | Show help. |
 
 ### Environment
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `ARCH_FIND_MODEL` | `claude-opus-4-8` | Model for the stage-1 analysis (one deep pass). |
-| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Model for stage-2 workers (passed through to the scheduler). |
+| `WF_RUNTIME` | `claude` | `claude` \| `pi` — selects the LLM runtime for stage 1 (scan) and stage 2 (judge + workers). |
+| `ARCH_FIND_MODEL` | `claude-opus-4-8` | Claude: model for the stage-1 analysis (one deep pass). |
+| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Claude: model for stage-2 judge + workers (passed through to the scheduler). |
+| `PI_SCAN_MODEL` | pi default | Pi: model for the stage-1 analysis (omit `--model` → pi configured default). |
+| `PI_JUDGE_MODEL` | pi default | Pi: model for the stage-2 triage judge. |
+| `PI_WORKER_MODEL` | pi default | Pi: model for stage-2 workers. |
 | `MAX_PARALLEL` | `2` | Stage-2 worker pool size. |
 | `MAX_FINDINGS` | `0` (no limit) | Default for `--limit`. |
 | `NO_COLOR` | — | Disable ANSI. |
 
 ### Preflight
 
-Refuses to run unless: target is a git repo, has an `origin` remote, and both
-`claude` and `gh` are on `PATH`. On the scan path it ensures `reports/` exists
-and is gitignored in the target (`reports/` is uncommitted scratch — the durable
-outputs are the PRs).
+Refuses to run unless: target is a git repo, has an `origin` remote, `gh` is
+on `PATH`, and the selected runtime's CLI is on `PATH` (`claude` when
+`WF_RUNTIME=claude`, `pi` when `WF_RUNTIME=pi`). On the scan path it ensures
+`reports/` exists and is gitignored in the target (`reports/` is uncommitted
+scratch — the durable outputs are the PRs).
 
 ### Stage 1 (find)
 
@@ -82,6 +88,12 @@ Runs `claude -p` with a scan-only prompt override against the
 opportunities, **skip** the interactive candidate-presentation and grilling loop,
 and write each opportunity as an `audit-finding`-format H2 into
 `reports/architecture-<unit>.md`. Never prompts.
+
+With `WF_RUNTIME=pi`, the scan runs headless on the `pi` CLI (`pi -p --mode json
+--approve --exclude-tools ask_question`, the arch skill loaded via `--skill`); the
+prompt is adapted for Pi's no-subagent model (explore inline) but the report
+contract is identical. Usage is auto-detected per log format (Claude `result`
+line vs Pi summed `turn_end` events).
 
 **Scan is skipped by default if reports already exist** (avoids a duplicate
 expensive Opus pass on an accidental re-run). `--rescan` forces a fresh scan,
@@ -95,7 +107,8 @@ prints the report list + the exact next-step command and stops.
 ### Stage 2 (address)
 
 Invokes `address-reports.sh` with cwd in the target repo, passing the reports
-plus `--resume` / `--limit` through. Inherits `CLAUDE_MODEL` + `MAX_PARALLEL`.
+plus `--resume` / `--limit` through. Inherits `WF_RUNTIME` + `CLAUDE_MODEL` (or
+the `PI_*_MODEL` vars) + `MAX_PARALLEL`.
 
 ### Outputs
 
@@ -135,9 +148,12 @@ after that finding's PR is open.
 
 | Var | Default | Meaning |
 |-----|---------|---------|
+| `WF_RUNTIME` | `claude` | `claude` \| `pi` — selects the LLM runtime for the judge + workers (inherited from the pipeline). |
 | `MAX_PARALLEL` | `2` | Worker pool size, shared across all reports. |
 | `MAX_FINDINGS` | `0` | Default for `--limit`. |
-| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Model passed to `claude --model`. |
+| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Claude: model passed to `claude --model`. |
+| `PI_JUDGE_MODEL` | pi default | Pi: model for the triage judge. |
+| `PI_WORKER_MODEL` | pi default | Pi: model for workers. |
 | `DRY_RUN=1` | — | Print the planned worklist; spawn no workers, open no PRs. |
 | `NO_COLOR=1` | — | Disable ANSI (auto-off when not a TTY). |
 
